@@ -1,148 +1,187 @@
 import React from "react";
-import { withStyles } from "@material-ui/core/styles";
-import type { CreateCSSProperties } from "@material-ui/core/styles/withStyles";
+import Button from "@material-ui/core/Button";
+import CircularProgress from "@material-ui/core/CircularProgress";
+import List from "@material-ui/core/List";
+import ListItem from "@material-ui/core/ListItem";
+import ListItemText from "@material-ui/core/ListItemText";
 import TextField from "@material-ui/core/TextField";
-import Input from "@material-ui/core/Input";
-import FormHelperText from "@material-ui/core/FormHelperText";
-import FormControl from "@material-ui/core/FormControl";
-import Select from "@material-ui/core/Select";
-import MenuItem from "@material-ui/core/MenuItem";
-import FormControlLabel from "@material-ui/core/FormControlLabel";
-import Checkbox from "@material-ui/core/Checkbox";
+import Typography from "@material-ui/core/Typography";
+import { withStyles } from "@material-ui/core/styles";
 import I18n from "@iobroker/adapter-react/i18n";
+import { rankSchoolResults } from "../../../src/lib/webuntis/SchoolDiscovery";
+import type { SchoolSearchResult } from "../../../src/lib/webuntis/WebUntisTypes";
 
-const styles = (): Record<string, CreateCSSProperties> => ({
-	input: {
-		marginTop: 0,
-		minWidth: 400,
+type SchoolResult = SchoolSearchResult;
+
+const ThemeButton = withStyles(theme => ({
+	root: {
+		color: theme.palette.text.primary,
 	},
-	button: {
-		marginRight: 20,
-	},
-	card: {
-		maxWidth: 345,
-		textAlign: "center",
-	},
-	media: {
-		height: 180,
-	},
-	column: {
-		display: "inline-block",
-		verticalAlign: "top",
-		marginRight: 20,
-	},
-	columnLogo: {
-		width: 350,
-		marginRight: 0,
-	},
-	columnSettings: {
-		width: "calc(100% - 370px)",
-	},
-	controlElement: {
-		//background: "#d2d2d2",
-		marginBottom: 5,
-	},
-});
+}))(Button);
 
 interface SettingsProps {
-	classes: Record<string, string>;
-	native: Record<string, any>;
-
-	onChange: (attr: string, value: any) => void;
+	native: Record<string, unknown>;
+	socket: {
+		sendTo: (
+			instance: string,
+			command: string,
+			data: unknown,
+		) => Promise<{ ok?: boolean; code?: string; results?: SchoolResult[] } | undefined>;
+	};
+	instance: string;
+	onChange: (attr: string, value: unknown) => void;
+	onSchoolSelected: (school: SchoolResult) => void;
 }
-
 interface SettingsState {
-	// add your state properties here
-	dummy?: undefined;
+	query: string;
+	results: SchoolResult[];
+	searching: boolean;
+	testing: boolean;
+	status: string;
 }
 
 class Settings extends React.Component<SettingsProps, SettingsState> {
-	constructor(props: SettingsProps) {
-		super(props);
-		this.state = {};
+	public state: SettingsState = { query: "", results: [], searching: false, testing: false, status: "" };
+	private translate(value: string): string {
+		return I18n.t(value as AdminWord);
 	}
 
-	renderInput(title: AdminWord, attr: string, type: string): React.JSX.Element {
+	private async search(): Promise<void> {
+		this.setState({ searching: true, status: "" });
+		try {
+			const response = await this.props.socket.sendTo(this.props.instance, "searchSchools", {
+				query: this.state.query,
+			});
+			this.setState({
+				results: rankSchoolResults(response?.results ?? [], this.state.query),
+				status: response?.code ?? "",
+			});
+		} catch {
+			this.setState({ status: "SERVER_UNREACHABLE" });
+		} finally {
+			this.setState({ searching: false });
+		}
+	}
+
+	private async testConnection(): Promise<void> {
+		if (
+			typeof this.props.native.schoolId !== "number" ||
+			!this.props.native.server ||
+			!this.props.native.schoolName
+		) {
+			this.setState({ status: "SCHOOL_NOT_SELECTED" });
+			return;
+		}
+		this.setState({ testing: true, status: "" });
+		try {
+			const response = await this.props.socket.sendTo(this.props.instance, "testConnection", this.props.native);
+			this.setState({ status: response?.ok ? "CONNECTED" : (response?.code ?? "UNEXPECTED_RESPONSE") });
+		} catch {
+			this.setState({ status: "SERVER_UNREACHABLE" });
+		} finally {
+			this.setState({ testing: false });
+		}
+	}
+
+	private selectSchool(school: SchoolResult): void {
+		this.props.onSchoolSelected(school);
+		this.setState({ results: [], status: "SCHOOL_SELECTED" });
+	}
+
+	private renderField(label: string, key: string, type = "text"): React.JSX.Element {
 		return (
 			<TextField
-				label={I18n.t(title)}
-				className={`${this.props.classes.input} ${this.props.classes.controlElement}`}
-				value={this.props.native[attr]}
-				type={type || "text"}
-				onChange={e => this.props.onChange(attr, e.target.value)}
+				fullWidth
 				margin="normal"
+				label={this.translate(label)}
+				type={type}
+				value={this.props.native[key] ?? ""}
+				onChange={event => this.props.onChange(key, event.target.value)}
 			/>
 		);
 	}
 
-	renderSelect(
-		title: AdminWord,
-		attr: string,
-		options: { value: string; title: AdminWord }[],
-		style?: React.CSSProperties,
-	): React.JSX.Element {
+	public render(): React.JSX.Element {
+		const selected =
+			typeof this.props.native.schoolDisplayName === "string" ? this.props.native.schoolDisplayName : "";
+		const address = typeof this.props.native.schoolAddress === "string" ? this.props.native.schoolAddress : "";
 		return (
-			<FormControl
-				className={`${this.props.classes.input} ${this.props.classes.controlElement}`}
-				style={{
-					paddingTop: 5,
-					...style,
-				}}
-			>
-				<Select
-					value={this.props.native[attr] || "_"}
-					onChange={e => this.props.onChange(attr, e.target.value === "_" ? "" : e.target.value)}
-					input={
-						<Input
-							name={attr}
-							id={`${attr}-helper`}
-						/>
-					}
+			<form>
+				<Typography
+					variant="h6"
+					color="textPrimary"
 				>
-					{options.map(item => (
-						<MenuItem
-							key={`key-${item.value}`}
-							value={item.value || "_"}
+					{this.translate("school")}
+				</Typography>
+				<TextField
+					fullWidth
+					margin="normal"
+					label={this.translate("schoolSearch")}
+					value={this.state.query}
+					onChange={event => this.setState({ query: event.target.value })}
+				/>
+				<ThemeButton
+					type="button"
+					variant="contained"
+					color="primary"
+					disabled={this.state.searching || this.state.query.trim().length < 2}
+					onClick={() => void this.search()}
+				>
+					{this.state.searching ? <CircularProgress size={20} /> : this.translate("searchSchool")}
+				</ThemeButton>
+				{selected ? (
+					<Typography
+						variant="body1"
+						color="textPrimary"
+					>
+						{this.translate("selectedSchool")}: {selected}
+						{address ? `, ${address}` : ""}{" "}
+						<ThemeButton
+							type="button"
+							size="small"
+							onClick={() => this.setState({ query: "", status: "" })}
 						>
-							{I18n.t(item.title)}
-						</MenuItem>
+							{this.translate("changeSchool")}
+						</ThemeButton>
+					</Typography>
+				) : null}
+				<List>
+					{this.state.results.map(school => (
+						<ListItem
+							button
+							key={`${school.schoolId}-${school.server}`}
+							onClick={() => this.selectSchool(school)}
+						>
+							<ListItemText
+								primary={school.displayName}
+								secondary={school.address || this.translate("unknownAddress")}
+								primaryTypographyProps={{ color: "textPrimary" }}
+								secondaryTypographyProps={{ color: "textSecondary" }}
+							/>
+						</ListItem>
 					))}
-				</Select>
-				<FormHelperText>{I18n.t(title)}</FormHelperText>
-			</FormControl>
-		);
-	}
-
-	renderCheckbox(title: AdminWord, attr: string, style?: React.CSSProperties): React.JSX.Element {
-		return (
-			<FormControlLabel
-				key={attr}
-				style={{
-					paddingTop: 5,
-					...style,
-				}}
-				className={this.props.classes.controlElement}
-				control={
-					<Checkbox
-						checked={this.props.native[attr]}
-						onChange={() => this.props.onChange(attr, !this.props.native[attr])}
-						color="primary"
-					/>
-				}
-				label={I18n.t(title)}
-			/>
-		);
-	}
-
-	render(): React.JSX.Element {
-		return (
-			<form className={this.props.classes.tab}>
-				{this.renderCheckbox("option1", "option1")}
-				<br />
-				{this.renderInput("option2", "option2", "text")}
+				</List>
+				{this.renderField("username", "username")}
+				{this.renderField("password", "password", "password")}
+				<ThemeButton
+					type="button"
+					variant="outlined"
+					disabled={this.state.testing}
+					onClick={() => void this.testConnection()}
+				>
+					{this.state.testing ? <CircularProgress size={20} /> : this.translate("testConnection")}
+				</ThemeButton>
+				{this.state.status ? (
+					<Typography
+						variant="body2"
+						color="textPrimary"
+					>
+						{this.translate(this.state.status)}
+					</Typography>
+				) : null}
 			</form>
 		);
 	}
 }
 
-export default withStyles(styles)(Settings);
+export default Settings;
