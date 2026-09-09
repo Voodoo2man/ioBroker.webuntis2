@@ -1,0 +1,7 @@
+{
+  "version": 3,
+  "sources": ["../../../src/lib/webuntis/WebUntisErrors.ts"],
+  "sourcesContent": ["/* eslint-disable jsdoc/no-blank-blocks, jsdoc/require-param */\n\nimport type { WebUntisErrorCode } from \"./WebUntisTypes\";\n\n/**\n *\n */\nexport class WebUntisError extends Error {\n\tpublic readonly code: WebUntisErrorCode;\n\n\t/**\n\t *\n\t */\n\tpublic constructor(code: WebUntisErrorCode, message: string, options?: ErrorOptions) {\n\t\tsuper(message, options);\n\t\tthis.name = \"WebUntisError\";\n\t\tthis.code = code;\n\t}\n}\n\n/**\n *\n */\nexport function classifyWebUntisError(error: unknown): WebUntisErrorCode {\n\tif (error instanceof WebUntisError) {\n\t\treturn error.code;\n\t}\n\tif (error instanceof DOMException && error.name === \"AbortError\") {\n\t\treturn \"TIMEOUT\";\n\t}\n\tif (error instanceof TypeError) {\n\t\treturn \"SERVER_UNREACHABLE\";\n\t}\n\treturn \"UNEXPECTED_RESPONSE\";\n}\n"],
+  "mappings": ";;;;;;;;;;;;;;;;;;AAAA;AAAA;AAAA;AAAA;AAAA;AAAA;AAOO,MAAM,sBAAsB,MAAM;AAAA,EACxB;AAAA;AAAA;AAAA;AAAA,EAKT,YAAY,MAAyB,SAAiB,SAAwB;AACpF,UAAM,SAAS,OAAO;AACtB,SAAK,OAAO;AACZ,SAAK,OAAO;AAAA,EACb;AACD;AAKO,SAAS,sBAAsB,OAAmC;AACxE,MAAI,iBAAiB,eAAe;AACnC,WAAO,MAAM;AAAA,EACd;AACA,MAAI,iBAAiB,gBAAgB,MAAM,SAAS,cAAc;AACjE,WAAO;AAAA,EACR;AACA,MAAI,iBAAiB,WAAW;AAC/B,WAAO;AAAA,EACR;AACA,SAAO;AACR;",
+  "names": []
+}

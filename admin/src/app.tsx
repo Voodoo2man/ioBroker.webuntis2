@@ -5,6 +5,8 @@ import { type Theme, type StyleRules, withStyles } from "@material-ui/core/style
 import GenericApp from "@iobroker/adapter-react/GenericApp";
 import Settings from "./components/settings";
 import type { GenericAppProps, GenericAppSettings } from "@iobroker/adapter-react/types";
+import { mergeSchoolSelection } from "../../src/lib/webuntis/SchoolDiscovery";
+import type { SchoolSearchResult } from "../../src/lib/webuntis/WebUntisTypes";
 
 const styles = (_theme: Theme): StyleRules => ({
 	root: {},
@@ -14,7 +16,6 @@ class App extends GenericApp {
 	constructor(props: GenericAppProps) {
 		const extendedProps: GenericAppSettings = {
 			...props,
-			encryptedFields: [],
 			translations: {
 				en: require("./i18n/en.json"),
 				de: require("./i18n/de.json"),
@@ -25,11 +26,15 @@ class App extends GenericApp {
 				it: require("./i18n/it.json"),
 				es: require("./i18n/es.json"),
 				pl: require("./i18n/pl.json"),
-				uk: require("./i18n/uk.json"),
 				"zh-cn": require("./i18n/zh-cn.json"),
 			},
 		};
-		super(props, extendedProps);
+		super(extendedProps, undefined);
+	}
+
+	private selectSchool(school: SchoolSearchResult): void {
+		const native = mergeSchoolSelection(this.state.native, school) as unknown as ioBroker.AdapterConfig;
+		this.setState({ native, changed: this.getIsChanged(native) });
 	}
 
 	onConnectionReady(): void {
@@ -45,6 +50,9 @@ class App extends GenericApp {
 			<div className="App">
 				<Settings
 					native={this.state.native}
+					socket={this.socket}
+					instance={this.instanceId}
+					onSchoolSelected={school => this.selectSchool(school)}
 					onChange={(attr, value) => this.updateNativeValue(attr, value)}
 				/>
 				{this.renderError()}

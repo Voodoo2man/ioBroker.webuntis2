@@ -4,8 +4,13 @@
 declare global {
 	namespace ioBroker {
 		interface AdapterConfig {
-			option1: boolean;
-			option2: string;
+			server: string;
+			schoolName: string;
+			schoolDisplayName: string;
+			schoolAddress: string;
+			schoolId: number | null;
+			username: string;
+			password: string;
 		}
 	}
 }
