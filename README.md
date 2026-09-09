@@ -1,57 +1,56 @@
+**WORK IN PROGRESS**
+
 ![Logo](admin/webuntis.png)
 
 # ioBroker.webuntis
 
 [![NPM version](https://img.shields.io/npm/v/iobroker.webuntis.svg)](https://www.npmjs.com/package/iobroker.webuntis)
-[![Downloads](https://img.shields.io/npm/dm/iobroker.webuntis.svg)](https://www.npmjs.com/package/iobroker.webuntis)
-![Test and Release](https://github.com/Voodoo2man/ioBroker.webuntis/actions/workflows/test-and-release.yml/badge.svg)
+<!-- [![Downloads](https://img.shields.io/npm/dm/iobroker.webuntis.svg)](https://www.npmjs.com/package/iobroker.webuntis) -->
+<!-- ![Test and Release](https://github.com/Voodoo2man/ioBroker.webuntis/actions/workflows/test-and-release.yml/badge.svg) -->
 
-ioBroker-Adapter für WebUntis. Der Adapter sucht Schulen automatisch, prüft
-die Anmeldung und stellt den Stundenplan für heute, morgen und die laufende
-Woche als ioBroker-States bereit.
+ioBroker adapter for WebUntis. The adapter discovers schools automatically,
+tests the login, and provides the timetable for today, tomorrow, and the
+current week as ioBroker states.
 
-## Funktionen
+## Features
 
-- Schulsuche nach Name, Ort oder Adresse
-- Auswahl eines konkreten Treffers, auch wenn mehrere Schulen gefunden werden
-- Anmeldung mit WebUntis-Benutzername und Passwort
-- Verbindungstest direkt in der Adapterkonfiguration
-- Stundenplan für heute, morgen und Montag bis Sonntag der laufenden Woche
-- Unterrichtsdaten wie Fach, Lehrkraft, Raum, Klasse, Zeit und Status
-- Erkennung von Änderungen, Vertretungen und Ausfällen
-- Tageszusammenfassungen mit Unterrichtsanzahl, Zeiten, Fächern und Änderungszählern
-- Aktualisierung standardmäßig alle fünf Minuten
+- Search for schools by name, city, or address
+- Select a specific result when multiple schools are found
+- Log in with a WebUntis username and password
+- Test the connection directly in the adapter configuration
+- Timetables for today, tomorrow, and Monday through Sunday of the current week
+- Lesson data such as subject, teacher, room, class, time, and status
+- Detection of changes, substitutions, and cancellations
+- Daily summaries with lesson counts, times, subjects, and change counters
+- Updates every five minutes by default
 
-Prüfungen, Hausaufgaben und weitere WebUntis-Datenbereiche sind derzeit nicht
-implementiert.
+Exams, homework, and other WebUntis data areas are not implemented yet.
 
-## Einrichtung
+## Setup
 
-1. Adapter installieren und eine neue `webuntis`-Instanz öffnen.
-2. Im Bereich „Schule“ mindestens zwei Zeichen eingeben und die Suche starten.
-3. Die gewünschte Schule aus den Treffern auswählen.
-4. WebUntis-Benutzername und Passwort eingeben.
-5. „Verbindung testen“ ausführen und die Konfiguration speichern.
+1. Install the adapter and open a new `webuntis` instance.
+2. In the “School” section, enter at least two characters and start the search.
+3. Select the desired school from the results.
+4. Enter the WebUntis username and password.
+5. Run “Test connection” and save the configuration.
 
-Die Auswahl übernimmt Server, internen Schulnamen, Schul-ID, Anzeigenamen und
-Adresse. Bei mehreren Treffern wird nicht automatisch der erste Treffer
-verwendet.
+The selection stores the server, internal school name, school ID, display name,
+and address. When multiple results are found, the first result is not selected
+automatically.
 
-## Unterstütztes Login
+## Supported login
 
-Aktuell wird ausschließlich die Anmeldung mit Benutzername und Passwort
-unterstützt. QR-Code, iServ, Microsoft 365, SAML und OAuth sind nicht
-implementiert.
+Only username-and-password authentication is currently supported. QR code,
+iServ, Microsoft 365, SAML, and OAuth authentication are not implemented.
 
-Die Schulsuche verwendet den strukturierten öffentlichen WebUntis-Dienst
-`https://mobile.webuntis.com/ms/schoolquery2`. Die Anmeldung und der Abruf des
-Stundenplans erfolgen über die WebUntis-Schnittstellen der ausgewählten Schule.
-WebUntis/Untis ist ein externer Dienst; dieses Projekt steht nicht mit der
-Untis GmbH in Verbindung.
+School discovery uses the structured public WebUntis service
+`https://mobile.webuntis.com/ms/schoolquery2`. Login and timetable requests are
+sent to the WebUntis interfaces of the selected school. WebUntis/Untis is an
+external service; this project is not affiliated with Untis GmbH.
 
 ## States
 
-Die Daten werden unter `timetable` angelegt:
+The adapter creates its data below `timetable`:
 
 ```text
 timetable.today
@@ -63,36 +62,35 @@ timetable.today
 │   ├── subject / subjectLong
 │   ├── teacher / room / class
 │   ├── status / changed / cancelled
-│   └── substitution sowie Originalwerte, falls vorhanden
-└── ... Tageszusammenfassung direkt unter timetable.today
+│   └── substitution and original values, where available
+└── ... daily summary states directly below timetable.today
 ```
 
-`timetable.tomorrow` verwendet dieselbe Struktur. Unter `timetable.week`
-liegen zusätzlich die Tageskanäle `monday` bis `sunday`, jeweils mit
-chronologisch nummerierten Lesson-Slots (`01`, `02`, …).
+`timetable.tomorrow` uses the same structure. `timetable.week` additionally
+contains the day channels `monday` through `sunday`, each with chronologically
+numbered lesson slots (`01`, `02`, …).
 
-Die Tageszusammenfassung enthält unter anderem:
+The daily summary includes:
 
-- `hasSchool`, `lessonCount` und `lessonDurationMinutes`
-- `schoolStart` und `schoolEnd`
-- `subjects`, `subjectCount`, `firstSubject` und `lastSubject`
-- `hasChanges`, `changeCount` und `cancellationCount`
+- `hasSchool`, `lessonCount`, and `lessonDurationMinutes`
+- `schoolStart` and `schoolEnd`
+- `subjects`, `subjectCount`, `firstSubject`, and `lastSubject`
+- `hasChanges`, `changeCount`, and `cancellationCount`
 
-Ausgefallene Stunden zählen als Lesson, werden aber nicht zur tatsächlichen
-Unterrichtsdauer addiert. Bei einem fehlgeschlagenen Update bleiben bereits
-vorhandene Stundenplandaten erhalten. Der Verbindungsstatus und die Zeitpunkte
-der letzten, erfolgreichen und nächsten Aktualisierung stehen unter `info`.
+Cancelled lessons count as lessons but are not included in the actual lesson
+duration. If an update fails, existing timetable data is preserved. The
+connection status and the timestamps of the last, successful, and next update
+are available below `info`.
 
-## Sicherheit
+## Security
 
-Das Passwort wird als verschlüsseltes ioBroker-Konfigurationsfeld behandelt.
-Zugangsdaten, Tokens, Cookies und Session-IDs werden weder geloggt noch in
-States geschrieben. Zugangsdaten bitte niemals in Issues oder Support-Anfragen
-veröffentlichen.
+The password is handled as an encrypted ioBroker configuration field.
+Credentials, tokens, cookies, and session IDs are never logged or written to
+states. Never publish credentials in issues or support requests.
 
-## Entwicklung
+## Development
 
-Voraussetzung ist Node.js 20 oder neuer.
+Node.js 20 or newer is required.
 
 ```bash
 npm install
@@ -102,29 +100,28 @@ npm run check
 npm run build
 ```
 
-Die WebUntis-Kommunikation liegt unter `src/lib/webuntis/`:
+WebUntis communication is implemented in `src/lib/webuntis/`:
 
-- `SchoolDiscovery` validiert und sortiert Suchergebnisse.
-- `WebUntisClient` kapselt die WebUntis-Anfragen und die Session-Verwendung.
-- `WebUntisService` verbindet API-Zugriff, Authentifizierung und
-  Stundenplanaufbereitung.
+- `SchoolDiscovery` validates and ranks search results.
+- `WebUntisClient` encapsulates WebUntis requests and session handling.
+- `WebUntisService` combines API access, authentication, and timetable
+  processing.
 
-### Testhost
+### Test host
 
-Für Prüfung, Paketierung und Installation auf dem konfigurierten SSH-Ziel
+To test, package, and install the adapter on the configured SSH target
 `iobroker-test`:
 
 ```bash
 ./scripts/install-testhost.sh
 ```
 
-Eine andere Instanz kann über `WEBUNTIS_INSTANCE=1` gewählt werden. Das Script
-verwendet keine Zugangsdaten und nimmt keine Git-Änderungen vor.
+Use `WEBUNTIS_INSTANCE=1` to select a different instance. The script stores no
+credentials and does not perform Git operations.
 
-## Lizenz
+## License
 
-MIT License. Siehe [LICENSE](LICENSE).
+MIT License. See [LICENSE](LICENSE).
 
-Dieses Projekt ist eine unabhängige Open-Source-Integration. Die Nutzung
-erfolgt auf eigenes Risiko und unter Beachtung der Nutzungsbedingungen des
-externen Dienstes.
+This project is an independent open-source integration. Use it at your own
+risk and in accordance with the terms of use of the external service.
