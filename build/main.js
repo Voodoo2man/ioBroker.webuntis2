@@ -96,13 +96,17 @@ class WebuntisNext extends utils.Adapter {
   todayLessons = [];
   constructor(options = {}) {
     super({ ...options, name: "webuntis2" });
-    this.webUntis = new import_WebUntisService.WebUntisService(this.logHttpDiagnostic.bind(this));
+    this.webUntis = new import_WebUntisService.WebUntisService(
+      this.logHttpDiagnostic.bind(this),
+      (message) => this.log.info(message),
+      (message) => this.log.warn(message)
+    );
     this.on("ready", this.onReady.bind(this));
     this.on("message", this.onMessage.bind(this));
     this.on("unload", this.onUnload.bind(this));
   }
   logHttpDiagnostic(diagnostic) {
-    this.log.info(`WebUntis ${diagnostic.method || "request"} HTTP ${JSON.stringify(diagnostic)}`);
+    this.log.debug(`WebUntis ${diagnostic.method || "request"} HTTP ${JSON.stringify(diagnostic)}`);
   }
   async onReady() {
     await this.setState("info.connection", false, true);
