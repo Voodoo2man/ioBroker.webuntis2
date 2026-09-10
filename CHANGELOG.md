@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+- Renamed the adapter and repository to `ioBroker.webuntis2`.
+- Added functional WebUntis timetable, daily summaries, holidays, and dynamic current/next lesson states.
+- Added resolved subject, teacher, room, and class names to timetable lessons.
+- Added the React administration interface with school discovery, configuration persistence, and connection testing.
+- Removed unsupported Messages and Exams object areas and cleanly migrates existing installations.
+
 ## 0.0.1 - 2026-09-09
 
 - WebUntis-Schulsuche über `schoolquery2` mit Treffer-Auswahl im React-Admin.

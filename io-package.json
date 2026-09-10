@@ -1,6 +1,6 @@
 {
 	"common": {
-		"name": "webuntis",
+		"name": "webuntis2",
 		"version": "0.0.1",
 		"news": {
 			"0.0.1": {
@@ -18,17 +18,17 @@
 			}
 		},
 		"titleLang": {
-			"en": "WebUntis",
-			"de": "WebUntis",
-			"ru": "ВебУнтис",
-			"pt": "WebUntis",
-			"nl": "WebUntis",
-			"fr": "WebUntis",
-			"it": "WebUntis",
-			"es": "WebUntis",
-			"pl": "WebUntis",
-			"uk": "WebUntis",
-			"zh-cn": "WebUntis"
+			"en": "WebUntis2",
+			"de": "WebUntis2",
+			"ru": "ВебУнтис2",
+			"pt": "WebUntis2",
+			"nl": "WebUntis2",
+			"fr": "WebUntis2",
+			"it": "WebUntis2",
+			"es": "WebUntis2",
+			"pl": "WebUntis2",
+			"uk": "WebUntis2",
+			"zh-cn": "WebUntis2"
 		},
 		"desc": {
 			"en": "Connect ioBroker to WebUntis for timetables, school information and related data",
@@ -52,8 +52,8 @@
 		"platform": "Javascript/Node.js",
 		"icon": "webuntis.png",
 		"enabled": true,
-		"extIcon": "https://raw.githubusercontent.com/Voodoo2man/ioBroker.webuntis/main/admin/webuntis.png",
-		"readme": "https://github.com/Voodoo2man/ioBroker.webuntis/blob/main/README.md",
+		"extIcon": "https://raw.githubusercontent.com/Voodoo2man/ioBroker.webuntis2/main/admin/webuntis.png",
+		"readme": "https://github.com/Voodoo2man/ioBroker.webuntis2/blob/main/README.md",
 		"loglevel": "info",
 		"tier": 3,
 		"mode": "daemon",

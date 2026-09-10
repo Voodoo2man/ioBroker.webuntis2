@@ -90,7 +90,7 @@ jobs:
 #          sentry: true
 #          sentry-token: ${{ secrets.SENTRY_AUTH_TOKEN }}
 #          sentry-project: "iobroker-webuntis"
-#          sentry-version-prefix: "iobroker.webuntis"
+#          sentry-version-prefix: "iobroker.webuntis2"
 #          sentry-sourcemap-paths: "build/ admin/build/"
 #          # If your sentry project is linked to a GitHub repository, you can enable the following option
 #          # sentry-github-integration: true

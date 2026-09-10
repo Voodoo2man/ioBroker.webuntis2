@@ -1,0 +1,7 @@
+{
+  "version": 3,
+  "sources": ["../../src/lib/LegacyNamespaceCleanup.ts"],
+  "sourcesContent": ["/* eslint-disable jsdoc/require-jsdoc */\n\nexport interface NamespaceCleanupAdapter {\n\tgetObjectAsync(id: string): Promise<unknown>;\n\tdelObjectAsync(id: string, options: { recursive: boolean }): Promise<void>;\n}\n\nexport async function cleanupLegacyNamespace(adapter: NamespaceCleanupAdapter, namespace: string): Promise<void> {\n\tif (await adapter.getObjectAsync(namespace)) {\n\t\tawait adapter.delObjectAsync(namespace, { recursive: true });\n\t}\n}\n"],
+  "mappings": ";;;;;;;;;;;;;;;;;;AAAA;AAAA;AAAA;AAAA;AAAA;AAOA,eAAsB,uBAAuB,SAAkC,WAAkC;AAChH,MAAI,MAAM,QAAQ,eAAe,SAAS,GAAG;AAC5C,UAAM,QAAQ,eAAe,WAAW,EAAE,WAAW,KAAK,CAAC;AAAA,EAC5D;AACD;",
+  "names": []
+}

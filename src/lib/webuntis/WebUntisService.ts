@@ -1,6 +1,7 @@
 /* eslint-disable jsdoc/no-blank-blocks, jsdoc/require-jsdoc, jsdoc/require-param */
 
 import { searchSchools } from "./SchoolDiscovery";
+import { HolidayCache, summarizeHolidays, type HolidaySummary } from "./Holidays";
 import { WebUntisClient } from "./WebUntisClient";
 import { classifyWebUntisError, WebUntisError } from "./WebUntisErrors";
 import { normalizeLessons, resolveTimetableReferences, splitTimetable, weekRange } from "./Timetable";
@@ -16,6 +17,8 @@ import type {
  *
  */
 export class WebUntisService {
+	private readonly holidayCache = new HolidayCache();
+
 	public constructor(private readonly onDiagnostic?: (diagnostic: WebUntisHttpDiagnostic) => void) {}
 	/**
 	 *
@@ -27,7 +30,7 @@ export class WebUntisService {
 	public async loadTimetable(
 		config: WebUntisConnectionConfig,
 		now = new Date(),
-	): Promise<ReturnType<typeof splitTimetable>> {
+	): Promise<ReturnType<typeof splitTimetable> & { holidays: HolidaySummary | null }> {
 		if (!config.server || !config.schoolName || config.schoolId === null) {
 			throw new WebUntisError("SCHOOL_NOT_SELECTED", "School selection is missing");
 		}
@@ -39,6 +42,13 @@ export class WebUntisService {
 		}
 		const client = new WebUntisClient(config, fetch, undefined, this.onDiagnostic);
 		const session = await client.authenticate(config.username, config.password);
+		let holidayEntries: Awaited<ReturnType<HolidayCache["get"]>> = null;
+		try {
+			holidayEntries = await this.holidayCache.get(now, () => client.getHolidays(session));
+		} catch {
+			// Holiday failures are optional; preserve existing holiday states.
+		}
+		const holidays = holidayEntries ? summarizeHolidays(holidayEntries, now) : null;
 		const range = weekRange(now);
 		const classId = session.personType >= 1 && session.personType <= 5 ? null : await client.getClassId(session);
 		const supportedPerson =
@@ -53,7 +63,7 @@ export class WebUntisService {
 						: null;
 		if (!element) {
 			const periods = await client.getPublicTimetable(session, now);
-			return splitTimetable(normalizeLessons(periods), now);
+			return { ...splitTimetable(normalizeLessons(periods), now), holidays };
 		}
 		const periods: WebUntisPeriod[] = await client.getTimetable(session, {
 			...range,
@@ -72,10 +82,13 @@ export class WebUntisService {
 			client.getRooms(session).catch(() => []),
 			client.getKlassen(session).catch(() => []),
 		]);
-		return splitTimetable(
-			normalizeLessons(resolveTimetableReferences(periods, { subjects, teachers, rooms, klassen })),
-			now,
-		);
+		return {
+			...splitTimetable(
+				normalizeLessons(resolveTimetableReferences(periods, { subjects, teachers, rooms, klassen })),
+				now,
+			),
+			holidays,
+		};
 	}
 
 	/**
