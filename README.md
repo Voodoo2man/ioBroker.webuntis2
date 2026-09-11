@@ -71,6 +71,10 @@ and include only relevant, non-sensitive log messages when asking for help.
 
 ## Changelog
 
+### 0.0.2 (2026-09-11)
+
+- (@Voodoo2man) Prepared the first Trusted Publishing release for npm.
+
 ### 0.0.1 (2026-09-11)
 
 - (@Voodoo2man) Initial release with school search, secure login, timetable

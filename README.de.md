@@ -76,6 +76,10 @@ nicht vertrauliche Logmeldungen.
 
 ## Änderungsverlauf
 
+### 0.0.2 (2026-09-11)
+
+- (@Voodoo2man) Erste Veröffentlichung mit Trusted Publishing für npm vorbereitet.
+
 ### 0.0.1 (2026-09-11)
 
 - (@Voodoo2man) Erste Veröffentlichung mit Schulsuche, geschützter Anmeldung,
