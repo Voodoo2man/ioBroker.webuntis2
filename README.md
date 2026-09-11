@@ -1,6 +1,6 @@
 **WORK IN PROGRESS**
 
-![Logo](admin/webuntis.png)
+![WebUntis2](docs/webuntis2-readme-banner.png)
 
 # ioBroker.webuntis2
 

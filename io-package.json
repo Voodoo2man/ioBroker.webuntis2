@@ -50,9 +50,9 @@
 			"license": "MIT"
 		},
 		"platform": "Javascript/Node.js",
-		"icon": "webuntis.png",
+		"icon": "webuntis2.png",
 		"enabled": true,
-		"extIcon": "https://raw.githubusercontent.com/Voodoo2man/ioBroker.webuntis2/main/admin/webuntis.png",
+		"extIcon": "https://raw.githubusercontent.com/Voodoo2man/ioBroker.webuntis2/main/admin/webuntis2.png",
 		"readme": "https://github.com/Voodoo2man/ioBroker.webuntis2/blob/main/README.md",
 		"loglevel": "info",
 		"tier": 3,
