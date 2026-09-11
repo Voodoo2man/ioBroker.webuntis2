@@ -55,6 +55,21 @@ jobs:
           # install-command: 'npm install'
           build: true
 
+  # Publishes tagged releases using npm trusted publishing.
+  deploy:
+    needs: [check-and-lint, adapter-tests]
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: write
+    steps:
+      - uses: ioBroker/testing-action-deploy@v1
+        with:
+          node-version: '24.x'
+          build: true
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
 # TODO: To enable automatic npm releases, set up trusted publishing in your npm account
 # See https://docs.npmjs.com/trusted-publishers for more details
 # Then uncomment the following block:
