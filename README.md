@@ -69,6 +69,8 @@ and include only relevant, non-sensitive log messages when asking for help.
 
 ## Changelog
 
+For earlier releases, see [CHANGELOG_OLD.md](CHANGELOG_OLD.md).
+
 ### 0.1.0 (2026-09-11)
 
 - (@Voodoo2man) Complete feature release with timetable data, holidays, readable lesson names, daily summaries, current and next lesson information, and the React administration interface.
