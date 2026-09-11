@@ -1,6 +1,7 @@
 /* eslint-disable jsdoc/no-blank-blocks, jsdoc/require-param */
 
 import { WebUntisError } from "./WebUntisErrors";
+import type { HolidayEntry } from "./Holidays";
 import type {
 	TimetableQuery,
 	WebUntisConnectionConfig,
@@ -161,7 +162,7 @@ export class WebUntisClient {
 				body: JSON.stringify({
 					id: Date.now().toString(),
 					method: "authenticate",
-					params: { user: username, password, client: "ioBroker.webuntis" },
+					params: { user: username, password, client: "ioBroker.webuntis2" },
 					jsonrpc: "2.0",
 				}),
 				signal: controller.signal,
@@ -295,6 +296,13 @@ export class WebUntisClient {
 	 */
 	public async getKlassen(session: WebUntisSession): Promise<WebUntisPeriod[]> {
 		return this.request<WebUntisPeriod[]>("getKlassen", {}, session);
+	}
+
+	/**
+	 *
+	 */
+	public async getHolidays(session: WebUntisSession): Promise<HolidayEntry[]> {
+		return this.request<HolidayEntry[]>("getHolidays", {}, session);
 	}
 
 	/**

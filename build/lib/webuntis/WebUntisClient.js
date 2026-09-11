@@ -148,7 +148,7 @@ class WebUntisClient {
         body: JSON.stringify({
           id: Date.now().toString(),
           method: "authenticate",
-          params: { user: username, password, client: "ioBroker.webuntis" },
+          params: { user: username, password, client: "ioBroker.webuntis2" },
           jsonrpc: "2.0"
         }),
         signal: controller.signal
@@ -271,6 +271,12 @@ class WebUntisClient {
    */
   async getKlassen(session) {
     return this.request("getKlassen", {}, session);
+  }
+  /**
+   *
+   */
+  async getHolidays(session) {
+    return this.request("getHolidays", {}, session);
   }
   /**
    *

@@ -1,5 +1,7 @@
 import * as utils from "@iobroker/adapter-core";
 import { WebUntisService, type WebUntisConnectionConfig } from "./lib/webuntis/WebUntisService";
+import { cleanupLegacyNamespace } from "./lib/LegacyNamespaceCleanup";
+import type { HolidaySummary } from "./lib/webuntis/Holidays";
 import { WebUntisError } from "./lib/webuntis/WebUntisErrors";
 import {
 	lessonChannelName,
@@ -8,8 +10,10 @@ import {
 	type TimetableSummary,
 } from "./lib/webuntis/Timetable";
 import type { WebUntisHttpDiagnostic } from "./lib/webuntis/WebUntisTypes";
+import { deriveCurrentNextLesson, type CurrentNextLessonSummary } from "./lib/webuntis/CurrentNextLesson";
 
 const TIMETABLE_INTERVAL_MS = 5 * 60 * 1000;
+const CURRENT_NEXT_INTERVAL_MS = 60 * 1000;
 const TIMETABLE_GROUPS = ["today", "tomorrow", "week"] as const;
 type TimetableGroup = (typeof TIMETABLE_GROUPS)[number];
 
@@ -51,12 +55,44 @@ const LESSON_STATE_NAMES: Record<string, string> = {
 	originalSubject: "Original subject",
 };
 
+const CURRENT_NEXT_STATE_DEFINITIONS: Record<
+	keyof CurrentNextLessonSummary,
+	{ type: "string" | "number" | "boolean"; role: string; name: string; def: string | number | boolean; unit?: string }
+> = {
+	currentLesson: { type: "string", role: "text", name: "Current lesson", def: "" },
+	currentSubject: { type: "string", role: "text", name: "Current subject", def: "" },
+	currentRoom: { type: "string", role: "text", name: "Current room", def: "" },
+	currentTeacher: { type: "string", role: "text", name: "Current teacher", def: "" },
+	nextLesson: { type: "string", role: "text", name: "Next lesson", def: "" },
+	nextSubject: { type: "string", role: "text", name: "Next subject", def: "" },
+	nextRoom: { type: "string", role: "text", name: "Next room", def: "" },
+	nextTeacher: { type: "string", role: "text", name: "Next teacher", def: "" },
+	nextLessonStart: { type: "string", role: "value.time", name: "Next lesson start", def: "" },
+	minutesUntilNextLesson: {
+		type: "number",
+		role: "value.interval",
+		name: "Minutes until next lesson",
+		def: 0,
+		unit: "min",
+	},
+	schoolRunning: { type: "boolean", role: "indicator", name: "School running", def: false },
+	minutesUntilSchoolEnd: {
+		type: "number",
+		role: "value.interval",
+		name: "Minutes until school end",
+		def: 0,
+		unit: "min",
+	},
+};
+
 class WebuntisNext extends utils.Adapter {
 	private readonly webUntis: WebUntisService;
 	private timetableTimer?: NodeJS.Timeout;
+	private currentNextTimer?: NodeJS.Timeout;
+	private todayLessons: TimetableLesson[] = [];
 
 	public constructor(options: Partial<utils.AdapterOptions> = {}) {
-		super({ ...options, name: "webuntis" });
+		super({ ...options, name: "webuntis2" });
 		this.webUntis = new WebUntisService(this.logHttpDiagnostic.bind(this));
 		this.on("ready", this.onReady.bind(this));
 		this.on("message", this.onMessage.bind(this));
@@ -74,6 +110,7 @@ class WebuntisNext extends utils.Adapter {
 		}
 		await this.updateTimetable();
 		this.timetableTimer = setInterval(() => void this.updateTimetable(), TIMETABLE_INTERVAL_MS);
+		this.currentNextTimer = setInterval(() => void this.updateCurrentNextStates(), CURRENT_NEXT_INTERVAL_MS);
 	}
 
 	private hasConnectionConfig(): this is { config: WebUntisConnectionConfig } {
@@ -89,16 +126,24 @@ class WebuntisNext extends utils.Adapter {
 	private async updateTimetable(): Promise<void> {
 		await this.setState("info.lastUpdate", new Date().toISOString(), true);
 		try {
+			await cleanupLegacyNamespace(this, "messages");
 			await this.ensureTimetableRoot();
+			await this.ensureHolidaysRoot();
 			await this.cleanupObsoleteStructure();
 			const now = new Date();
 			const data = await this.webUntis.loadTimetable(this.config, now);
+			this.todayLessons = data.today;
 			let updated = 0;
 			let removed = 0;
 			for (const group of TIMETABLE_GROUPS) {
 				const result = await this.writeTimetableGroup(group, data[group], now);
 				updated += result.updated;
 				removed += result.removed;
+			}
+			if (data.holidays) {
+				await this.writeHolidaySummary(data.holidays);
+			} else {
+				this.log.warn("WebUntis holidays are not available; previous holiday values were preserved");
 			}
 			await this.setState("info.lastSuccessfulUpdate", now.toISOString(), true);
 			await this.setState("info.nextUpdate", new Date(now.getTime() + TIMETABLE_INTERVAL_MS).toISOString(), true);
@@ -119,6 +164,79 @@ class WebuntisNext extends utils.Adapter {
 			common: { name: "Timetable" },
 			native: {},
 		});
+	}
+
+	private async ensureHolidaysRoot(): Promise<void> {
+		await this.setObjectNotExistsAsync("holidays", {
+			type: "channel",
+			common: { name: "Holidays" },
+			native: {},
+		});
+		await this.setObjectNotExistsAsync("holidays.current", {
+			type: "channel",
+			common: { name: "Current holiday" },
+			native: {},
+		});
+		await this.setObjectNotExistsAsync("holidays.next", {
+			type: "channel",
+			common: { name: "Next holiday" },
+			native: {},
+		});
+	}
+
+	private async writeHolidaySummary(summary: HolidaySummary): Promise<void> {
+		await this.writeSimpleState(
+			"holidays.current.active",
+			summary.current.active,
+			"Active",
+			"boolean",
+			"indicator",
+			false,
+		);
+		await this.writeSimpleState("holidays.current.name", summary.current.name, "Name", "string", "text", "");
+		await this.writeSimpleState(
+			"holidays.current.longName",
+			summary.current.longName,
+			"Long name",
+			"string",
+			"text",
+			"",
+		);
+		await this.writeSimpleState(
+			"holidays.current.startDate",
+			summary.current.startDate,
+			"Start date",
+			"string",
+			"date",
+			"",
+		);
+		await this.writeSimpleState(
+			"holidays.current.endDate",
+			summary.current.endDate,
+			"End date",
+			"string",
+			"date",
+			"",
+		);
+		await this.writeSimpleState("holidays.next.name", summary.next.name, "Name", "string", "text", "");
+		await this.writeSimpleState("holidays.next.longName", summary.next.longName, "Long name", "string", "text", "");
+		await this.writeSimpleState(
+			"holidays.next.startDate",
+			summary.next.startDate,
+			"Start date",
+			"string",
+			"date",
+			"",
+		);
+		await this.writeSimpleState("holidays.next.endDate", summary.next.endDate, "End date", "string", "date", "");
+		await this.writeSimpleState(
+			"holidays.next.daysUntil",
+			summary.next.daysUntil,
+			"Days until",
+			"number",
+			"value",
+			0,
+		);
 	}
 
 	private async writeDaySummary(path: string, summary: TimetableSummary): Promise<void> {
@@ -143,6 +261,33 @@ class WebuntisNext extends utils.Adapter {
 			});
 			await this.setStateAsync(`timetable.${path}.${name}`, summary[name], true);
 		}
+	}
+
+	private async writeCurrentNextSummary(lessons: TimetableLesson[], now: Date): Promise<void> {
+		const summary = deriveCurrentNextLesson(lessons, now);
+		for (const [name, definition] of Object.entries(CURRENT_NEXT_STATE_DEFINITIONS) as [
+			keyof CurrentNextLessonSummary,
+			(typeof CURRENT_NEXT_STATE_DEFINITIONS)[keyof CurrentNextLessonSummary],
+		][]) {
+			await this.setObjectNotExistsAsync(`timetable.today.${name}`, {
+				type: "state",
+				common: {
+					name: definition.name,
+					type: definition.type,
+					role: definition.role,
+					read: true,
+					write: false,
+					def: definition.def,
+					...(definition.unit ? { unit: definition.unit } : {}),
+				},
+				native: {},
+			});
+			await this.setStateAsync(`timetable.today.${name}`, summary[name], true);
+		}
+	}
+
+	private async updateCurrentNextStates(): Promise<void> {
+		await this.writeCurrentNextSummary(this.todayLessons, new Date());
 	}
 
 	private async cleanupObsoleteStructure(): Promise<void> {
@@ -194,6 +339,9 @@ class WebuntisNext extends utils.Adapter {
 			}
 			const result = await this.writeTimetableDay(`timetable.${group}`, lessons, this.timetableDate(day));
 			await this.writeDaySummary(group, summarizeTimetable(lessons));
+			if (group === "today") {
+				await this.writeCurrentNextSummary(lessons, now);
+			}
 			removed += result.removed;
 		}
 		return { updated: lessons.length, removed };
@@ -408,6 +556,9 @@ class WebuntisNext extends utils.Adapter {
 	private onUnload(callback: () => void): void {
 		if (this.timetableTimer) {
 			clearInterval(this.timetableTimer);
+		}
+		if (this.currentNextTimer) {
+			clearInterval(this.currentNextTimer);
 		}
 		callback();
 	}

@@ -23,6 +23,7 @@ __export(WebUntisService_exports, {
 });
 module.exports = __toCommonJS(WebUntisService_exports);
 var import_SchoolDiscovery = require("./SchoolDiscovery");
+var import_Holidays = require("./Holidays");
 var import_WebUntisClient = require("./WebUntisClient");
 var import_WebUntisErrors = require("./WebUntisErrors");
 var import_Timetable = require("./Timetable");
@@ -30,6 +31,7 @@ class WebUntisService {
   constructor(onDiagnostic) {
     this.onDiagnostic = onDiagnostic;
   }
+  holidayCache = new import_Holidays.HolidayCache();
   /**
    *
    */
@@ -48,13 +50,19 @@ class WebUntisService {
     }
     const client = new import_WebUntisClient.WebUntisClient(config, fetch, void 0, this.onDiagnostic);
     const session = await client.authenticate(config.username, config.password);
+    let holidayEntries = null;
+    try {
+      holidayEntries = await this.holidayCache.get(now, () => client.getHolidays(session));
+    } catch {
+    }
+    const holidays = holidayEntries ? (0, import_Holidays.summarizeHolidays)(holidayEntries, now) : null;
     const range = (0, import_Timetable.weekRange)(now);
     const classId = session.personType >= 1 && session.personType <= 5 ? null : await client.getClassId(session);
     const supportedPerson = session.personType >= 1 && session.personType <= 5 ? null : await client.getSupportedPerson(session);
     const element = session.personType >= 1 && session.personType <= 5 ? { id: session.personId, type: session.personType } : supportedPerson ? supportedPerson : (classId != null ? classId : session.klasseId) > 0 ? { id: classId != null ? classId : session.klasseId, type: 1 } : null;
     if (!element) {
       const periods2 = await client.getPublicTimetable(session, now);
-      return (0, import_Timetable.splitTimetable)((0, import_Timetable.normalizeLessons)(periods2), now);
+      return { ...(0, import_Timetable.splitTimetable)((0, import_Timetable.normalizeLessons)(periods2), now), holidays };
     }
     const periods = await client.getTimetable(session, {
       ...range,
@@ -73,10 +81,13 @@ class WebUntisService {
       client.getRooms(session).catch(() => []),
       client.getKlassen(session).catch(() => [])
     ]);
-    return (0, import_Timetable.splitTimetable)(
-      (0, import_Timetable.normalizeLessons)((0, import_Timetable.resolveTimetableReferences)(periods, { subjects, teachers, rooms, klassen })),
-      now
-    );
+    return {
+      ...(0, import_Timetable.splitTimetable)(
+        (0, import_Timetable.normalizeLessons)((0, import_Timetable.resolveTimetableReferences)(periods, { subjects, teachers, rooms, klassen })),
+        now
+      ),
+      holidays
+    };
   }
   /**
    *

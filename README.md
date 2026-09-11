@@ -2,11 +2,11 @@
 
 ![Logo](admin/webuntis.png)
 
-# ioBroker.webuntis
+# ioBroker.webuntis2
 
-[![NPM version](https://img.shields.io/npm/v/iobroker.webuntis.svg)](https://www.npmjs.com/package/iobroker.webuntis)
-<!-- [![Downloads](https://img.shields.io/npm/dm/iobroker.webuntis.svg)](https://www.npmjs.com/package/iobroker.webuntis) -->
-<!-- ![Test and Release](https://github.com/Voodoo2man/ioBroker.webuntis/actions/workflows/test-and-release.yml/badge.svg) -->
+[![NPM version](https://img.shields.io/npm/v/iobroker.webuntis2.svg)](https://www.npmjs.com/package/iobroker.webuntis2)
+<!-- [![Downloads](https://img.shields.io/npm/dm/iobroker.webuntis2.svg)](https://www.npmjs.com/package/iobroker.webuntis2) -->
+<!-- ![Test and Release](https://github.com/Voodoo2man/ioBroker.webuntis2/actions/workflows/test-and-release.yml/badge.svg) -->
 
 ioBroker adapter for WebUntis. The adapter discovers schools automatically,
 tests the login, and provides the timetable for today, tomorrow, and the
@@ -23,12 +23,14 @@ current week as ioBroker states.
 - Detection of changes, substitutions, and cancellations
 - Daily summaries with lesson counts, times, subjects, and change counters
 - Updates every five minutes by default
+- Dynamic current/next lesson information below `timetable.today`, including
+  minutes until the next lesson and whether school is currently running
 
 Exams, homework, and other WebUntis data areas are not implemented yet.
 
 ## Setup
 
-1. Install the adapter and open a new `webuntis` instance.
+1. Install the adapter and open a new `webuntis2` instance.
 2. In the “School” section, enter at least two characters and start the search.
 3. Select the desired school from the results.
 4. Enter the WebUntis username and password.
@@ -77,10 +79,22 @@ The daily summary includes:
 - `subjects`, `subjectCount`, `firstSubject`, and `lastSubject`
 - `hasChanges`, `changeCount`, and `cancellationCount`
 
+The today channel also provides time-dependent states for `currentLesson` and
+`nextLesson`, their subject/room/teacher details, `nextLessonStart`,
+`minutesUntilNextLesson`, `schoolRunning`, and `minutesUntilSchoolEnd`. These
+states are recalculated locally every 60 seconds from the already loaded
+today timetable; the local timer does not perform WebUntis requests.
+
 Cancelled lessons count as lessons but are not included in the actual lesson
 duration. If an update fails, existing timetable data is preserved. The
 connection status and the timestamps of the last, successful, and next update
 are available below `info`.
+
+Holiday information is available below `holidays`. The adapter exposes the
+currently active holiday below `holidays.current` and the next future holiday
+below `holidays.next`, including `daysUntil`. Holiday data is loaded from
+WebUntis and cached in memory for several hours; no complete holiday history
+is created in the object tree.
 
 ## Security
 
