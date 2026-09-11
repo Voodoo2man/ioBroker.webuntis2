@@ -74,12 +74,6 @@ funktionieren. Führe anschließend den Verbindungstest in der
 Adapterkonfiguration aus. Teile bei einer Supportanfrage nur relevante,
 nicht vertrauliche Logmeldungen.
 
-## Lizenz
-
-Copyright (c) 2026 Voodoo2man <Voodoo2man@outlook.de>
-
-MIT-Lizenz. Siehe [LICENSE](LICENSE).
-
 ## Änderungsverlauf
 
 ### 0.0.1 (2026-09-11)
@@ -88,3 +82,9 @@ MIT-Lizenz. Siehe [LICENSE](LICENSE).
   Stundenplan, Tagesübersichten, Informationen zur aktuellen und nächsten
   Stunde, Ferienterminen, verständlichen Stammdatennamen und der Bereinigung
   nicht unterstützter alter Bereiche.
+
+## Lizenz
+
+Copyright (c) 2026 Voodoo2man <Voodoo2man@outlook.de>
+
+MIT-Lizenz. Siehe [LICENSE](LICENSE).

@@ -69,12 +69,6 @@ If the connection does not work, check the selected school and WebUntis login
 in a browser first. Then run the connection test in the adapter configuration
 and include only relevant, non-sensitive log messages when asking for help.
 
-## License
-
-Copyright (c) 2026 Voodoo2man <Voodoo2man@outlook.de>
-
-MIT License. See [LICENSE](LICENSE).
-
 ## Changelog
 
 ### 0.0.1 (2026-09-11)
@@ -82,3 +76,9 @@ MIT License. See [LICENSE](LICENSE).
 - (@Voodoo2man) Initial release with school search, secure login, timetable
   data, daily summaries, current and next lesson information, holidays,
   readable master-data names, and cleanup of unsupported legacy namespaces.
+
+## License
+
+Copyright (c) 2026 Voodoo2man <Voodoo2man@outlook.de>
+
+MIT License. See [LICENSE](LICENSE).
