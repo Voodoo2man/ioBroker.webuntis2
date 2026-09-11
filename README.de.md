@@ -1,5 +1,3 @@
-**IN ARBEIT**
-
 ![WebUntis2](docs/webuntis2-readme-banner.png)
 
 # ioBroker.webuntis2
