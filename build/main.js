@@ -116,8 +116,8 @@ class WebuntisNext extends utils.Adapter {
       return;
     }
     await this.updateTimetable();
-    this.timetableTimer = setInterval(() => void this.updateTimetable(), TIMETABLE_INTERVAL_MS);
-    this.currentNextTimer = setInterval(() => void this.updateCurrentNextStates(), CURRENT_NEXT_INTERVAL_MS);
+    this.timetableTimer = this.setInterval(() => void this.updateTimetable(), TIMETABLE_INTERVAL_MS);
+    this.currentNextTimer = this.setInterval(() => void this.updateCurrentNextStates(), CURRENT_NEXT_INTERVAL_MS);
   }
   hasConnectionConfig() {
     return Boolean(
@@ -498,10 +498,10 @@ class WebuntisNext extends utils.Adapter {
   }
   onUnload(callback) {
     if (this.timetableTimer) {
-      clearInterval(this.timetableTimer);
+      this.clearInterval(this.timetableTimer);
     }
     if (this.currentNextTimer) {
-      clearInterval(this.currentNextTimer);
+      this.clearInterval(this.currentNextTimer);
     }
     callback();
   }

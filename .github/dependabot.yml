@@ -4,9 +4,10 @@ updates:
     directory: "/"
     schedule:
       interval: monthly
-      day: 20
       time: "00:05"
       timezone: Europe/Berlin
+    cooldown:
+      default: 7
     open-pull-requests-limit: 5
     assignees:
       - Voodoo2man
@@ -16,9 +17,11 @@ updates:
     directory: "/"
     schedule:
       interval: monthly
-      day: 20
       time: "00:05"
       timezone: Europe/Berlin
     open-pull-requests-limit: 5
     assignees:
       - Voodoo2man
+    ignore:
+      - dependency-name: "@types/node"
+        update-types: ["version-update:semver-major"]

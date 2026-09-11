@@ -54,8 +54,8 @@ and update information. Holiday information is available below `holidays`.
 - Username-and-password login is supported.
 - QR-code, Microsoft 365, SAML, and OAuth login are not supported.
 - Exams, homework, and messages are not provided.
-- WebUntis is an external service. This project is independent and is not
-  affiliated with Untis GmbH.
+- [WebUntis](https://webuntis.com/) is an external service. This project is
+  independent and is not affiliated with Untis GmbH.
 
 ## Privacy and security
 
@@ -71,4 +71,14 @@ and include only relevant, non-sensitive log messages when asking for help.
 
 ## License
 
+Copyright (c) 2026 Voodoo2man <Voodoo2man@outlook.de>
+
 MIT License. See [LICENSE](LICENSE).
+
+## Changelog
+
+### 0.0.1 (2026-09-11)
+
+- (@Voodoo2man) Initial release with school search, secure login, timetable
+  data, daily summaries, current and next lesson information, holidays,
+  readable master-data names, and cleanup of unsupported legacy namespaces.

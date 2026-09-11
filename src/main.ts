@@ -87,8 +87,8 @@ const CURRENT_NEXT_STATE_DEFINITIONS: Record<
 
 class WebuntisNext extends utils.Adapter {
 	private readonly webUntis: WebUntisService;
-	private timetableTimer?: NodeJS.Timeout;
-	private currentNextTimer?: NodeJS.Timeout;
+	private timetableTimer?: ioBroker.Interval;
+	private currentNextTimer?: ioBroker.Interval;
 	private todayLessons: TimetableLesson[] = [];
 
 	public constructor(options: Partial<utils.AdapterOptions> = {}) {
@@ -115,8 +115,8 @@ class WebuntisNext extends utils.Adapter {
 			return;
 		}
 		await this.updateTimetable();
-		this.timetableTimer = setInterval(() => void this.updateTimetable(), TIMETABLE_INTERVAL_MS);
-		this.currentNextTimer = setInterval(() => void this.updateCurrentNextStates(), CURRENT_NEXT_INTERVAL_MS);
+		this.timetableTimer = this.setInterval(() => void this.updateTimetable(), TIMETABLE_INTERVAL_MS);
+		this.currentNextTimer = this.setInterval(() => void this.updateCurrentNextStates(), CURRENT_NEXT_INTERVAL_MS);
 	}
 
 	private hasConnectionConfig(): this is { config: WebUntisConnectionConfig } {
@@ -561,10 +561,10 @@ class WebuntisNext extends utils.Adapter {
 
 	private onUnload(callback: () => void): void {
 		if (this.timetableTimer) {
-			clearInterval(this.timetableTimer);
+			this.clearInterval(this.timetableTimer);
 		}
 		if (this.currentNextTimer) {
-			clearInterval(this.currentNextTimer);
+			this.clearInterval(this.currentNextTimer);
 		}
 		callback();
 	}

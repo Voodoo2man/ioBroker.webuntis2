@@ -43,8 +43,17 @@
 			"uk": "Підключіть ioBroker до WebUntis для отримання розкладів, шкільної інформації та пов’язаних даних",
 			"zh-cn": "将 ioBroker 连接到 WebUntis 以获取时间表、学校信息和相关数据"
 		},
-		"authors": ["Voodoo2man <Voodoo2man@outlook.de>"],
-		"keywords": ["webuntis", "untis", "timetable", "school", "education", "schedule"],
+		"authors": [
+			"Voodoo2man <Voodoo2man@outlook.de>"
+		],
+		"keywords": [
+			"webuntis",
+			"untis",
+			"timetable",
+			"school",
+			"education",
+			"schedule"
+		],
 		"licenseInformation": {
 			"type": "free",
 			"license": "MIT"
@@ -73,7 +82,7 @@
 		],
 		"globalDependencies": [
 			{
-				"admin": ">=7.0.23"
+				"admin": ">=7.6.17"
 			}
 		]
 	},
@@ -86,8 +95,12 @@
 		"username": "",
 		"password": ""
 	},
-	"encryptedNative": ["password"],
-	"protectedNative": ["password"],
+	"encryptedNative": [
+		"password"
+	],
+	"protectedNative": [
+		"password"
+	],
 	"objects": [],
 	"instanceObjects": [
 		{
