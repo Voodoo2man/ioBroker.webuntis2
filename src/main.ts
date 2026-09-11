@@ -24,8 +24,8 @@ const SUMMARY_STATE_DEFINITIONS: Record<
 	hasSchool: { type: "boolean", role: "indicator", name: "Has school", def: false },
 	lessonCount: { type: "number", role: "value", name: "Lesson count", def: 0 },
 	lessonDurationMinutes: { type: "number", role: "value", name: "Lesson duration in minutes", def: 0 },
-	schoolStart: { type: "string", role: "value.time", name: "School start", def: "" },
-	schoolEnd: { type: "string", role: "value.time", name: "School end", def: "" },
+	schoolStart: { type: "string", role: "text", name: "School start", def: "" },
+	schoolEnd: { type: "string", role: "text", name: "School end", def: "" },
 	subjects: { type: "string", role: "text", name: "Subjects", def: "" },
 	subjectCount: { type: "number", role: "value", name: "Subject count", def: 0 },
 	firstSubject: { type: "string", role: "text", name: "First subject", def: "" },
@@ -67,7 +67,7 @@ const CURRENT_NEXT_STATE_DEFINITIONS: Record<
 	nextSubject: { type: "string", role: "text", name: "Next subject", def: "" },
 	nextRoom: { type: "string", role: "text", name: "Next room", def: "" },
 	nextTeacher: { type: "string", role: "text", name: "Next teacher", def: "" },
-	nextLessonStart: { type: "string", role: "value.time", name: "Next lesson start", def: "" },
+	nextLessonStart: { type: "string", role: "text", name: "Next lesson start", def: "" },
 	minutesUntilNextLesson: {
 		type: "number",
 		role: "value.interval",
@@ -265,6 +265,9 @@ class WebuntisNext extends utils.Adapter {
 				},
 				native: {},
 			});
+			await this.extendObjectAsync(`timetable.${path}.${name}`, {
+				common: { type: definition.type, role: definition.role, def: definition.def },
+			});
 			await this.setStateAsync(`timetable.${path}.${name}`, summary[name], true);
 		}
 	}
@@ -287,6 +290,14 @@ class WebuntisNext extends utils.Adapter {
 					...(definition.unit ? { unit: definition.unit } : {}),
 				},
 				native: {},
+			});
+			await this.extendObjectAsync(`timetable.today.${name}`, {
+				common: {
+					type: definition.type,
+					role: definition.role,
+					def: definition.def,
+					...(definition.unit ? { unit: definition.unit } : {}),
+				},
 			});
 			await this.setStateAsync(`timetable.today.${name}`, summary[name], true);
 		}
@@ -450,8 +461,8 @@ class WebuntisNext extends utils.Adapter {
 			{ value: string | number | boolean; type: "string" | "number" | "boolean"; role: string }
 		> = {
 			date: { value: lesson.date, type: "string", role: "date" },
-			startTime: { value: lesson.startTime, type: "string", role: "value.time" },
-			endTime: { value: lesson.endTime, type: "string", role: "value.time" },
+			startTime: { value: lesson.startTime, type: "string", role: "text" },
+			endTime: { value: lesson.endTime, type: "string", role: "text" },
 			subject: { value: lesson.subject, type: "string", role: "text" },
 			subjectLong: { value: lesson.subjectLong, type: "string", role: "text" },
 			teacher: { value: lesson.teacher, type: "string", role: "text" },
@@ -459,10 +470,10 @@ class WebuntisNext extends utils.Adapter {
 			class: { value: lesson.class, type: "string", role: "text" },
 			...(lesson.lessonId === null
 				? {}
-				: { lessonId: { value: String(lesson.lessonId), type: "string" as const, role: "value" } }),
+				: { lessonId: { value: String(lesson.lessonId), type: "string" as const, role: "text" } }),
 			...(lesson.periodId === null
 				? {}
-				: { periodId: { value: String(lesson.periodId), type: "string" as const, role: "value" } }),
+				: { periodId: { value: String(lesson.periodId), type: "string" as const, role: "text" } }),
 			status: { value: lesson.status, type: "string", role: "text" },
 			changed: { value: lesson.changed, type: "boolean", role: "indicator" },
 			cancelled: { value: lesson.cancelled, type: "boolean", role: "indicator" },
@@ -498,7 +509,9 @@ class WebuntisNext extends utils.Adapter {
 				},
 				native: {},
 			});
-			await this.extendObjectAsync(`${base}.${name}`, { common: { name: LESSON_STATE_NAMES[name] || name } });
+			await this.extendObjectAsync(`${base}.${name}`, {
+				common: { name: LESSON_STATE_NAMES[name] || name, type: item.type, role: item.role, def: item.value },
+			});
 			await this.setStateAsync(`${base}.${name}`, item.value, true);
 		}
 	}
