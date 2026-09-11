@@ -172,8 +172,6 @@ class WebUntisClient {
    */
   async authenticate(username, password) {
     var _a;
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), this.requestTimeoutMs);
     try {
       const response = await this.fetchImpl(this.endpoint, {
         method: "POST",
@@ -184,7 +182,7 @@ class WebUntisClient {
           params: { user: username, password, client: "ioBroker.webuntis2" },
           jsonrpc: "2.0"
         }),
-        signal: controller.signal
+        signal: AbortSignal.timeout(this.requestTimeoutMs)
       });
       this.sessionCookie = getCookieHeader(response.headers);
       this.authenticatedAt = Date.now();
@@ -272,8 +270,6 @@ class WebUntisClient {
         throw new import_WebUntisErrors.WebUntisError("TIMEOUT", "WebUntis authentication timed out");
       }
       throw new import_WebUntisErrors.WebUntisError("SERVER_UNREACHABLE", "WebUntis authentication failed", { cause: error });
-    } finally {
-      clearTimeout(timer);
     }
   }
   /**
@@ -478,8 +474,6 @@ class WebUntisClient {
   }
   async request(method, params, session) {
     var _a;
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), this.requestTimeoutMs);
     try {
       const requestSequence = ++this.requestSequence;
       const sessionEndpoint = this.endpoint.replace(
@@ -495,7 +489,7 @@ class WebUntisClient {
           ...this.sessionCookie ? { cookie: this.sessionCookie } : {}
         },
         body: JSON.stringify({ id: Date.now().toString(), method, params, jsonrpc: "2.0" }),
-        signal: controller.signal
+        signal: AbortSignal.timeout(this.requestTimeoutMs)
       });
       const body = await response.text();
       const cookie = mergeCookieHeader(this.sessionCookie, response.headers);
@@ -581,8 +575,6 @@ class WebUntisClient {
         throw new import_WebUntisErrors.WebUntisError("TIMEOUT", "WebUntis timetable request timed out");
       }
       throw new import_WebUntisErrors.WebUntisError("SERVER_UNREACHABLE", "WebUntis timetable request failed", { cause: error });
-    } finally {
-      clearTimeout(timer);
     }
   }
 }

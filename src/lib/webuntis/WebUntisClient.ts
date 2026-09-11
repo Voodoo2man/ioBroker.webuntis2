@@ -194,8 +194,6 @@ export class WebUntisClient {
 	 *
 	 */
 	public async authenticate(username: string, password: string): Promise<WebUntisSession> {
-		const controller = new AbortController();
-		const timer = setTimeout(() => controller.abort(), this.requestTimeoutMs);
 		try {
 			const response = await this.fetchImpl(this.endpoint, {
 				method: "POST",
@@ -206,7 +204,7 @@ export class WebUntisClient {
 					params: { user: username, password, client: "ioBroker.webuntis2" },
 					jsonrpc: "2.0",
 				}),
-				signal: controller.signal,
+				signal: AbortSignal.timeout(this.requestTimeoutMs),
 			});
 			this.sessionCookie = getCookieHeader(response.headers);
 			this.authenticatedAt = Date.now();
@@ -300,8 +298,6 @@ export class WebUntisClient {
 				throw new WebUntisError("TIMEOUT", "WebUntis authentication timed out");
 			}
 			throw new WebUntisError("SERVER_UNREACHABLE", "WebUntis authentication failed", { cause: error });
-		} finally {
-			clearTimeout(timer);
 		}
 	}
 
@@ -529,8 +525,6 @@ export class WebUntisClient {
 	}
 
 	private async request<T>(method: string, params: unknown, session: WebUntisSession): Promise<T> {
-		const controller = new AbortController();
-		const timer = setTimeout(() => controller.abort(), this.requestTimeoutMs);
 		try {
 			const requestSequence = ++this.requestSequence;
 			const sessionEndpoint = this.endpoint.replace(
@@ -546,7 +540,7 @@ export class WebUntisClient {
 					...(this.sessionCookie ? { cookie: this.sessionCookie } : {}),
 				},
 				body: JSON.stringify({ id: Date.now().toString(), method, params, jsonrpc: "2.0" }),
-				signal: controller.signal,
+				signal: AbortSignal.timeout(this.requestTimeoutMs),
 			});
 			const body = await response.text();
 			const cookie = mergeCookieHeader(this.sessionCookie, response.headers);
@@ -643,8 +637,6 @@ export class WebUntisClient {
 				throw new WebUntisError("TIMEOUT", "WebUntis timetable request timed out");
 			}
 			throw new WebUntisError("SERVER_UNREACHABLE", "WebUntis timetable request failed", { cause: error });
-		} finally {
-			clearTimeout(timer);
 		}
 	}
 }

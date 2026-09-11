@@ -57,8 +57,8 @@ Verbindungsstatus und Aktualisierungsinformationen. Ferientermine stehen unter
 - Unterstützt wird die Anmeldung mit Benutzername und Passwort.
 - QR-Code-, Microsoft-365-, SAML- und OAuth-Anmeldung werden nicht unterstützt.
 - Prüfungen, Hausaufgaben und Mitteilungen werden nicht bereitgestellt.
-- WebUntis ist ein externer Dienst. Dieses Projekt ist unabhängig und nicht
-  mit der Untis GmbH verbunden.
+- [WebUntis](https://webuntis.com/) ist ein externer Dienst. Dieses Projekt ist
+  unabhängig und nicht mit der Untis GmbH verbunden.
 
 ## Datenschutz und Sicherheit
 
@@ -74,6 +74,17 @@ funktionieren. Führe anschließend den Verbindungstest in der
 Adapterkonfiguration aus. Teile bei einer Supportanfrage nur relevante,
 nicht vertrauliche Logmeldungen.
 
+## Änderungsverlauf
+
+### 0.0.1 (2026-09-11)
+
+- (@Voodoo2man) Erste Veröffentlichung mit Schulsuche, geschützter Anmeldung,
+  Stundenplan, Tagesübersichten, Informationen zur aktuellen und nächsten
+  Stunde, Ferienterminen, verständlichen Stammdatennamen und der Bereinigung
+  nicht unterstützter alter Bereiche.
+
 ## Lizenz
+
+Copyright (c) 2026 Voodoo2man <Voodoo2man@outlook.de>
 
 MIT-Lizenz. Siehe [LICENSE](LICENSE).

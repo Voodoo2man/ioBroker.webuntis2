@@ -47,8 +47,6 @@ export async function searchSchools(query: string, fetchImpl: typeof fetch = fet
 	if (normalizedQuery.length < 2) {
 		return [];
 	}
-	const controller = new AbortController();
-	const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
 	try {
 		const response = await fetchImpl(SEARCH_URL, {
 			method: "POST",
@@ -59,7 +57,7 @@ export async function searchSchools(query: string, fetchImpl: typeof fetch = fet
 				params: [{ schoolid: 0, search: normalizedQuery }],
 				jsonrpc: "2.0",
 			}),
-			signal: controller.signal,
+			signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
 		});
 		if (!response.ok) {
 			throw new WebUntisError("SERVER_UNREACHABLE", `School search HTTP ${response.status}`);
@@ -80,8 +78,6 @@ export async function searchSchools(query: string, fetchImpl: typeof fetch = fet
 			throw new WebUntisError("TIMEOUT", "School search timed out");
 		}
 		throw new WebUntisError("SERVER_UNREACHABLE", "School search failed", { cause: error });
-	} finally {
-		clearTimeout(timer);
 	}
 }
 
