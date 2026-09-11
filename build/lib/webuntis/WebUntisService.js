@@ -29,11 +29,12 @@ var import_WebUntisErrors = require("./WebUntisErrors");
 var import_Timetable = require("./Timetable");
 const MASTERDATA_TTL_MS = 6 * 60 * 60 * 1e3;
 class WebUntisService {
-  constructor(onDiagnostic, onInfo, onWarning, fetchImpl = fetch) {
+  constructor(onDiagnostic, onInfo, onWarning, fetchImpl = fetch, onDebug) {
     this.onDiagnostic = onDiagnostic;
     this.onInfo = onInfo;
     this.onWarning = onWarning;
     this.fetchImpl = fetchImpl;
+    this.onDebug = onDebug;
   }
   holidayCache = new import_Holidays.HolidayCache();
   sessionClient;
@@ -48,6 +49,7 @@ class WebUntisService {
     return (0, import_SchoolDiscovery.searchSchools)(query);
   }
   async loadTimetable(config, now = /* @__PURE__ */ new Date()) {
+    var _a;
     if (!config.server || !config.schoolName || config.schoolId === null) {
       throw new import_WebUntisErrors.WebUntisError("SCHOOL_NOT_SELECTED", "School selection is missing");
     }
@@ -63,6 +65,7 @@ class WebUntisService {
       if (!(error instanceof import_WebUntisErrors.WebUntisError) || error.code !== "SESSION_EXPIRED") {
         throw error;
       }
+      (_a = this.onDebug) == null ? void 0 : _a.call(this, "WebUntis session expired; performing one diagnostic re-authentication");
       this.sessionClient = void 0;
       this.session = void 0;
       this.sessionKey = void 0;

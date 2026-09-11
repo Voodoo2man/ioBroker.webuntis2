@@ -99,7 +99,9 @@ class WebuntisNext extends utils.Adapter {
     this.webUntis = new import_WebUntisService.WebUntisService(
       this.logHttpDiagnostic.bind(this),
       (message) => this.log.info(message),
-      (message) => this.log.warn(message)
+      (message) => this.log.warn(message),
+      fetch,
+      (message) => this.log.debug(message)
     );
     this.on("ready", this.onReady.bind(this));
     this.on("message", this.onMessage.bind(this));
@@ -147,7 +149,7 @@ class WebuntisNext extends utils.Adapter {
       await this.setState("info.lastSuccessfulUpdate", now.toISOString(), true);
       await this.setState("info.nextUpdate", new Date(now.getTime() + TIMETABLE_INTERVAL_MS).toISOString(), true);
       await this.setState("info.connection", true, true);
-      this.log.info(`Timetable updated: ${updated} lessons updated, ${removed} obsolete lessons removed`);
+      this.log.warn(`Timetable updated: ${updated} lessons updated, ${removed} obsolete lessons removed`);
     } catch (error) {
       await this.setState("info.connection", false, true);
       await this.setState("info.nextUpdate", new Date(Date.now() + TIMETABLE_INTERVAL_MS).toISOString(), true);

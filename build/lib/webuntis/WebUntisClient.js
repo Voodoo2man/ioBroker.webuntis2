@@ -92,6 +92,9 @@ function getSupportedPerson(value) {
   }
   return null;
 }
+function isLoginPagePayload(value) {
+  return isRecord(value) && Boolean(value.loginError);
+}
 function getEndpoint(server, schoolName) {
   var _a;
   const url = new URL(server);
@@ -122,6 +125,34 @@ function getCookieHeader(headers) {
   const cookies = values.flatMap((value) => value.split(/,(?=[^;,]+=)/)).map((value) => value.split(";", 1)[0].trim()).filter(Boolean);
   return cookies.length ? cookies.join("; ") : void 0;
 }
+function cookieValue(header, name) {
+  var _a;
+  return (_a = header == null ? void 0 : header.split(/;\s*/).map((cookie) => cookie.split("=", 2)).find(([key]) => key === name)) == null ? void 0 : _a[1];
+}
+function mergeCookieHeader(previous, headers) {
+  const values = /* @__PURE__ */ new Map();
+  for (const cookie of (previous || "").split(/;\s*/)) {
+    const separator = cookie.indexOf("=");
+    if (separator > 0) {
+      values.set(cookie.slice(0, separator), cookie);
+    }
+  }
+  const next = getCookieHeader(headers);
+  if (next) {
+    for (const cookie of next.split(/;\s*/)) {
+      const separator = cookie.indexOf("=");
+      if (separator > 0) {
+        values.set(cookie.slice(0, separator), cookie);
+      }
+    }
+  }
+  const value = values.size ? [...values.values()].join("; ") : void 0;
+  return {
+    value,
+    changed: value !== previous,
+    sessionCookieChanged: cookieValue(previous, "JSESSIONID") !== cookieValue(value, "JSESSIONID")
+  };
+}
 class WebUntisClient {
   /**
    *
@@ -134,6 +165,8 @@ class WebUntisClient {
   }
   endpoint;
   sessionCookie;
+  authenticatedAt;
+  requestSequence = 0;
   /**
    *
    */
@@ -154,6 +187,7 @@ class WebUntisClient {
         signal: controller.signal
       });
       this.sessionCookie = getCookieHeader(response.headers);
+      this.authenticatedAt = Date.now();
       const contentType = response.headers.get("content-type") || "";
       const body = await response.text();
       const type = getResponseType(body, contentType);
@@ -291,6 +325,8 @@ class WebUntisClient {
         ...this.sessionCookie ? { cookie: this.sessionCookie } : { cookie: `JSESSIONID=${session.sessionId}` }
       }
     });
+    const cookie = mergeCookieHeader(this.sessionCookie, response.headers);
+    this.sessionCookie = cookie.value;
     const contentType = response.headers.get("content-type") || "";
     const body = await response.text();
     const type = getResponseType(body, contentType);
@@ -323,8 +359,15 @@ class WebUntisClient {
       dataKeys: isRecord(payload) && isRecord(payload.data) ? Object.keys(payload.data) : [],
       classIdType: isRecord(payload) && isRecord(payload.data) ? typeof payload.data.klasseId : "missing",
       classIdPresent: getClassIdFromConfig(payload) !== null,
+      cookiePresent: Boolean(this.sessionCookie),
+      cookieChanged: cookie.changed,
+      sessionCookieChanged: cookie.sessionCookieChanged,
+      cookieCount: this.sessionCookie ? this.sessionCookie.split(/;\s*/).length : 0,
       classCandidateCount: isRecord(payload) && isRecord(payload.data) && Array.isArray(payload.data.klassen) ? payload.data.klassen.length : 0
     });
+    if (response.redirected || isLoginPagePayload(payload)) {
+      throw new import_WebUntisErrors.WebUntisError("SESSION_EXPIRED", "WebUntis session expired");
+    }
     return getClassIdFromConfig(payload);
   }
   /**
@@ -344,6 +387,8 @@ class WebUntisClient {
         ...this.sessionCookie ? { cookie: this.sessionCookie } : { cookie: `JSESSIONID=${session.sessionId}` }
       }
     });
+    const cookie = mergeCookieHeader(this.sessionCookie, response.headers);
+    this.sessionCookie = cookie.value;
     const contentType = response.headers.get("content-type") || "";
     const body = await response.text();
     const type = getResponseType(body, contentType);
@@ -365,7 +410,11 @@ class WebUntisClient {
       resultType: "array",
       resultLength: periods.length,
       resultKeys: isRecord(payload) ? Object.keys(payload) : void 0,
-      errorMessage: isRecord(payload) && isRecord(payload.error) && typeof payload.error.message === "string" ? payload.error.message.slice(0, 120) : void 0
+      cookiePresent: Boolean(this.sessionCookie),
+      cookieChanged: cookie.changed,
+      sessionCookieChanged: cookie.sessionCookieChanged,
+      cookieCount: this.sessionCookie ? this.sessionCookie.split(/;\s*/).length : 0,
+      errorMessage: isRecord(payload) && typeof payload.errorMessage === "string" ? payload.errorMessage.slice(0, 120) : isRecord(payload) && isRecord(payload.error) && typeof payload.error.message === "string" ? payload.error.message.slice(0, 120) : void 0
     });
     if (!response.ok) {
       throw new import_WebUntisErrors.WebUntisError("SERVER_UNREACHABLE", `WebUntis HTTP ${response.status}`);
@@ -385,6 +434,8 @@ class WebUntisClient {
         ...this.sessionCookie ? { cookie: this.sessionCookie } : { cookie: `JSESSIONID=${session.sessionId}` }
       }
     });
+    const cookie = mergeCookieHeader(this.sessionCookie, response.headers);
+    this.sessionCookie = cookie.value;
     const contentType = response.headers.get("content-type") || "";
     const body = await response.text();
     let payload;
@@ -414,8 +465,15 @@ class WebUntisClient {
       resultType: person ? "object" : "missing",
       personCandidate: Boolean(person),
       resultKeys: isRecord(payload) ? Object.keys(payload) : void 0,
+      cookiePresent: Boolean(this.sessionCookie),
+      cookieChanged: cookie.changed,
+      sessionCookieChanged: cookie.sessionCookieChanged,
+      cookieCount: this.sessionCookie ? this.sessionCookie.split(/;\s*/).length : 0,
       errorMessage: isRecord(payload) && typeof payload.errorMessage === "string" ? payload.errorMessage.slice(0, 120) : void 0
     });
+    if (response.redirected || isLoginPagePayload(payload)) {
+      throw new import_WebUntisErrors.WebUntisError("SESSION_EXPIRED", "WebUntis session expired");
+    }
     return person;
   }
   async request(method, params, session) {
@@ -423,10 +481,12 @@ class WebUntisClient {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), this.requestTimeoutMs);
     try {
+      const requestSequence = ++this.requestSequence;
       const sessionEndpoint = this.endpoint.replace(
         "/jsonrpc.do?",
         `/jsonrpc.do;jsessionid=${encodeURIComponent(session.sessionId)}?`
       );
+      const requestOptions = isRecord(params) && isRecord(params.options) ? params.options : void 0;
       const response = await this.fetchImpl(sessionEndpoint, {
         method: "POST",
         headers: {
@@ -437,26 +497,37 @@ class WebUntisClient {
         body: JSON.stringify({ id: Date.now().toString(), method, params, jsonrpc: "2.0" }),
         signal: controller.signal
       });
-      if (!response.ok) {
-        throw new import_WebUntisErrors.WebUntisError("SERVER_UNREACHABLE", `WebUntis HTTP ${response.status}`);
-      }
       const body = await response.text();
+      const cookie = mergeCookieHeader(this.sessionCookie, response.headers);
+      this.sessionCookie = cookie.value;
+      const contentType = response.headers.get("content-type") || "";
+      const type = getResponseType(body, contentType);
       let payload;
-      try {
-        payload = JSON.parse(body);
-      } catch {
-        throw new import_WebUntisErrors.WebUntisError("INVALID_RESPONSE", "Invalid WebUntis timetable JSON response");
+      if (type === "json") {
+        try {
+          payload = JSON.parse(body);
+        } catch {
+        }
       }
       const diagnostic = {
         method,
         status: response.status,
-        contentType: response.headers.get("content-type") || "",
+        contentType,
         url: redactUrl(response.url),
         redirected: response.redirected,
         length: body.length,
-        type: "json",
+        type,
         cookiePresent: Boolean(this.sessionCookie),
-        elementType: isRecord(params) && isRecord(params.options) && isRecord(params.options.element) ? typeof params.options.element.type === "number" ? params.options.element.type : void 0 : void 0
+        cookieChanged: cookie.changed,
+        sessionCookieChanged: cookie.sessionCookieChanged,
+        cookieCount: this.sessionCookie ? this.sessionCookie.split(/;\s*/).length : 0,
+        sessionAgeSeconds: this.authenticatedAt ? Math.max(0, Math.round((Date.now() - this.authenticatedAt) / 1e3)) : void 0,
+        requestSequence,
+        sessionPresent: Boolean(session.sessionId),
+        personIdPresent: typeof session.personId === "number",
+        elementType: isRecord(requestOptions == null ? void 0 : requestOptions.element) ? typeof requestOptions.element.type === "number" ? requestOptions.element.type : void 0 : void 0,
+        startDate: typeof (requestOptions == null ? void 0 : requestOptions.startDate) === "number" ? requestOptions.startDate : void 0,
+        endDate: typeof (requestOptions == null ? void 0 : requestOptions.endDate) === "number" ? requestOptions.endDate : void 0
       };
       if (isRecord(payload)) {
         diagnostic.keys = Object.keys(payload);
@@ -480,8 +551,14 @@ class WebUntisClient {
         }
       }
       (_a = this.onDiagnostic) == null ? void 0 : _a.call(this, diagnostic);
+      if (!response.ok) {
+        throw new import_WebUntisErrors.WebUntisError("SERVER_UNREACHABLE", `WebUntis HTTP ${response.status}`);
+      }
       if (!isRecord(payload)) {
-        throw new import_WebUntisErrors.WebUntisError("INVALID_RESPONSE", "Invalid WebUntis timetable response");
+        throw new import_WebUntisErrors.WebUntisError(
+          type === "html" ? "HTML_RESPONSE" : "INVALID_RESPONSE",
+          type === "html" ? "WebUntis returned HTML instead of JSON" : "Invalid WebUntis timetable response"
+        );
       }
       if (isRecord(payload.error)) {
         if (payload.error.code === -7001 && typeof payload.error.message === "string" && payload.error.message.startsWith("invalid elementType:")) {

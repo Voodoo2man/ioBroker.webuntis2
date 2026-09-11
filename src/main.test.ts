@@ -261,6 +261,60 @@ describe("WebUntis username/password authentication", () => {
 		expect((timetableHeaders as Record<string, string>).cookie).to.equal("JSESSIONID=session");
 	});
 
+	it("merges and updates cookies received from timetable responses", async () => {
+		let call = 0;
+		const followUpHeaders: unknown[] = [];
+		const client = new WebUntisClient(config, async (_url, init) => {
+			call++;
+			if (call === 1) {
+				const headers = new Headers({ "content-type": "application/json" });
+				headers.append("set-cookie", "JSESSIONID=session; Path=/");
+				headers.append("set-cookie", "ROUTE=one; Path=/");
+				return new Response(
+					JSON.stringify({ result: { sessionId: "session", personType: 5, personId: 1, klasseId: 2 } }),
+					{ status: 200, headers },
+				);
+			}
+			followUpHeaders.push(init?.headers);
+			if (call === 2) {
+				const headers = new Headers({ "content-type": "application/json" });
+				headers.append("set-cookie", "JSESSIONID=next; Path=/");
+				return new Response(JSON.stringify({ result: [] }), { status: 200, headers });
+			}
+			return response({ result: [] });
+		});
+		const session = await client.authenticate("alice", "secret");
+		const query = {
+			startDate: 20260907,
+			endDate: 20260911,
+			element: { id: 1, type: 5 },
+			onlyBaseTimetable: false,
+			showBooking: true,
+			showInfo: true,
+			showSubstText: true,
+			showLsText: true,
+			showLsNumber: true,
+			showStudentgroup: true,
+		};
+		await client.getTimetable(session, query);
+		await client.getTimetable(session, query);
+		expect((followUpHeaders[0] as Record<string, string>).cookie).to.equal("JSESSIONID=session; ROUTE=one");
+		expect((followUpHeaders[1] as Record<string, string>).cookie).to.equal("JSESSIONID=next; ROUTE=one");
+	});
+
+	it("classifies a redirected person request as an expired session", async () => {
+		const client = new WebUntisClient(config, async url => {
+			expect(String(url)).to.contain("/api/daytimetable/config");
+			return response({ loginError: true, state: "LOGIN" });
+		});
+		try {
+			await client.getClassId({ sessionId: "session", personType: 12, personId: 4700, klasseId: 0 });
+			expect.fail("expected expired session");
+		} catch (error) {
+			expect((error as WebUntisError).code).to.equal("SESSION_EXPIRED");
+		}
+	});
+
 	it("classifies timeouts", async () => {
 		try {
 			await new WebUntisClient(

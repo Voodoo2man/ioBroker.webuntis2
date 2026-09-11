@@ -40,6 +40,7 @@ export class WebUntisService {
 		private readonly onInfo?: (message: string) => void,
 		private readonly onWarning?: (message: string) => void,
 		private readonly fetchImpl: typeof fetch = fetch,
+		private readonly onDebug?: (message: string) => void,
 	) {}
 	/**
 	 *
@@ -67,6 +68,7 @@ export class WebUntisService {
 			if (!(error instanceof WebUntisError) || error.code !== "SESSION_EXPIRED") {
 				throw error;
 			}
+			this.onDebug?.("WebUntis session expired; performing one diagnostic re-authentication");
 			this.sessionClient = undefined;
 			this.session = undefined;
 			this.sessionKey = undefined;
