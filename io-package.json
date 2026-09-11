@@ -16,19 +16,6 @@
 				"uk": "повний випуск функцій",
 				"zh-cn": "完整功能版本"
 			},
-			"0.0.2": {
-				"en": "prepared trusted publishing release",
-				"de": "Trusted-Publishing-Veröffentlichung vorbereitet",
-				"ru": "подготовлен выпуск с доверенной публикацией",
-				"pt": "versão de publicação confiável preparada",
-				"nl": "trusted publishing-release voorbereid",
-				"fr": "version de publication de confiance préparée",
-				"it": "preparata la versione per la pubblicazione attendibile",
-				"es": "versión de publicación confiable preparada",
-				"pl": "przygotowano wydanie z zaufanym publikowaniem",
-				"uk": "підготовлено випуск із довіреною публікацією",
-				"zh-cn": "已准备可信发布版本"
-			},
 			"0.0.1": {
 				"en": "initial release",
 				"de": "Erstveröffentlichung",
