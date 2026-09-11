@@ -5,7 +5,16 @@
 		"news": {
 			"0.1.0": {
 				"en": "complete feature release",
-				"de": "vollständige Funktionsveröffentlichung"
+				"de": "vollständige Funktionsveröffentlichung",
+				"ru": "полный выпуск функций",
+				"pt": "versão com todas as funcionalidades",
+				"nl": "volledige functierelease",
+				"fr": "version avec toutes les fonctionnalités",
+				"it": "versione con tutte le funzionalità",
+				"es": "versión con todas las funcionalidades",
+				"pl": "wydanie z pełnym zestawem funkcji",
+				"uk": "повний випуск функцій",
+				"zh-cn": "完整功能版本"
 			},
 			"0.0.2": {
 				"en": "prepared trusted publishing release",
