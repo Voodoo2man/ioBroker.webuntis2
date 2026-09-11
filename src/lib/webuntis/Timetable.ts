@@ -272,6 +272,17 @@ export function dateNumber(date: Date): number {
 }
 
 /**
+ * Returns the next date for a weekday, including today.
+ */
+export function nextWeekday(date: Date, targetWeekday: number): Date {
+	const result = new Date(date);
+	result.setHours(12, 0, 0, 0);
+	const currentWeekday = (result.getDay() + 6) % 7;
+	result.setDate(result.getDate() + ((targetWeekday - currentWeekday + 7) % 7));
+	return result;
+}
+
+/**
  *
  */
 export function dayRange(date: Date): {
@@ -301,9 +312,9 @@ export function weekRange(date: Date): {
 	endDate: number;
 } {
 	const start = new Date(date);
-	start.setDate(start.getDate() - start.getDay() + 1);
+	start.setHours(12, 0, 0, 0);
 	const end = new Date(start);
-	end.setDate(start.getDate() + 4);
+	end.setDate(end.getDate() + 6);
 	return { startDate: dateNumber(start), endDate: dateNumber(end) };
 }
 

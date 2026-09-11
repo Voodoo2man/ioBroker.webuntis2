@@ -74,6 +74,10 @@ nicht vertrauliche Logmeldungen.
 
 ## Änderungsverlauf
 
+### 0.1.1 (2026-09-12)
+
+- (@Voodoo2man) Verbesserte rollierende Sieben-Tage-Ansicht und Wochentagszusammenfassungen ergänzt. Datumsfelder enthalten jetzt reine Datumswerte sowie zusätzliche Unix-Zeitstempel in Millisekunden.
+
 ### 0.1.0 (2026-09-11)
 
 - (@Voodoo2man) Vollständige Funktionsveröffentlichung mit Stundenplandaten, Ferienterminen, verständlichen Stundennamen, Tagesübersichten, Informationen zur aktuellen und nächsten Stunde sowie React-Administrationsoberfläche.
