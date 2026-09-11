@@ -83,6 +83,8 @@ and include only relevant, non-sensitive log messages when asking for help.
   data, daily summaries, current and next lesson information, holidays,
   readable master-data names, and cleanup of unsupported legacy namespaces.
 
+[Older changelogs can be found there](CHANGELOG_OLD.md)
+
 ## License
 
 Copyright (c) 2026 Voodoo2man <Voodoo2man@outlook.de>
