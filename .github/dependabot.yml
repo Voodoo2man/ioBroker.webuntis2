@@ -7,7 +7,7 @@ updates:
       time: "00:05"
       timezone: Europe/Berlin
     cooldown:
-      default: 7
+      default-days: 7
     open-pull-requests-limit: 5
     assignees:
       - Voodoo2man
