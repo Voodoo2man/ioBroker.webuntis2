@@ -1,8 +1,21 @@
 {
 	"common": {
 		"name": "webuntis2",
-		"version": "0.1.0",
+		"version": "0.1.1",
 		"news": {
+			"0.1.1": {
+				"en": "Improved rolling weekly timetable, weekly summaries and date states with Unix timestamps",
+				"de": "Verbesserte rollierende Wochenansicht, Wochentagszusammenfassungen und Datumsdatenpunkte mit Unix-Zeitstempeln",
+				"ru": "Улучшенное скользящее недельное расписание, сводки по дням недели и состояния дат с временными метками Unix",
+				"pt": "Calendário semanal contínuo melhorado, resumos dos dias da semana e estados de data com marcas de tempo Unix",
+				"nl": "Verbeterd doorlopend weekrooster, weeksamenvattingen en datumstatussen met Unix-tijdstempels",
+				"fr": "Planning hebdomadaire glissant amélioré, résumés des jours de la semaine et états de date avec horodatages Unix",
+				"it": "Calendario settimanale continuo migliorato, riepiloghi dei giorni della settimana e stati delle date con timestamp Unix",
+				"es": "Calendario semanal continuo mejorado, resúmenes de los días de la semana y estados de fecha con marcas de tiempo Unix",
+				"pl": "Ulepszony kroczący tygodniowy plan lekcji, podsumowania dni tygodnia i stany dat z sygnaturami czasu Unix",
+				"uk": "Покращений ковзний тижневий розклад, підсумки днів тижня та стани дат із часовими мітками Unix",
+				"zh-cn": "改进的滚动周课表、每周每日摘要以及带 Unix 时间戳的日期状态"
+			},
 			"0.1.0": {
 				"en": "complete feature release",
 				"de": "vollständige Funktionsveröffentlichung",

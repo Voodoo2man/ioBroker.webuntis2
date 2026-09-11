@@ -8,6 +8,7 @@ import {
 	splitTimetable,
 	summarizeTimetable,
 	weekRange,
+	nextWeekday,
 } from "./Timetable";
 
 describe("WebUntis timetable normalization", () => {
@@ -147,9 +148,12 @@ describe("WebUntis timetable normalization", () => {
 		expect(result.week[0].id).to.equal("period-1");
 	});
 
-	it("calculates the current Monday-to-Friday range", () => {
+	it("calculates the rolling seven-day range and next weekdays", () => {
 		const range = weekRange(new Date(2026, 8, 9));
-		expect(range).to.deep.equal({ startDate: 20260907, endDate: 20260911 });
+		expect(range).to.deep.equal({ startDate: 20260909, endDate: 20260915 });
+		expect(weekRange(new Date(2026, 8, 15))).to.deep.equal({ startDate: 20260915, endDate: 20260921 });
+		expect(nextWeekday(new Date(2026, 8, 15), 0)).to.deep.equal(new Date(2026, 8, 21, 12));
+		expect(nextWeekday(new Date(2026, 8, 15), 1)).to.deep.equal(new Date(2026, 8, 15, 12));
 		expect(dateNumber(new Date(2026, 8, 9))).to.equal(20260909);
 	});
 });

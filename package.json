@@ -1,6 +1,6 @@
 {
   "name": "iobroker.webuntis2",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Connect ioBroker to WebUntis for timetables, school information and related data",
   "author": {
     "name": "Voodoo2man",
