@@ -1,5 +1,3 @@
-**WORK IN PROGRESS**
-
 ![WebUntis2](docs/webuntis2-readme-banner.png)
 
 # ioBroker.webuntis2
@@ -70,6 +68,10 @@ in a browser first. Then run the connection test in the adapter configuration
 and include only relevant, non-sensitive log messages when asking for help.
 
 ## Changelog
+
+### 0.1.0 (2026-09-11)
+
+- (@Voodoo2man) Complete feature release with timetable data, holidays, readable lesson names, daily summaries, current and next lesson information, and the React administration interface.
 
 ### 0.0.2 (2026-09-11)
 

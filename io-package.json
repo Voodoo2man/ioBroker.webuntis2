@@ -1,8 +1,12 @@
 {
 	"common": {
 		"name": "webuntis2",
-		"version": "0.0.2",
+		"version": "0.1.0",
 		"news": {
+			"0.1.0": {
+				"en": "complete feature release",
+				"de": "vollständige Funktionsveröffentlichung"
+			},
 			"0.0.2": {
 				"en": "prepared trusted publishing release",
 				"de": "Trusted-Publishing-Veröffentlichung vorbereitet",

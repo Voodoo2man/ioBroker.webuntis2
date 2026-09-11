@@ -1,5 +1,3 @@
-**IN ARBEIT**
-
 ![WebUntis2](docs/webuntis2-readme-banner.png)
 
 # ioBroker.webuntis2
@@ -75,6 +73,10 @@ Adapterkonfiguration aus. Teile bei einer Supportanfrage nur relevante,
 nicht vertrauliche Logmeldungen.
 
 ## Änderungsverlauf
+
+### 0.1.0 (2026-09-11)
+
+- (@Voodoo2man) Vollständige Funktionsveröffentlichung mit Stundenplandaten, Ferienterminen, verständlichen Stundennamen, Tagesübersichten, Informationen zur aktuellen und nächsten Stunde sowie React-Administrationsoberfläche.
 
 ### 0.0.2 (2026-09-11)
 
