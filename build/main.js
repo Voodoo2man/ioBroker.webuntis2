@@ -46,6 +46,7 @@ const SUMMARY_STATE_DEFINITIONS = {
 };
 const LESSON_STATE_NAMES = {
   date: "Date",
+  dateTimestamp: "Date (Unix timestamp ms)",
   startTime: "Lesson start",
   endTime: "Lesson end",
   subject: "Subject",
@@ -89,6 +90,13 @@ const CURRENT_NEXT_STATE_DEFINITIONS = {
     unit: "min"
   }
 };
+function dateOnly(value) {
+  return value.trim().split(/[T ]/, 1)[0] || "";
+}
+function numericDate(value) {
+  const [year, month, day] = dateOnly(value).split("-").map(Number);
+  return year && month && day ? new Date(year, month - 1, day).getTime() : 0;
+}
 class WebuntisNext extends utils.Adapter {
   webUntis;
   timetableTimer;
@@ -149,7 +157,7 @@ class WebuntisNext extends utils.Adapter {
       await this.setState("info.lastSuccessfulUpdate", now.toISOString(), true);
       await this.setState("info.nextUpdate", new Date(now.getTime() + TIMETABLE_INTERVAL_MS).toISOString(), true);
       await this.setState("info.connection", true, true);
-      this.log.warn(`Timetable updated: ${updated} lessons updated, ${removed} obsolete lessons removed`);
+      this.log.debug(`Timetable updated: ${updated} lessons updated, ${removed} obsolete lessons removed`);
     } catch (error) {
       await this.setState("info.connection", false, true);
       await this.setState("info.nextUpdate", new Date(Date.now() + TIMETABLE_INTERVAL_MS).toISOString(), true);
@@ -202,35 +210,74 @@ class WebuntisNext extends utils.Adapter {
     );
     await this.writeSimpleState(
       "holidays.current.startDate",
-      summary.current.startDate,
+      dateOnly(summary.current.startDate),
       "Start date",
       "string",
-      "date",
+      "text",
       ""
     );
     await this.writeSimpleState(
+      "holidays.current.startDateTimestamp",
+      numericDate(summary.current.startDate),
+      "Start date (Unix timestamp ms)",
+      "number",
+      "value",
+      0
+    );
+    await this.writeSimpleState(
       "holidays.current.endDate",
-      summary.current.endDate,
+      dateOnly(summary.current.endDate),
       "End date",
       "string",
-      "date",
+      "text",
       ""
+    );
+    await this.writeSimpleState(
+      "holidays.current.endDateTimestamp",
+      numericDate(summary.current.endDate),
+      "End date (Unix timestamp ms)",
+      "number",
+      "value",
+      0
     );
     await this.writeSimpleState("holidays.next.name", summary.next.name, "Name", "string", "text", "");
     await this.writeSimpleState("holidays.next.longName", summary.next.longName, "Long name", "string", "text", "");
     await this.writeSimpleState(
       "holidays.next.startDate",
-      summary.next.startDate,
+      dateOnly(summary.next.startDate),
       "Start date",
       "string",
-      "date",
+      "text",
       ""
     );
-    await this.writeSimpleState("holidays.next.endDate", summary.next.endDate, "End date", "string", "date", "");
+    await this.writeSimpleState(
+      "holidays.next.startDateTimestamp",
+      numericDate(summary.next.startDate),
+      "Start date (Unix timestamp ms)",
+      "number",
+      "value",
+      0
+    );
+    await this.writeSimpleState(
+      "holidays.next.endDate",
+      dateOnly(summary.next.endDate),
+      "End date",
+      "string",
+      "text",
+      ""
+    );
     await this.writeSimpleState(
       "holidays.next.daysUntil",
       summary.next.daysUntil,
       "Days until",
+      "number",
+      "value",
+      0
+    );
+    await this.writeSimpleState(
+      "holidays.next.endDateTimestamp",
+      numericDate(summary.next.endDate),
+      "End date (Unix timestamp ms)",
       "number",
       "value",
       0
@@ -312,18 +359,17 @@ class WebuntisNext extends utils.Adapter {
     let removed = await this.removeLegacyLessons(group);
     if (group === "week") {
       const weekdayNames = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"];
-      const byDay = weekdayNames.map(
-        (_, index) => lessons.filter((lesson) => {
-          const date = /* @__PURE__ */ new Date(`${lesson.date}T12:00:00`);
-          return (date.getDay() + 6) % 7 === index;
-        })
-      );
+      const byDay = weekdayNames.map((_, index) => {
+        const targetDate = this.timetableDate((0, import_Timetable.nextWeekday)(now, index));
+        return lessons.filter((lesson) => lesson.date === targetDate);
+      });
       for (let index = 0; index < weekdayNames.length; index++) {
         const result = await this.writeTimetableDay(
           `timetable.week.${weekdayNames[index]}`,
           byDay[index],
-          this.timetableDate(this.getMonday(now, index))
+          this.timetableDate((0, import_Timetable.nextWeekday)(now, index))
         );
+        await this.writeDaySummary(`week.${weekdayNames[index]}`, (0, import_Timetable.summarizeTimetable)(byDay[index]));
         removed += result.removed;
       }
     } else {
@@ -363,7 +409,15 @@ class WebuntisNext extends utils.Adapter {
       common: { name: path.split(".").at(-1) || "Day" },
       native: {}
     });
-    await this.writeSimpleState(`${path}.date`, date, "Date", "string", "date", "");
+    await this.writeSimpleState(`${path}.date`, dateOnly(date), "Date", "string", "text", "");
+    await this.writeSimpleState(
+      `${path}.dateTimestamp`,
+      numericDate(date),
+      "Date (Unix timestamp ms)",
+      "number",
+      "value",
+      0
+    );
     await this.writeSimpleState(`${path}.lessonCount`, lessons.length, "Lesson count", "number", "value", 0);
     await this.setObjectNotExistsAsync(`${path}.lessons`, {
       type: "channel",
@@ -390,12 +444,6 @@ class WebuntisNext extends utils.Adapter {
     }
     return { removed: stale.size };
   }
-  getMonday(date, dayOffset) {
-    const monday = new Date(date);
-    monday.setHours(12, 0, 0, 0);
-    monday.setDate(monday.getDate() - (monday.getDay() + 6) % 7 + dayOffset);
-    return monday;
-  }
   timetableDate(date) {
     return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
   }
@@ -405,6 +453,7 @@ class WebuntisNext extends utils.Adapter {
       common: { name, type, role, read: true, write: false, def },
       native: {}
     });
+    await this.extendObjectAsync(id, { common: { name, type, role, read: true, write: false, def } });
     await this.setStateAsync(id, value, true);
   }
   async writeLesson(path, slot, lesson) {
@@ -417,7 +466,8 @@ class WebuntisNext extends utils.Adapter {
     });
     await this.extendObjectAsync(base, { common: { name: label || `Lesson ${slot}` } });
     const values = {
-      date: { value: lesson.date, type: "string", role: "date" },
+      date: { value: dateOnly(lesson.date), type: "string", role: "text" },
+      dateTimestamp: { value: numericDate(lesson.date), type: "number", role: "value" },
       startTime: { value: lesson.startTime, type: "string", role: "text" },
       endTime: { value: lesson.endTime, type: "string", role: "text" },
       subject: { value: lesson.subject, type: "string", role: "text" },

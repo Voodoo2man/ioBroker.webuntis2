@@ -22,6 +22,7 @@ __export(Timetable_exports, {
   dateNumber: () => dateNumber,
   dayRange: () => dayRange,
   lessonChannelName: () => lessonChannelName,
+  nextWeekday: () => nextWeekday,
   normalizeLesson: () => normalizeLesson,
   normalizeLessons: () => normalizeLessons,
   resolveTimetableReferences: () => resolveTimetableReferences,
@@ -167,14 +168,21 @@ function dateNumber(date) {
     `${date.getFullYear()}${String(date.getMonth() + 1).padStart(2, "0")}${String(date.getDate()).padStart(2, "0")}`
   );
 }
+function nextWeekday(date, targetWeekday) {
+  const result = new Date(date);
+  result.setHours(12, 0, 0, 0);
+  const currentWeekday = (result.getDay() + 6) % 7;
+  result.setDate(result.getDate() + (targetWeekday - currentWeekday + 7) % 7);
+  return result;
+}
 function dayRange(date) {
   return { startDate: dateNumber(date), endDate: dateNumber(date) };
 }
 function weekRange(date) {
   const start = new Date(date);
-  start.setDate(start.getDate() - start.getDay() + 1);
+  start.setHours(12, 0, 0, 0);
   const end = new Date(start);
-  end.setDate(start.getDate() + 4);
+  end.setDate(end.getDate() + 6);
   return { startDate: dateNumber(start), endDate: dateNumber(end) };
 }
 function splitTimetable(lessons, today) {
@@ -200,6 +208,7 @@ function assertTimetableResponse(value) {
   dateNumber,
   dayRange,
   lessonChannelName,
+  nextWeekday,
   normalizeLesson,
   normalizeLessons,
   resolveTimetableReferences,

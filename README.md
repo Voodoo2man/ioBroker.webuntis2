@@ -69,6 +69,10 @@ and include only relevant, non-sensitive log messages when asking for help.
 
 ## Changelog
 
+### 0.1.1 (2026-09-12)
+
+- (@Voodoo2man) Improved the rolling seven-day timetable and added weekly summary states. Date fields now contain date-only values and companion Unix timestamps in milliseconds.
+
 ### 0.1.0 (2026-09-11)
 
 - (@Voodoo2man) Complete feature release with timetable data, holidays, readable lesson names, daily summaries, current and next lesson information, and the React administration interface.
