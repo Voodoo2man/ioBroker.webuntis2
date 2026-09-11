@@ -26,7 +26,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: ioBroker/testing-action-check@v2
+      - uses: ioBroker/testing-action-check@e95660177eea35742eb207b911b1f38071bd6c90 # v2
         with:
           # @iobroker/testing@6 requires Node.js >=22.19.0.
           node-version: '22.x'
@@ -47,7 +47,7 @@ jobs:
         os: [ubuntu-latest, windows-latest, macos-latest]
 
     steps:
-      - uses: ioBroker/testing-action-adapter@v1
+      - uses: ioBroker/testing-action-adapter@470171e892446829e39bac4d5694c90307830d00 # v1
         with:
           node-version: ${{ matrix.node-version }}
           os: ${{ matrix.os }}
@@ -64,7 +64,7 @@ jobs:
       id-token: write
       contents: write
     steps:
-      - uses: ioBroker/testing-action-deploy@v1
+      - uses: ioBroker/testing-action-deploy@aec8d427d5ec1aa14e722174d0f592462540c1c3 # v1
         with:
           node-version: '24.x'
           build: true
@@ -92,7 +92,7 @@ jobs:
 #      contents: write
 #
 #    steps:
-#      - uses: ioBroker/testing-action-deploy@v1
+#      - uses: ioBroker/testing-action-deploy@aec8d427d5ec1aa14e722174d0f592462540c1c3 # v1
 #        with:
 #          node-version: '20.x'
 #          # Uncomment the following line if your adapter cannot be installed using 'npm ci'
