@@ -350,6 +350,7 @@ export class WebUntisClient {
 		const url = this.endpoint.replace(/\/jsonrpc\.do\?.*$/i, "/api/daytimetable/config");
 		const response = await this.fetchImpl(url, {
 			method: "GET",
+			signal: AbortSignal.timeout(this.requestTimeoutMs),
 			headers: {
 				accept: "application/json",
 				...(this.sessionCookie
@@ -417,6 +418,7 @@ export class WebUntisClient {
 		url.searchParams.set("formatId", "1");
 		const response = await this.fetchImpl(url, {
 			method: "GET",
+			signal: AbortSignal.timeout(this.requestTimeoutMs),
 			headers: {
 				accept: "application/json",
 				...(this.sessionCookie
@@ -471,6 +473,7 @@ export class WebUntisClient {
 		const url = this.endpoint.replace(/\/jsonrpc\.do\?.*$/i, "/api/app/config");
 		const response = await this.fetchImpl(url, {
 			method: "GET",
+			signal: AbortSignal.timeout(this.requestTimeoutMs),
 			headers: {
 				accept: "application/json",
 				...(this.sessionCookie
