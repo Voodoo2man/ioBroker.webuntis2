@@ -69,6 +69,10 @@ and include only relevant, non-sensitive log messages when asking for help.
 
 ## Changelog
 
+### 0.1.2 (2026-10-05)
+
+- (@Voodoo2man) Improved WebUntis request timeouts and polling reliability.
+
 ### 0.1.1 (2026-09-12)
 
 - (@Voodoo2man) Improved the rolling seven-day timetable and added weekly summary states. Date fields now contain date-only values and companion Unix timestamps in milliseconds.

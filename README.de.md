@@ -74,6 +74,10 @@ nicht vertrauliche Logmeldungen.
 
 ## Änderungsverlauf
 
+### 0.1.2 (2026-10-05)
+
+- (@Voodoo2man) WebUntis-Timeouts und Zuverlässigkeit der Aktualisierungen verbessert.
+
 ### 0.1.1 (2026-09-12)
 
 - (@Voodoo2man) Verbesserte rollierende Sieben-Tage-Ansicht und Wochentagszusammenfassungen ergänzt. Datumsfelder enthalten jetzt reine Datumswerte sowie zusätzliche Unix-Zeitstempel in Millisekunden.
