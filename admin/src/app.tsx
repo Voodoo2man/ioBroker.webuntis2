@@ -29,7 +29,10 @@ class App extends GenericApp {
 				"zh-cn": require("./i18n/zh-cn.json"),
 			},
 		};
-		super(extendedProps, undefined);
+		// adapter-react 2.2.4 reads optional settings.Connection without guarding
+		// the settings argument. Pass an empty settings object so the Admin UI can
+		// initialize its socket connection instead of failing with a blank page.
+		super(extendedProps, {});
 	}
 
 	private selectSchool(school: SchoolSearchResult): void {
