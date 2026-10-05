@@ -75,7 +75,7 @@ const CURRENT_NEXT_STATE_DEFINITIONS: Record<
 		role: "value.interval",
 		name: "Minutes until next lesson",
 		def: 0,
-		unit: "min",
+		unit: "m",
 	},
 	schoolRunning: { type: "boolean", role: "indicator", name: "School running", def: false },
 	minutesUntilSchoolEnd: {
@@ -83,7 +83,7 @@ const CURRENT_NEXT_STATE_DEFINITIONS: Record<
 		role: "value.interval",
 		name: "Minutes until school end",
 		def: 0,
-		unit: "min",
+		unit: "m",
 	},
 };
 
@@ -98,9 +98,10 @@ function numericDate(value: string): number {
 
 class WebuntisNext extends utils.Adapter {
 	private readonly webUntis: WebUntisService;
-	private timetableTimer?: ioBroker.Interval;
-	private currentNextTimer?: ioBroker.Interval;
+	private timetableTimer?: ioBroker.Timeout;
+	private currentNextTimer?: ioBroker.Timeout;
 	private todayLessons: TimetableLesson[] = [];
+	private unloaded = false;
 
 	public constructor(options: Partial<utils.AdapterOptions> = {}) {
 		super({ ...options, name: "webuntis2" });
@@ -126,8 +127,32 @@ class WebuntisNext extends utils.Adapter {
 			return;
 		}
 		await this.updateTimetable();
-		this.timetableTimer = this.setInterval(() => void this.updateTimetable(), TIMETABLE_INTERVAL_MS);
-		this.currentNextTimer = this.setInterval(() => void this.updateCurrentNextStates(), CURRENT_NEXT_INTERVAL_MS);
+		this.scheduleTimetableUpdate();
+		this.scheduleCurrentNextUpdate();
+	}
+
+	private scheduleTimetableUpdate(): void {
+		if (this.unloaded) {
+			return;
+		}
+		this.timetableTimer = this.setTimeout(() => {
+			this.timetableTimer = undefined;
+			void this.updateTimetable()
+				.catch(error => this.log.error(`Unexpected timetable update error: ${error}`))
+				.finally(() => this.scheduleTimetableUpdate());
+		}, TIMETABLE_INTERVAL_MS);
+	}
+
+	private scheduleCurrentNextUpdate(): void {
+		if (this.unloaded) {
+			return;
+		}
+		this.currentNextTimer = this.setTimeout(() => {
+			this.currentNextTimer = undefined;
+			void this.updateCurrentNextStates()
+				.catch(error => this.log.error(`Unexpected current/next update error: ${error}`))
+				.finally(() => this.scheduleCurrentNextUpdate());
+		}, CURRENT_NEXT_INTERVAL_MS);
 	}
 
 	private hasConnectionConfig(): this is { config: WebUntisConnectionConfig } {
@@ -625,11 +650,12 @@ class WebuntisNext extends utils.Adapter {
 	}
 
 	private onUnload(callback: () => void): void {
+		this.unloaded = true;
 		if (this.timetableTimer) {
-			this.clearInterval(this.timetableTimer);
+			this.clearTimeout(this.timetableTimer);
 		}
 		if (this.currentNextTimer) {
-			this.clearInterval(this.currentNextTimer);
+			this.clearTimeout(this.currentNextTimer);
 		}
 		callback();
 	}

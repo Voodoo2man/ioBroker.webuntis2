@@ -20,8 +20,6 @@
 	"changeSchool": "Changer d'école",
 	"headerSubtitle": "Connectez votre instance ioBroker à WebUntis",
 	"hidePassword": "Masquer le mot de passe",
-	"option1": "option1",
-	"option2": "option2",
 	"password": "Mot de passe",
 	"school": "École",
 	"schoolCardHelp": "Sélectionnez l'école utilisée pour votre compte WebUntis.",
