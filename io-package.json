@@ -1,8 +1,21 @@
 {
 	"common": {
 		"name": "webuntis2",
-		"version": "0.1.3",
+		"version": "0.1.4",
 		"news": {
+			"0.1.4": {
+				"en": "Fixed the empty adapter configuration page in ioBroker Admin",
+				"de": "Leere Adapter-Konfigurationsseite in ioBroker Admin behoben",
+				"ru": "Исправлена пустая страница конфигурации адаптера в ioBroker Admin",
+				"pt": "Corrigida a página de configuração vazia do adaptador no ioBroker Admin",
+				"nl": "Lege adapterconfiguratiepagina in ioBroker Admin opgelost",
+				"fr": "Correction de la page de configuration vide dans ioBroker Admin",
+				"it": "Corretta la pagina di configurazione vuota dell'adattatore in ioBroker Admin",
+				"es": "Corregida la página de configuración vacía del adaptador en ioBroker Admin",
+				"pl": "Naprawiono pustą stronę konfiguracji adaptera w ioBroker Admin",
+				"uk": "Виправлено порожню сторінку конфігурації адаптера в ioBroker Admin",
+				"zh-cn": "修复了 ioBroker Admin 中适配器配置页面为空的问题"
+			},
 			"0.1.3": {
 				"en": "Update adapter test dependencies for repository review",
 				"de": "Adapter-Testabhängigkeiten für die Repository-Prüfung aktualisiert",
