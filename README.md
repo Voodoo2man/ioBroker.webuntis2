@@ -69,6 +69,10 @@ and include only relevant, non-sensitive log messages when asking for help.
 
 ## Changelog
 
+### 0.1.3 (2026-10-05)
+
+- (@Voodoo2man) Updated the adapter test dependency for repository review.
+
 ### 0.1.2 (2026-10-05)
 
 - (@Voodoo2man) Improved WebUntis request timeouts and polling reliability.

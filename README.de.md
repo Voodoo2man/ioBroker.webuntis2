@@ -74,6 +74,10 @@ nicht vertrauliche Logmeldungen.
 
 ## Änderungsverlauf
 
+### 0.1.3 (2026-10-05)
+
+- (@Voodoo2man) Adapter-Testabhängigkeit für die Repository-Prüfung aktualisiert.
+
 ### 0.1.2 (2026-10-05)
 
 - (@Voodoo2man) WebUntis-Timeouts und Zuverlässigkeit der Aktualisierungen verbessert.
