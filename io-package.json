@@ -1,8 +1,21 @@
 {
 	"common": {
 		"name": "webuntis2",
-		"version": "0.1.2",
+		"version": "0.1.3",
 		"news": {
+			"0.1.3": {
+				"en": "Update adapter test dependencies for repository review",
+				"de": "Adapter-Testabhängigkeiten für die Repository-Prüfung aktualisiert",
+				"ru": "Обновлены зависимости тестирования адаптера для проверки репозитория",
+				"pt": "Dependências de teste do adaptador atualizadas para a revisão do repositório",
+				"nl": "Adaptertestafhankelijkheden bijgewerkt voor repositorybeoordeling",
+				"fr": "Dépendances de test de l'adaptateur mises à jour pour la revue du dépôt",
+				"it": "Dipendenze di test dell'adattatore aggiornate per la revisione del repository",
+				"es": "Dependencias de prueba del adaptador actualizadas para la revisión del repositorio",
+				"pl": "Zaktualizowano zależności testowe adaptera na potrzeby przeglądu repozytorium",
+				"uk": "Оновлено залежності тестування адаптера для перевірки репозиторію",
+				"zh-cn": "更新适配器测试依赖以进行仓库审查"
+			},
 			"0.1.2": {
 				"en": "Improved WebUntis request timeouts and polling reliability",
 				"de": "WebUntis-Timeouts und Zuverlässigkeit der Aktualisierungen verbessert",
