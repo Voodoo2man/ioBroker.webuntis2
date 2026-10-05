@@ -12,6 +12,13 @@ import type {
 
 const REQUEST_TIMEOUT_MS = 10_000;
 
+/**
+ * Format a date using the local calendar date instead of converting it to UTC.
+ */
+export function localDateString(date: Date): string {
+	return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
 	return typeof value === "object" && value !== null;
 }
@@ -414,7 +421,7 @@ export class WebUntisClient {
 		const url = new URL(this.endpoint.replace(/\/jsonrpc\.do\?.*$/i, "/api/public/timetable/weekly/data"));
 		url.searchParams.set("elementType", String(session.personType));
 		url.searchParams.set("elementId", String(session.personId));
-		url.searchParams.set("date", date.toISOString().slice(0, 10));
+		url.searchParams.set("date", localDateString(date));
 		url.searchParams.set("formatId", "1");
 		const response = await this.fetchImpl(url, {
 			method: "GET",

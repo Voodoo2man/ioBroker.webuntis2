@@ -12,6 +12,7 @@ import {
 } from "./lib/webuntis/Timetable";
 import type { WebUntisHttpDiagnostic } from "./lib/webuntis/WebUntisTypes";
 import { deriveCurrentNextLesson, type CurrentNextLessonSummary } from "./lib/webuntis/CurrentNextLesson";
+import { removeStaleLessonStates } from "./lib/LessonStateCleanup";
 
 const TIMETABLE_INTERVAL_MS = 5 * 60 * 1000;
 const CURRENT_NEXT_INTERVAL_MS = 60 * 1000;
@@ -567,12 +568,7 @@ class WebuntisNext extends utils.Adapter {
 				? { originalSubject: { value: lesson.originalSubject, type: "string" as const, role: "text" } }
 				: {}),
 		};
-		const optional = ["substitution", "originalTeacher", "originalRoom", "originalSubject"];
-		for (const name of optional) {
-			if (!(name in values) && (await this.getObjectAsync(`${base}.${name}`))) {
-				await this.delObjectAsync(`${base}.${name}`);
-			}
-		}
+		await removeStaleLessonStates(base, values, this.getObjectAsync.bind(this), this.delObjectAsync.bind(this));
 		for (const [name, item] of Object.entries(values)) {
 			await this.setObjectNotExistsAsync(`${base}.${name}`, {
 				type: "state",

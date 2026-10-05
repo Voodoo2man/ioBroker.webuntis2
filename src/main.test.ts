@@ -10,6 +10,7 @@ import {
 import { WebUntisClient } from "./lib/webuntis/WebUntisClient";
 import { WebUntisError } from "./lib/webuntis/WebUntisErrors";
 import { WebUntisService } from "./lib/webuntis/WebUntisService";
+import { removeStaleLessonStates } from "./lib/LessonStateCleanup";
 
 function response(body: unknown, status = 200): Response {
 	return new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
@@ -312,6 +313,43 @@ describe("WebUntis username/password authentication", () => {
 			expect.fail("expected expired session");
 		} catch (error) {
 			expect((error as WebUntisError).code).to.equal("SESSION_EXPIRED");
+		}
+	});
+
+	it("removes stale lesson IDs when an updated lesson has no IDs", async () => {
+		const existing = new Set(["timetable.today.lessons.01.lessonId", "timetable.today.lessons.01.periodId"]);
+		const deleted: string[] = [];
+		await removeStaleLessonStates(
+			"timetable.today.lessons.01",
+			{ subject: { value: "Mathematics" } },
+			async id => (existing.has(id) ? {} : null),
+			async id => {
+				deleted.push(id);
+			},
+		);
+		expect(deleted).to.have.members(["timetable.today.lessons.01.lessonId", "timetable.today.lessons.01.periodId"]);
+	});
+
+	it("uses the local calendar date for public timetables", async () => {
+		const previousTimezone = process.env.TZ;
+		process.env.TZ = "Europe/Berlin";
+		try {
+			let requestUrl = "";
+			const client = new WebUntisClient(config, async url => {
+				requestUrl = String(url);
+				return response({ data: { result: { data: { elementPeriods: { 1: [] } } } } });
+			});
+			await client.getPublicTimetable(
+				{ sessionId: "session", personType: 5, personId: 1, klasseId: 2 },
+				new Date(2026, 8, 10, 0, 30),
+			);
+			expect(new URL(requestUrl).searchParams.get("date")).to.equal("2026-09-10");
+		} finally {
+			if (previousTimezone === undefined) {
+				delete process.env.TZ;
+			} else {
+				process.env.TZ = previousTimezone;
+			}
 		}
 	});
 
