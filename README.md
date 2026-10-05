@@ -69,6 +69,10 @@ and include only relevant, non-sensitive log messages when asking for help.
 
 ## Changelog
 
+### 0.1.4 (2026-10-05)
+
+- (@Voodoo2man) Fixed the empty adapter configuration page in ioBroker Admin.
+
 ### 0.1.2 (2026-10-05)
 
 - (@Voodoo2man) Improved WebUntis request timeouts and polling reliability.

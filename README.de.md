@@ -74,6 +74,10 @@ nicht vertrauliche Logmeldungen.
 
 ## Änderungsverlauf
 
+### 0.1.4 (2026-10-05)
+
+- (@Voodoo2man) Leere Adapter-Konfigurationsseite in ioBroker Admin behoben.
+
 ### 0.1.2 (2026-10-05)
 
 - (@Voodoo2man) WebUntis-Timeouts und Zuverlässigkeit der Aktualisierungen verbessert.
