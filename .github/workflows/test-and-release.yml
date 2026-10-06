@@ -91,6 +91,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '24.x'
+      - run: npm install --global npm@11.21.0
       - run: npm dist-tag add iobroker.webuntis2@0.1.4 latest
 
   # Publishes tagged releases using npm trusted publishing.
