@@ -82,6 +82,17 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: gh release create v0.1.4 --target abcb95118fec48dcea3e9b1a2b5c74b70633b3bc --title v0.1.4 --generate-notes
 
+  promote-latest:
+    if: github.event_name == 'workflow_dispatch' && inputs.publish == true
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24.x'
+      - run: npm dist-tag add iobroker.webuntis2@0.1.4 latest
+
   # Publishes tagged releases using npm trusted publishing.
   deploy:
     needs: [check-and-lint, adapter-tests]
