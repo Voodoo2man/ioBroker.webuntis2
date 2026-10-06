@@ -70,11 +70,17 @@ jobs:
       id-token: write
       contents: write
     steps:
-      - uses: ioBroker/testing-action-deploy@v1
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: '24.x'
-          build: true
-          github-token: ${{ secrets.GITHUB_TOKEN }}
+      - run: npm ci
+      - run: npm run build
+      - run: npm publish --provenance --access public
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release create v0.1.4 --target abcb95118fec48dcea3e9b1a2b5c74b70633b3bc --title v0.1.4 --generate-notes
 
   # Publishes tagged releases using npm trusted publishing.
   deploy:
