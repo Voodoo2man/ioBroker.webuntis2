@@ -4,6 +4,12 @@ name: Test and Release
 # as well as tags with a semantic version
 on:
   workflow_dispatch:
+    inputs:
+      publish:
+        description: Publish the already verified package
+        required: true
+        default: false
+        type: boolean
   push:
     branches:
       - "main"
@@ -55,6 +61,20 @@ jobs:
           # Uncomment the following line if your adapter cannot be installed using 'npm ci'
           # install-command: 'npm install'
           build: true
+
+  # Manual fallback: the exact main commit was already fully verified.
+  manual-deploy:
+    if: github.event_name == 'workflow_dispatch' && inputs.publish == true
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: write
+    steps:
+      - uses: ioBroker/testing-action-deploy@v1
+        with:
+          node-version: '24.x'
+          build: true
+          github-token: ${{ secrets.GITHUB_TOKEN }}
 
   # Publishes tagged releases using npm trusted publishing.
   deploy:
