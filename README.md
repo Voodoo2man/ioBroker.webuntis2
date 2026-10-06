@@ -69,7 +69,7 @@ and include only relevant, non-sensitive log messages when asking for help.
 
 ## Changelog
 
-### 0.1.4 (2026-10-05)
+### 0.1.5 (2026-10-06)
 
 - (@Voodoo2man) Fixed the empty adapter configuration page in ioBroker Admin.
 

@@ -1,0 +1,7 @@
+{
+  "version": 3,
+  "sources": ["../../src/lib/LessonStateCleanup.ts"],
+  "sourcesContent": ["/**\n * Remove optional lesson states that were present in an earlier update but are\n * missing from the current lesson.\n *\n * @param base Lesson state base path.\n * @param values Current lesson values.\n * @param getObject Reads an existing object.\n * @param deleteObject Deletes an existing object.\n */\nexport async function removeStaleLessonStates(\n\tbase: string,\n\tvalues: Readonly<Record<string, unknown>>,\n\tgetObject: (id: string) => Promise<unknown>,\n\tdeleteObject: (id: string) => Promise<unknown>,\n): Promise<void> {\n\tconst optional = [\"lessonId\", \"periodId\", \"substitution\", \"originalTeacher\", \"originalRoom\", \"originalSubject\"];\n\tfor (const name of optional) {\n\t\tif (!(name in values) && (await getObject(`${base}.${name}`))) {\n\t\t\tawait deleteObject(`${base}.${name}`);\n\t\t}\n\t}\n}\n"],
+  "mappings": ";;;;;;;;;;;;;;;;;;AAAA;AAAA;AAAA;AAAA;AAAA;AASA,eAAsB,wBACrB,MACA,QACA,WACA,cACgB;AAChB,QAAM,WAAW,CAAC,YAAY,YAAY,gBAAgB,mBAAmB,gBAAgB,iBAAiB;AAC9G,aAAW,QAAQ,UAAU;AAC5B,QAAI,EAAE,QAAQ,WAAY,MAAM,UAAU,GAAG,IAAI,IAAI,IAAI,EAAE,GAAI;AAC9D,YAAM,aAAa,GAAG,IAAI,IAAI,IAAI,EAAE;AAAA,IACrC;AAAA,EACD;AACD;",
+  "names": []
+}

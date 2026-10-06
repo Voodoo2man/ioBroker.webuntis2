@@ -27,6 +27,7 @@ var import_LegacyNamespaceCleanup = require("./lib/LegacyNamespaceCleanup");
 var import_WebUntisErrors = require("./lib/webuntis/WebUntisErrors");
 var import_Timetable = require("./lib/webuntis/Timetable");
 var import_CurrentNextLesson = require("./lib/webuntis/CurrentNextLesson");
+var import_LessonStateCleanup = require("./lib/LessonStateCleanup");
 const TIMETABLE_INTERVAL_MS = 5 * 60 * 1e3;
 const CURRENT_NEXT_INTERVAL_MS = 60 * 1e3;
 const TIMETABLE_GROUPS = ["today", "tomorrow", "week"];
@@ -79,7 +80,7 @@ const CURRENT_NEXT_STATE_DEFINITIONS = {
     role: "value.interval",
     name: "Minutes until next lesson",
     def: 0,
-    unit: "min"
+    unit: "m"
   },
   schoolRunning: { type: "boolean", role: "indicator", name: "School running", def: false },
   minutesUntilSchoolEnd: {
@@ -87,7 +88,7 @@ const CURRENT_NEXT_STATE_DEFINITIONS = {
     role: "value.interval",
     name: "Minutes until school end",
     def: 0,
-    unit: "min"
+    unit: "m"
   }
 };
 function dateOnly(value) {
@@ -102,6 +103,7 @@ class WebuntisNext extends utils.Adapter {
   timetableTimer;
   currentNextTimer;
   todayLessons = [];
+  unloaded = false;
   constructor(options = {}) {
     super({ ...options, name: "webuntis2" });
     this.webUntis = new import_WebUntisService.WebUntisService(
@@ -124,8 +126,26 @@ class WebuntisNext extends utils.Adapter {
       return;
     }
     await this.updateTimetable();
-    this.timetableTimer = this.setInterval(() => void this.updateTimetable(), TIMETABLE_INTERVAL_MS);
-    this.currentNextTimer = this.setInterval(() => void this.updateCurrentNextStates(), CURRENT_NEXT_INTERVAL_MS);
+    this.scheduleTimetableUpdate();
+    this.scheduleCurrentNextUpdate();
+  }
+  scheduleTimetableUpdate() {
+    if (this.unloaded) {
+      return;
+    }
+    this.timetableTimer = this.setTimeout(() => {
+      this.timetableTimer = void 0;
+      void this.updateTimetable().catch((error) => this.log.error(`Unexpected timetable update error: ${error}`)).finally(() => this.scheduleTimetableUpdate());
+    }, TIMETABLE_INTERVAL_MS);
+  }
+  scheduleCurrentNextUpdate() {
+    if (this.unloaded) {
+      return;
+    }
+    this.currentNextTimer = this.setTimeout(() => {
+      this.currentNextTimer = void 0;
+      void this.updateCurrentNextStates().catch((error) => this.log.error(`Unexpected current/next update error: ${error}`)).finally(() => this.scheduleCurrentNextUpdate());
+    }, CURRENT_NEXT_INTERVAL_MS);
   }
   hasConnectionConfig() {
     return Boolean(
@@ -485,12 +505,7 @@ class WebuntisNext extends utils.Adapter {
       ...lesson.originalRoom && lesson.originalRoom !== lesson.room ? { originalRoom: { value: lesson.originalRoom, type: "string", role: "text" } } : {},
       ...lesson.originalSubject && lesson.originalSubject !== lesson.subject ? { originalSubject: { value: lesson.originalSubject, type: "string", role: "text" } } : {}
     };
-    const optional = ["substitution", "originalTeacher", "originalRoom", "originalSubject"];
-    for (const name of optional) {
-      if (!(name in values) && await this.getObjectAsync(`${base}.${name}`)) {
-        await this.delObjectAsync(`${base}.${name}`);
-      }
-    }
+    await (0, import_LessonStateCleanup.removeStaleLessonStates)(base, values, this.getObjectAsync.bind(this), this.delObjectAsync.bind(this));
     for (const [name, item] of Object.entries(values)) {
       await this.setObjectNotExistsAsync(`${base}.${name}`, {
         type: "state",
@@ -560,11 +575,12 @@ class WebuntisNext extends utils.Adapter {
     };
   }
   onUnload(callback) {
+    this.unloaded = true;
     if (this.timetableTimer) {
-      this.clearInterval(this.timetableTimer);
+      this.clearTimeout(this.timetableTimer);
     }
     if (this.currentNextTimer) {
-      this.clearInterval(this.currentNextTimer);
+      this.clearTimeout(this.currentNextTimer);
     }
     callback();
   }

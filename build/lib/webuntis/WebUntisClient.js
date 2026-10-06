@@ -18,11 +18,15 @@ var __copyProps = (to, from, except, desc) => {
 var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 var WebUntisClient_exports = {};
 __export(WebUntisClient_exports, {
-  WebUntisClient: () => WebUntisClient
+  WebUntisClient: () => WebUntisClient,
+  localDateString: () => localDateString
 });
 module.exports = __toCommonJS(WebUntisClient_exports);
 var import_WebUntisErrors = require("./WebUntisErrors");
 const REQUEST_TIMEOUT_MS = 1e4;
+function localDateString(date) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+}
 function isRecord(value) {
   return typeof value === "object" && value !== null;
 }
@@ -316,6 +320,7 @@ class WebUntisClient {
     const url = this.endpoint.replace(/\/jsonrpc\.do\?.*$/i, "/api/daytimetable/config");
     const response = await this.fetchImpl(url, {
       method: "GET",
+      signal: AbortSignal.timeout(this.requestTimeoutMs),
       headers: {
         accept: "application/json",
         ...this.sessionCookie ? { cookie: this.sessionCookie } : { cookie: `JSESSIONID=${session.sessionId}` }
@@ -374,10 +379,11 @@ class WebUntisClient {
     const url = new URL(this.endpoint.replace(/\/jsonrpc\.do\?.*$/i, "/api/public/timetable/weekly/data"));
     url.searchParams.set("elementType", String(session.personType));
     url.searchParams.set("elementId", String(session.personId));
-    url.searchParams.set("date", date.toISOString().slice(0, 10));
+    url.searchParams.set("date", localDateString(date));
     url.searchParams.set("formatId", "1");
     const response = await this.fetchImpl(url, {
       method: "GET",
+      signal: AbortSignal.timeout(this.requestTimeoutMs),
       headers: {
         accept: "application/json",
         ...this.sessionCookie ? { cookie: this.sessionCookie } : { cookie: `JSESSIONID=${session.sessionId}` }
@@ -425,6 +431,7 @@ class WebUntisClient {
     const url = this.endpoint.replace(/\/jsonrpc\.do\?.*$/i, "/api/app/config");
     const response = await this.fetchImpl(url, {
       method: "GET",
+      signal: AbortSignal.timeout(this.requestTimeoutMs),
       headers: {
         accept: "application/json",
         ...this.sessionCookie ? { cookie: this.sessionCookie } : { cookie: `JSESSIONID=${session.sessionId}` }
@@ -580,6 +587,7 @@ class WebUntisClient {
 }
 // Annotate the CommonJS export names for ESM import in node:
 0 && (module.exports = {
-  WebUntisClient
+  WebUntisClient,
+  localDateString
 });
 //# sourceMappingURL=WebUntisClient.js.map

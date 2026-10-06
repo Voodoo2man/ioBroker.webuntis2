@@ -74,7 +74,7 @@ nicht vertrauliche Logmeldungen.
 
 ## Änderungsverlauf
 
-### 0.1.4 (2026-10-05)
+### 0.1.5 (2026-10-06)
 
 - (@Voodoo2man) Leere Adapter-Konfigurationsseite in ioBroker Admin behoben.
 
