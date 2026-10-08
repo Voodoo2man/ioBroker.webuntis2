@@ -35,5 +35,6 @@
 	"testingConnection": "Тестування з’єднання…",
 	"unknownAddress": "Місцезнаходження невідоме",
 	"username": "Ім'я користувача",
-	"webuntis2 adapter settings": "Налаштування адаптера для webuntis2"
+	"webuntis2 adapter settings": "Налаштування адаптера для webuntis2",
+	"NO_SCHOOLS_FOUND": "За цим запитом школи не знайдено."
 }

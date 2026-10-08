@@ -74,7 +74,7 @@ export async function searchSchools(query: string, fetchImpl: typeof fetch = fet
 		if (error instanceof WebUntisError) {
 			throw error;
 		}
-		if (error instanceof DOMException && error.name === "AbortError") {
+		if (error instanceof DOMException && (error.name === "AbortError" || error.name === "TimeoutError")) {
 			throw new WebUntisError("TIMEOUT", "School search timed out");
 		}
 		throw new WebUntisError("SERVER_UNREACHABLE", "School search failed", { cause: error });

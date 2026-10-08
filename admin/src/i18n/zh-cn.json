@@ -35,5 +35,6 @@
 	"testingConnection": "测试连接...",
 	"unknownAddress": "地点未知",
 	"username": "用户名",
-	"webuntis2 adapter settings": "webuntis2的适配器设置"
+	"webuntis2 adapter settings": "webuntis2的适配器设置",
+	"NO_SCHOOLS_FOUND": "未找到符合此搜索条件的学校。"
 }

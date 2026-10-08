@@ -35,5 +35,6 @@
 	"testingConnection": "Verbinding testen…",
 	"unknownAddress": "Locatie onbekend",
 	"username": "Gebruikersnaam",
-	"webuntis2 adapter settings": "Adapterinstellingen voor webuntis2"
+	"webuntis2 adapter settings": "Adapterinstellingen voor webuntis2",
+	"NO_SCHOOLS_FOUND": "Geen scholen gevonden voor deze zoekopdracht."
 }

@@ -29,7 +29,7 @@ type SchoolResult = SchoolSearchResult;
 const styles = (theme: Theme): StyleRules => ({
 	root: {
 		maxWidth: 920,
-		margin: "0 auto",
+		margin: 0,
 		padding: theme.spacing(3, 2.5, 4),
 		[theme.breakpoints.down("xs")]: { padding: theme.spacing(2, 1.5, 3) },
 	},
@@ -90,6 +90,7 @@ interface SettingsState {
 	query: string;
 	results: SchoolResult[];
 	searching: boolean;
+	searchStatus: string;
 	testing: boolean;
 	status: string;
 	searchMode: boolean;
@@ -101,6 +102,7 @@ class Settings extends React.Component<SettingsProps, SettingsState> {
 		query: "",
 		results: [],
 		searching: false,
+		searchStatus: "",
 		testing: false,
 		status: "",
 		searchMode: false,
@@ -112,17 +114,22 @@ class Settings extends React.Component<SettingsProps, SettingsState> {
 	}
 
 	private async search(): Promise<void> {
-		this.setState({ searching: true, status: "" });
+		this.setState({ searching: true, searchStatus: "", results: [] });
 		try {
 			const response = await this.props.socket.sendTo(this.props.instance, "searchSchools", {
 				query: this.state.query,
 			});
+			if (!response?.ok) {
+				this.setState({ searchStatus: response?.code ?? "UNEXPECTED_RESPONSE" });
+				return;
+			}
+			const results = rankSchoolResults(response.results ?? [], this.state.query);
 			this.setState({
-				results: rankSchoolResults(response?.results ?? [], this.state.query),
-				status: response?.code ?? "",
+				results,
+				searchStatus: results.length ? "" : "NO_SCHOOLS_FOUND",
 			});
 		} catch {
-			this.setState({ status: "SERVER_UNREACHABLE" });
+			this.setState({ searchStatus: "SERVER_UNREACHABLE" });
 		} finally {
 			this.setState({ searching: false });
 		}
@@ -150,7 +157,7 @@ class Settings extends React.Component<SettingsProps, SettingsState> {
 
 	private selectSchool(school: SchoolResult): void {
 		this.props.onSchoolSelected(school);
-		this.setState({ results: [], status: "SCHOOL_SELECTED", searchMode: false });
+		this.setState({ results: [], searchStatus: "", status: "SCHOOL_SELECTED", searchMode: false });
 	}
 
 	private renderField(label: string, key: string, type = "text"): React.JSX.Element {
@@ -196,11 +203,11 @@ class Settings extends React.Component<SettingsProps, SettingsState> {
 		);
 	}
 
-	private renderStatus(): React.JSX.Element | null {
-		if (!this.state.status) {
+	private renderStatus(status = this.state.status): React.JSX.Element | null {
+		if (!status) {
 			return null;
 		}
-		const success = this.state.status === "CONNECTED" || this.state.status === "SCHOOL_SELECTED";
+		const success = status === "CONNECTED" || status === "SCHOOL_SELECTED";
 		return (
 			<Paper
 				className={`${this.props.classes.status} ${success ? this.props.classes.statusSuccess : this.props.classes.statusError}`}
@@ -209,8 +216,8 @@ class Settings extends React.Component<SettingsProps, SettingsState> {
 				aria-live="polite"
 				style={{ padding: 10, display: "flex", alignItems: "center", gap: 6 }}
 			>
-				{success && this.state.status === "CONNECTED" ? <CheckCircleIcon fontSize="small" /> : null}
-				{this.translate(this.state.status)}
+				{success && status === "CONNECTED" ? <CheckCircleIcon fontSize="small" /> : null}
+				{this.translate(status)}
 			</Paper>
 		);
 	}
@@ -299,7 +306,10 @@ class Settings extends React.Component<SettingsProps, SettingsState> {
 									label={this.translate("schoolSearch")}
 									placeholder={this.translate("schoolSearchPlaceholder")}
 									value={this.state.query}
-									onChange={event => this.setState({ query: event.target.value })}
+									disabled={this.state.searching}
+									onChange={event =>
+										this.setState({ query: event.target.value, results: [], searchStatus: "", status: "" })
+									}
 									onKeyDown={event => {
 										if (event.key === "Enter") {
 											event.preventDefault();
@@ -359,6 +369,7 @@ class Settings extends React.Component<SettingsProps, SettingsState> {
 										))}
 									</List>
 								) : null}
+								{this.renderStatus(this.state.searchStatus)}
 							</>
 						) : null}
 					</CardContent>

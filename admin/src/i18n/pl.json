@@ -35,5 +35,6 @@
 	"testingConnection": "Testuję połączenie…",
 	"unknownAddress": "Lokalizacja nieznana",
 	"username": "Nazwa użytkownika",
-	"webuntis2 adapter settings": "Ustawienia adaptera dla webuntis2"
+	"webuntis2 adapter settings": "Ustawienia adaptera dla webuntis2",
+	"NO_SCHOOLS_FOUND": "Nie znaleziono szkół dla tego wyszukiwania."
 }

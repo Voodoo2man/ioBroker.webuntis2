@@ -13,6 +13,19 @@
 	width: 100%;
 	position: relative;
 }
+
+.m.adapter-container > .App {
+	padding-bottom: 64px;
+}
+
+.m.adapter-container > .App > .MuiToolbar-root {
+	/* Keep the Admin save/close controls anchored while the form scrolls. */
+	position: fixed !important;
+	bottom: 0 !important;
+	left: 0 !important;
+	right: 0 !important;
+	z-index: 1300;
+}
 .m .select-wrapper + label {
 	/* The positioning for dropdown labels is messed up */
 	transform: none !important;
