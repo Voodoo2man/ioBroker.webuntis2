@@ -3,6 +3,19 @@
 		"name": "webuntis2",
 		"version": "0.1.5",
 		"news": {
+			"NEXT": {
+				"en": "Improved Admin setup, school search feedback and mobile layout",
+				"de": "Admin-Einrichtung, Rückmeldungen bei der Schulsuche und mobile Darstellung verbessert",
+				"ru": "Улучшены настройка в Admin, обратная связь при поиске школ и мобильная компоновка",
+				"pt": "Melhoradas a configuração no Admin, as mensagens da pesquisa de escolas e a disposição móvel",
+				"nl": "Admin-configuratie, feedback bij het zoeken naar scholen en mobiele weergave verbeterd",
+				"fr": "Amélioration de la configuration Admin, des retours de recherche d’écoles et de l’affichage mobile",
+				"it": "Migliorate la configurazione Admin, le indicazioni della ricerca delle scuole e la visualizzazione mobile",
+				"es": "Mejoradas la configuración en Admin, las respuestas de búsqueda de escuelas y la vista móvil",
+				"pl": "Ulepszono konfigurację w Admin, komunikaty wyszukiwania szkół i układ mobilny",
+				"uk": "Покращено налаштування в Admin, відгук під час пошуку шкіл і мобільне компонування",
+				"zh-cn": "改进了 Admin 配置、学校搜索反馈和移动端布局"
+			},
 			"0.1.5": {
 				"en": "Fixed the empty adapter configuration page in ioBroker Admin",
 				"de": "Leere Adapter-Konfigurationsseite in ioBroker Admin behoben",
