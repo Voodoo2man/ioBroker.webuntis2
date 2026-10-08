@@ -61,16 +61,6 @@ const styles = (theme: Theme): StyleRules => ({
 		borderRadius: 8,
 		flexShrink: 0,
 	},
-	testButton: {
-		boxSizing: "border-box",
-		width: 260,
-		minWidth: 260,
-		maxWidth: 260,
-		height: 40,
-		minHeight: 40,
-		maxHeight: 40,
-		flexShrink: 0,
-	},
 	results: {
 		marginTop: theme.spacing(1.5),
 		border: `1px solid ${theme.palette.divider}`,
@@ -418,7 +408,16 @@ class Settings extends React.Component<SettingsProps, SettingsState> {
 								type="button"
 								variant="outlined"
 								color="primary"
-								className={this.props.classes.testButton}
+								style={{
+									boxSizing: "border-box",
+									width: 260,
+									minWidth: 260,
+									maxWidth: 260,
+									height: 40,
+									minHeight: 40,
+									maxHeight: 40,
+									flexShrink: 0,
+								}}
 								startIcon={
 									this.state.testing ? (
 										<CircularProgress
