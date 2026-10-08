@@ -50,6 +50,10 @@ const styles = (theme: Theme): StyleRules => ({
 	selectedDetails: { display: "flex", gap: theme.spacing(1), minWidth: 0 },
 	selectedIcon: { color: theme.palette.success.main, marginTop: 2 },
 	address: { wordBreak: "break-word" },
+	searchButton: {
+		minWidth: 240,
+		[theme.breakpoints.down("xs")]: { width: "100%" },
+	},
 	results: {
 		marginTop: theme.spacing(1.5),
 		border: `1px solid ${theme.palette.divider}`,
@@ -335,6 +339,7 @@ class Settings extends React.Component<SettingsProps, SettingsState> {
 									type="button"
 									variant="contained"
 									color="primary"
+									className={this.props.classes.searchButton}
 									startIcon={
 										this.state.searching ? (
 											<CircularProgress
