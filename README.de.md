@@ -88,6 +88,11 @@ nicht vertrauliche Logmeldungen.
 
 ## Änderungsverlauf
 
+### **WORK IN PROGRESS**
+
+- (@Voodoo2man) Rückmeldungen bei der Schulsuche, mobile Darstellung und Buttonverhalten in der Admin-Oberfläche verbessert.
+- (@Voodoo2man) Ukrainische Admin-Übersetzungen ergänzt und die technische Begründung für die React-Konfigurationsoberfläche dokumentiert.
+
 ### 0.1.5 (2026-10-06)
 
 - (@Voodoo2man) Leere Adapter-Konfigurationsseite in ioBroker Admin behoben.

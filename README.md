@@ -82,6 +82,11 @@ and include only relevant, non-sensitive log messages when asking for help.
 
 ## Changelog
 
+### **WORK IN PROGRESS**
+
+- (@Voodoo2man) Improved school search feedback, mobile layout, and button behavior in the Admin interface.
+- (@Voodoo2man) Added Ukrainian Admin translations and documented why the adapter uses a custom React configuration interface.
+
 ### 0.1.5 (2026-10-06)
 
 - (@Voodoo2man) Fixed the empty adapter configuration page in ioBroker Admin.
