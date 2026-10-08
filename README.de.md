@@ -36,6 +36,20 @@ Die ausgewählte Schule wird zusammen mit den für die Verbindung benötigten
 Daten gespeichert. Eine Serveradresse muss nicht manuell eingetragen werden,
 wenn sie über die Schulsuche ermittelt wurde.
 
+## Administrationsoberfläche
+
+Der Adapter verwendet eine React-Oberfläche, weil die Einrichtung zwei
+interaktive Abläufe enthält: Die Schulsuche fragt WebUntis anhand einer
+Benutzereingabe ab und zeigt die Treffer zur Auswahl an. Außerdem prüft der
+Verbindungstest die eingegebenen Zugangsdaten für die ausgewählte Schule,
+bevor die Einstellungen gespeichert werden. Beide Abläufe kommunizieren
+asynchron mit dem Adapter und müssen Lade-, Leer- und Fehlerzustände direkt im
+Formular anzeigen. Die Standardfelder von `jsonConfig` bilden Suche und
+Auswahl nicht allein ab; dafür wäre weiterhin eine eigene
+Komponente oder vergleichbarer Oberflächencode nötig. React hält diese
+Einrichtungsschritte zusammen; WebUntis-Anfragen und deren Prüfung bleiben
+Aufgabe des Adapters.
+
 ## Daten in ioBroker
 
 Die Stundenpläne stehen unter `timetable.today`, `timetable.tomorrow` und
