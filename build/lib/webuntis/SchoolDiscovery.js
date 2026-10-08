@@ -88,7 +88,7 @@ async function searchSchools(query, fetchImpl = fetch) {
     if (error instanceof import_WebUntisErrors.WebUntisError) {
       throw error;
     }
-    if (error instanceof DOMException && error.name === "AbortError") {
+    if (error instanceof DOMException && (error.name === "AbortError" || error.name === "TimeoutError")) {
       throw new import_WebUntisErrors.WebUntisError("TIMEOUT", "School search timed out");
     }
     throw new import_WebUntisErrors.WebUntisError("SERVER_UNREACHABLE", "School search failed", { cause: error });

@@ -35,5 +35,6 @@
 	"INVALID_RESPONSE": "WebUntis returned an invalid response",
 	"HTML_RESPONSE": "WebUntis returned an HTML page instead of an API response",
 	"REDIRECTED": "WebUntis redirected the login request",
-	"UNEXPECTED_RESPONSE": "Unexpected WebUntis response"
+	"UNEXPECTED_RESPONSE": "Unexpected WebUntis response",
+	"NO_SCHOOLS_FOUND": "No schools found for this search."
 }

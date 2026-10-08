@@ -35,6 +35,19 @@ The adapter stores the selected school together with the information required
 for the connection. No server address needs to be entered manually when it is
 provided by the school search.
 
+## Admin configuration interface
+
+The adapter uses a React-based Admin interface because setup includes two
+interactive operations: searching WebUntis schools from a user-entered query
+and displaying the returned schools for selection, and testing the entered
+credentials against the selected school before saving. Both operations call
+the adapter asynchronously and need to show loading, empty-result, and error
+states in the same form. The standard `jsonConfig` controls do not provide
+this complete query-and-result workflow on their own; reproducing it there
+would require a custom component or equivalent custom UI code. React keeps
+these setup interactions together while the adapter remains responsible for
+WebUntis requests and validation.
+
 ## Data in ioBroker
 
 The timetable is available below `timetable.today`, `timetable.tomorrow`, and
@@ -68,6 +81,11 @@ in a browser first. Then run the connection test in the adapter configuration
 and include only relevant, non-sensitive log messages when asking for help.
 
 ## Changelog
+
+### **WORK IN PROGRESS**
+
+- (@Voodoo2man) Improved school search feedback, mobile layout, and button behavior in the Admin interface.
+- (@Voodoo2man) Added Ukrainian Admin translations and documented why the adapter uses a custom React configuration interface.
 
 ### 0.1.5 (2026-10-06)
 
