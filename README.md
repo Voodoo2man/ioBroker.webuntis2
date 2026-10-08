@@ -81,8 +81,7 @@ in a browser first. Then run the connection test in the adapter configuration
 and include only relevant, non-sensitive log messages when asking for help.
 
 ## Changelog
-
-### **WORK IN PROGRESS**
+### 0.1.6 (2026-10-08)
 
 - (@Voodoo2man) Improved school search feedback, mobile layout, and button behavior in the Admin interface.
 - (@Voodoo2man) Added Ukrainian Admin translations and documented why the adapter uses a custom React configuration interface.
@@ -104,20 +103,6 @@ and include only relevant, non-sensitive log messages when asking for help.
 - (@Voodoo2man) Improved the rolling seven-day timetable and added weekly summary states. Date fields now contain date-only values and companion Unix timestamps in milliseconds.
 
 For earlier releases, see [CHANGELOG_OLD.md](CHANGELOG_OLD.md).
-
-### 0.1.0 (2026-09-11)
-
-- (@Voodoo2man) Complete feature release with timetable data, holidays, readable lesson names, daily summaries, current and next lesson information, and the React administration interface.
-
-### 0.0.2 (2026-09-11)
-
-- (@Voodoo2man) Prepared the first Trusted Publishing release for npm.
-
-### 0.0.1 (2026-09-11)
-
-- (@Voodoo2man) Initial release with school search, secure login, timetable
-  data, daily summaries, current and next lesson information, holidays,
-  readable master-data names, and cleanup of unsupported legacy namespaces.
 
 ## License
 

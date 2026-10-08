@@ -88,7 +88,7 @@ nicht vertrauliche Logmeldungen.
 
 ## Änderungsverlauf
 
-### **WORK IN PROGRESS**
+### 0.1.6 (2026-10-08)
 
 - (@Voodoo2man) Rückmeldungen bei der Schulsuche, mobile Darstellung und Buttonverhalten in der Admin-Oberfläche verbessert.
 - (@Voodoo2man) Ukrainische Admin-Übersetzungen ergänzt und die technische Begründung für die React-Konfigurationsoberfläche dokumentiert.
