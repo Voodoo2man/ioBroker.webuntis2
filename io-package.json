@@ -1,255 +1,242 @@
 {
-	"common": {
-		"name": "webuntis2",
-		"version": "0.1.5",
-		"news": {
-			"NEXT": {
-				"en": "Improved Admin setup, school search feedback and mobile layout",
-				"de": "Admin-Einrichtung, Rückmeldungen bei der Schulsuche und mobile Darstellung verbessert",
-				"ru": "Улучшены настройка в Admin, обратная связь при поиске школ и мобильная компоновка",
-				"pt": "Melhoradas a configuração no Admin, as mensagens da pesquisa de escolas e a disposição móvel",
-				"nl": "Admin-configuratie, feedback bij het zoeken naar scholen en mobiele weergave verbeterd",
-				"fr": "Amélioration de la configuration Admin, des retours de recherche d’écoles et de l’affichage mobile",
-				"it": "Migliorate la configurazione Admin, le indicazioni della ricerca delle scuole e la visualizzazione mobile",
-				"es": "Mejoradas la configuración en Admin, las respuestas de búsqueda de escuelas y la vista móvil",
-				"pl": "Ulepszono konfigurację w Admin, komunikaty wyszukiwania szkół i układ mobilny",
-				"uk": "Покращено налаштування в Admin, відгук під час пошуку шкіл і мобільне компонування",
-				"zh-cn": "改进了 Admin 配置、学校搜索反馈和移动端布局"
-			},
-			"0.1.5": {
-				"en": "Fixed the empty adapter configuration page in ioBroker Admin",
-				"de": "Leere Adapter-Konfigurationsseite in ioBroker Admin behoben",
-				"ru": "Исправлена пустая страница конфигурации адаптера в ioBroker Admin",
-				"pt": "Corrigida a página de configuração vazia do adaptador no ioBroker Admin",
-				"nl": "Lege adapterconfiguratiepagina in ioBroker Admin opgelost",
-				"fr": "Correction de la page de configuration vide dans ioBroker Admin",
-				"it": "Corretta la pagina di configurazione vuota dell'adattatore in ioBroker Admin",
-				"es": "Corregida la página de configuración vacía del adaptador en ioBroker Admin",
-				"pl": "Naprawiono pustą stronę konfiguracji adaptera w ioBroker Admin",
-				"uk": "Виправлено порожню сторінку конфігурації адаптера в ioBroker Admin",
-				"zh-cn": "修复了 ioBroker Admin 中适配器配置页面为空的问题"
-			},
-			"0.1.4": {
-				"en": "Fixed the empty adapter configuration page in ioBroker Admin",
-				"de": "Leere Adapter-Konfigurationsseite in ioBroker Admin behoben",
-				"ru": "Исправлена пустая страница конфигурации адаптера в ioBroker Admin",
-				"pt": "Corrigida a página de configuração vazia do adaptador no ioBroker Admin",
-				"nl": "Lege adapterconfiguratiepagina in ioBroker Admin opgelost",
-				"fr": "Correction de la page de configuration vide dans ioBroker Admin",
-				"it": "Corretta la pagina di configurazione vuota dell'adattatore in ioBroker Admin",
-				"es": "Corregida la página de configuración vacía del adaptador en ioBroker Admin",
-				"pl": "Naprawiono pustą stronę konfiguracji adaptera w ioBroker Admin",
-				"uk": "Виправлено порожню сторінку конфігурації адаптера в ioBroker Admin",
-				"zh-cn": "修复了 ioBroker Admin 中适配器配置页面为空的问题"
-			},
-			"0.1.3": {
-				"en": "Update adapter test dependencies for repository review",
-				"de": "Adapter-Testabhängigkeiten für die Repository-Prüfung aktualisiert",
-				"ru": "Обновлены зависимости тестирования адаптера для проверки репозитория",
-				"pt": "Dependências de teste do adaptador atualizadas para a revisão do repositório",
-				"nl": "Adaptertestafhankelijkheden bijgewerkt voor repositorybeoordeling",
-				"fr": "Dépendances de test de l'adaptateur mises à jour pour la revue du dépôt",
-				"it": "Dipendenze di test dell'adattatore aggiornate per la revisione del repository",
-				"es": "Dependencias de prueba del adaptador actualizadas para la revisión del repositorio",
-				"pl": "Zaktualizowano zależności testowe adaptera na potrzeby przeglądu repozytorium",
-				"uk": "Оновлено залежності тестування адаптера для перевірки репозиторію",
-				"zh-cn": "更新适配器测试依赖以进行仓库审查"
-			},
-			"0.1.2": {
-				"en": "Improved WebUntis request timeouts and polling reliability",
-				"de": "WebUntis-Timeouts und Zuverlässigkeit der Aktualisierungen verbessert",
-				"ru": "Улучшены тайм-ауты запросов WebUntis и надежность обновлений",
-				"pt": "Melhorados os tempos limite das solicitações WebUntis e a confiabilidade das atualizações",
-				"nl": "WebUntis-aanvraagtime-outs en de betrouwbaarheid van updates verbeterd",
-				"fr": "Amélioration des délais d'attente des requêtes WebUntis et de la fiabilité des mises à jour",
-				"it": "Migliorati i timeout delle richieste WebUntis e l'affidabilità degli aggiornamenti",
-				"es": "Mejorados los tiempos de espera de las solicitudes WebUntis y la fiabilidad de las actualizaciones",
-				"pl": "Ulepszono limity czasu żądań WebUntis i niezawodność aktualizacji",
-				"uk": "Покращено тайм-аути запитів WebUntis та надійність оновлень",
-				"zh-cn": "改进了 WebUntis 请求超时和更新可靠性"
-			},
-			"0.1.1": {
-				"en": "Improved rolling weekly timetable, weekly summaries and date states with Unix timestamps",
-				"de": "Verbesserte rollierende Wochenansicht, Wochentagszusammenfassungen und Datumsdatenpunkte mit Unix-Zeitstempeln",
-				"ru": "Улучшенное скользящее недельное расписание, сводки по дням недели и состояния дат с временными метками Unix",
-				"pt": "Calendário semanal contínuo melhorado, resumos dos dias da semana e estados de data com marcas de tempo Unix",
-				"nl": "Verbeterd doorlopend weekrooster, weeksamenvattingen en datumstatussen met Unix-tijdstempels",
-				"fr": "Planning hebdomadaire glissant amélioré, résumés des jours de la semaine et états de date avec horodatages Unix",
-				"it": "Calendario settimanale continuo migliorato, riepiloghi dei giorni della settimana e stati delle date con timestamp Unix",
-				"es": "Calendario semanal continuo mejorado, resúmenes de los días de la semana y estados de fecha con marcas de tiempo Unix",
-				"pl": "Ulepszony kroczący tygodniowy plan lekcji, podsumowania dni tygodnia i stany dat z sygnaturami czasu Unix",
-				"uk": "Покращений ковзний тижневий розклад, підсумки днів тижня та стани дат із часовими мітками Unix",
-				"zh-cn": "改进的滚动周课表、每周每日摘要以及带 Unix 时间戳的日期状态"
-			},
-			"0.1.0": {
-				"en": "complete feature release",
-				"de": "vollständige Funktionsveröffentlichung",
-				"ru": "полный выпуск функций",
-				"pt": "versão com todas as funcionalidades",
-				"nl": "volledige functierelease",
-				"fr": "version avec toutes les fonctionnalités",
-				"it": "versione con tutte le funzionalità",
-				"es": "versión con todas las funcionalidades",
-				"pl": "wydanie z pełnym zestawem funkcji",
-				"uk": "повний випуск функцій",
-				"zh-cn": "完整功能版本"
-			},
-			"0.0.1": {
-				"en": "initial release",
-				"de": "Erstveröffentlichung",
-				"ru": "Начальная версия",
-				"pt": "lançamento inicial",
-				"nl": "Eerste uitgave",
-				"fr": "Première version",
-				"it": "Versione iniziale",
-				"es": "Versión inicial",
-				"pl": "Pierwsze wydanie",
-				"uk": "Початкова версія",
-				"zh-cn": "首次出版"
-			}
-		},
-		"titleLang": {
-			"en": "WebUntis2",
-			"de": "WebUntis2",
-			"ru": "ВебУнтис2",
-			"pt": "WebUntis2",
-			"nl": "WebUntis2",
-			"fr": "WebUntis2",
-			"it": "WebUntis2",
-			"es": "WebUntis2",
-			"pl": "WebUntis2",
-			"uk": "WebUntis2",
-			"zh-cn": "WebUntis2"
-		},
-		"desc": {
-			"en": "Connect ioBroker to WebUntis for timetables, school information and related data",
-			"de": "Verbinden Sie ioBroker mit WebUntis für Stundenpläne, Schulinformationen und zugehörige Daten",
-			"ru": "Подключите ioBroker к WebUntis для получения расписаний, школьной информации и сопутствующих данных.",
-			"pt": "Conecte o ioBroker ao WebUntis para obter horários, informações escolares e dados relacionados",
-			"nl": "Koppel ioBroker aan WebUntis voor lesroosters, schoolinformatie en gerelateerde gegevens",
-			"fr": "Connectez ioBroker à WebUntis pour les horaires, les informations scolaires et les données associées",
-			"it": "Collega ioBroker a WebUntis per orari, informazioni sulla scuola e dati correlati",
-			"es": "Conecte ioBroker a WebUntis para obtener horarios, información escolar y datos relacionados",
-			"pl": "Połącz ioBroker z WebUntis, aby uzyskać rozkłady jazdy, informacje o szkołach i powiązane dane",
-			"uk": "Підключіть ioBroker до WebUntis для отримання розкладів, шкільної інформації та пов’язаних даних",
-			"zh-cn": "将 ioBroker 连接到 WebUntis 以获取时间表、学校信息和相关数据"
-		},
-		"authors": [
-			"Voodoo2man <Voodoo2man@outlook.de>"
-		],
-		"keywords": [
-			"webuntis",
-			"untis",
-			"timetable",
-			"school",
-			"education",
-			"schedule"
-		],
-		"licenseInformation": {
-			"type": "free",
-			"license": "MIT"
-		},
-		"platform": "Javascript/Node.js",
-		"icon": "webuntis2.png",
-		"enabled": true,
-		"extIcon": "https://raw.githubusercontent.com/Voodoo2man/ioBroker.webuntis2/main/admin/webuntis2.png",
-		"readme": "https://github.com/Voodoo2man/ioBroker.webuntis2/blob/main/README.md",
-		"loglevel": "info",
-		"tier": 3,
-		"mode": "daemon",
-		"type": "date-and-time",
-		"compact": true,
-		"messagebox": true,
-		"connectionType": "cloud",
-		"dataSource": "poll",
-		"adminUI": {
-			"config": "html"
-		},
-		"eraseOnUpload": true,
-		"dependencies": [
-			{
-				"js-controller": ">=6.0.11"
-			}
-		],
-		"globalDependencies": [
-			{
-				"admin": ">=7.8.23"
-			}
-		]
-	},
-	"native": {
-		"server": "",
-		"schoolName": "",
-		"schoolDisplayName": "",
-		"schoolAddress": "",
-		"schoolId": null,
-		"username": "",
-		"password": ""
-	},
-	"encryptedNative": [
-		"password"
-	],
-	"protectedNative": [
-		"password"
-	],
-	"objects": [],
-	"instanceObjects": [
-		{
-			"_id": "info",
-			"type": "channel",
-			"common": {
-				"name": "Information"
-			},
-			"native": {}
-		},
-		{
-			"_id": "info.connection",
-			"type": "state",
-			"common": {
-				"role": "indicator.connected",
-				"name": "Device or service connected",
-				"type": "boolean",
-				"read": true,
-				"write": false,
-				"def": false
-			},
-			"native": {}
-		},
-		{
-			"_id": "info.lastUpdate",
-			"type": "state",
-			"common": {
-				"name": "Last timetable update attempt",
-				"type": "string",
-				"role": "date",
-				"read": true,
-				"write": false
-			},
-			"native": {}
-		},
-		{
-			"_id": "info.lastSuccessfulUpdate",
-			"type": "state",
-			"common": {
-				"name": "Last successful timetable update",
-				"type": "string",
-				"role": "date",
-				"read": true,
-				"write": false
-			},
-			"native": {}
-		},
-		{
-			"_id": "info.nextUpdate",
-			"type": "state",
-			"common": {
-				"name": "Next timetable update",
-				"type": "string",
-				"role": "date",
-				"read": true,
-				"write": false
-			},
-			"native": {}
-		}
-	]
+  "common": {
+    "name": "webuntis2",
+    "version": "0.1.6",
+    "news": {
+      "0.1.6": {
+        "en": "Improved Admin setup, school search feedback and mobile layout",
+        "de": "Admin-Einrichtung, Rückmeldungen bei der Schulsuche und mobile Darstellung verbessert",
+        "ru": "Улучшены настройка в Admin, обратная связь при поиске школ и мобильная компоновка",
+        "pt": "Melhoradas a configuração no Admin, as mensagens da pesquisa de escolas e a disposição móvel",
+        "nl": "Admin-configuratie, feedback bij het zoeken naar scholen en mobiele weergave verbeterd",
+        "fr": "Amélioration de la configuration Admin, des retours de recherche d’écoles et de l’affichage mobile",
+        "it": "Migliorate la configurazione Admin, le indicazioni della ricerca delle scuole e la visualizzazione mobile",
+        "es": "Mejoradas la configuración en Admin, las respuestas de búsqueda de escuelas y la vista móvil",
+        "pl": "Ulepszono konfigurację w Admin, komunikaty wyszukiwania szkół i układ mobilny",
+        "uk": "Покращено налаштування в Admin, відгук під час пошуку шкіл і мобільне компонування",
+        "zh-cn": "改进了 Admin 配置、学校搜索反馈和移动端布局"
+      },
+      "0.1.5": {
+        "en": "Fixed the empty adapter configuration page in ioBroker Admin",
+        "de": "Leere Adapter-Konfigurationsseite in ioBroker Admin behoben",
+        "ru": "Исправлена пустая страница конфигурации адаптера в ioBroker Admin",
+        "pt": "Corrigida a página de configuração vazia do adaptador no ioBroker Admin",
+        "nl": "Lege adapterconfiguratiepagina in ioBroker Admin opgelost",
+        "fr": "Correction de la page de configuration vide dans ioBroker Admin",
+        "it": "Corretta la pagina di configurazione vuota dell'adattatore in ioBroker Admin",
+        "es": "Corregida la página de configuración vacía del adaptador en ioBroker Admin",
+        "pl": "Naprawiono pustą stronę konfiguracji adaptera w ioBroker Admin",
+        "uk": "Виправлено порожню сторінку конфігурації адаптера в ioBroker Admin",
+        "zh-cn": "修复了 ioBroker Admin 中适配器配置页面为空的问题"
+      },
+      "0.1.4": {
+        "en": "Fixed the empty adapter configuration page in ioBroker Admin",
+        "de": "Leere Adapter-Konfigurationsseite in ioBroker Admin behoben",
+        "ru": "Исправлена пустая страница конфигурации адаптера в ioBroker Admin",
+        "pt": "Corrigida a página de configuração vazia do adaptador no ioBroker Admin",
+        "nl": "Lege adapterconfiguratiepagina in ioBroker Admin opgelost",
+        "fr": "Correction de la page de configuration vide dans ioBroker Admin",
+        "it": "Corretta la pagina di configurazione vuota dell'adattatore in ioBroker Admin",
+        "es": "Corregida la página de configuración vacía del adaptador en ioBroker Admin",
+        "pl": "Naprawiono pustą stronę konfiguracji adaptera w ioBroker Admin",
+        "uk": "Виправлено порожню сторінку конфігурації адаптера в ioBroker Admin",
+        "zh-cn": "修复了 ioBroker Admin 中适配器配置页面为空的问题"
+      },
+      "0.1.3": {
+        "en": "Update adapter test dependencies for repository review",
+        "de": "Adapter-Testabhängigkeiten für die Repository-Prüfung aktualisiert",
+        "ru": "Обновлены зависимости тестирования адаптера для проверки репозитория",
+        "pt": "Dependências de teste do adaptador atualizadas para a revisão do repositório",
+        "nl": "Adaptertestafhankelijkheden bijgewerkt voor repositorybeoordeling",
+        "fr": "Dépendances de test de l'adaptateur mises à jour pour la revue du dépôt",
+        "it": "Dipendenze di test dell'adattatore aggiornate per la revisione del repository",
+        "es": "Dependencias de prueba del adaptador actualizadas para la revisión del repositorio",
+        "pl": "Zaktualizowano zależności testowe adaptera na potrzeby przeglądu repozytorium",
+        "uk": "Оновлено залежності тестування адаптера для перевірки репозиторію",
+        "zh-cn": "更新适配器测试依赖以进行仓库审查"
+      },
+      "0.1.2": {
+        "en": "Improved WebUntis request timeouts and polling reliability",
+        "de": "WebUntis-Timeouts und Zuverlässigkeit der Aktualisierungen verbessert",
+        "ru": "Улучшены тайм-ауты запросов WebUntis и надежность обновлений",
+        "pt": "Melhorados os tempos limite das solicitações WebUntis e a confiabilidade das atualizações",
+        "nl": "WebUntis-aanvraagtime-outs en de betrouwbaarheid van updates verbeterd",
+        "fr": "Amélioration des délais d'attente des requêtes WebUntis et de la fiabilité des mises à jour",
+        "it": "Migliorati i timeout delle richieste WebUntis e l'affidabilità degli aggiornamenti",
+        "es": "Mejorados los tiempos de espera de las solicitudes WebUntis y la fiabilidad de las actualizaciones",
+        "pl": "Ulepszono limity czasu żądań WebUntis i niezawodność aktualizacji",
+        "uk": "Покращено тайм-аути запитів WebUntis та надійність оновлень",
+        "zh-cn": "改进了 WebUntis 请求超时和更新可靠性"
+      },
+      "0.1.1": {
+        "en": "Improved rolling weekly timetable, weekly summaries and date states with Unix timestamps",
+        "de": "Verbesserte rollierende Wochenansicht, Wochentagszusammenfassungen und Datumsdatenpunkte mit Unix-Zeitstempeln",
+        "ru": "Улучшенное скользящее недельное расписание, сводки по дням недели и состояния дат с временными метками Unix",
+        "pt": "Calendário semanal contínuo melhorado, resumos dos dias da semana e estados de data com marcas de tempo Unix",
+        "nl": "Verbeterd doorlopend weekrooster, weeksamenvattingen en datumstatussen met Unix-tijdstempels",
+        "fr": "Planning hebdomadaire glissant amélioré, résumés des jours de la semaine et états de date avec horodatages Unix",
+        "it": "Calendario settimanale continuo migliorato, riepiloghi dei giorni della settimana e stati delle date con timestamp Unix",
+        "es": "Calendario semanal continuo mejorado, resúmenes de los días de la semana y estados de fecha con marcas de tiempo Unix",
+        "pl": "Ulepszony kroczący tygodniowy plan lekcji, podsumowania dni tygodnia i stany dat z sygnaturami czasu Unix",
+        "uk": "Покращений ковзний тижневий розклад, підсумки днів тижня та стани дат із часовими мітками Unix",
+        "zh-cn": "改进的滚动周课表、每周每日摘要以及带 Unix 时间戳的日期状态"
+      },
+      "0.1.0": {
+        "en": "complete feature release",
+        "de": "vollständige Funktionsveröffentlichung",
+        "ru": "полный выпуск функций",
+        "pt": "versão com todas as funcionalidades",
+        "nl": "volledige functierelease",
+        "fr": "version avec toutes les fonctionnalités",
+        "it": "versione con tutte le funzionalità",
+        "es": "versión con todas las funcionalidades",
+        "pl": "wydanie z pełnym zestawem funkcji",
+        "uk": "повний випуск функцій",
+        "zh-cn": "完整功能版本"
+      }
+    },
+    "titleLang": {
+      "en": "WebUntis2",
+      "de": "WebUntis2",
+      "ru": "ВебУнтис2",
+      "pt": "WebUntis2",
+      "nl": "WebUntis2",
+      "fr": "WebUntis2",
+      "it": "WebUntis2",
+      "es": "WebUntis2",
+      "pl": "WebUntis2",
+      "uk": "WebUntis2",
+      "zh-cn": "WebUntis2"
+    },
+    "desc": {
+      "en": "Connect ioBroker to WebUntis for timetables, school information and related data",
+      "de": "Verbinden Sie ioBroker mit WebUntis für Stundenpläne, Schulinformationen und zugehörige Daten",
+      "ru": "Подключите ioBroker к WebUntis для получения расписаний, школьной информации и сопутствующих данных.",
+      "pt": "Conecte o ioBroker ao WebUntis para obter horários, informações escolares e dados relacionados",
+      "nl": "Koppel ioBroker aan WebUntis voor lesroosters, schoolinformatie en gerelateerde gegevens",
+      "fr": "Connectez ioBroker à WebUntis pour les horaires, les informations scolaires et les données associées",
+      "it": "Collega ioBroker a WebUntis per orari, informazioni sulla scuola e dati correlati",
+      "es": "Conecte ioBroker a WebUntis para obtener horarios, información escolar y datos relacionados",
+      "pl": "Połącz ioBroker z WebUntis, aby uzyskać rozkłady jazdy, informacje o szkołach i powiązane dane",
+      "uk": "Підключіть ioBroker до WebUntis для отримання розкладів, шкільної інформації та пов’язаних даних",
+      "zh-cn": "将 ioBroker 连接到 WebUntis 以获取时间表、学校信息和相关数据"
+    },
+    "authors": [
+      "Voodoo2man <Voodoo2man@outlook.de>"
+    ],
+    "keywords": [
+      "webuntis",
+      "untis",
+      "timetable",
+      "school",
+      "education",
+      "schedule"
+    ],
+    "licenseInformation": {
+      "type": "free",
+      "license": "MIT"
+    },
+    "platform": "Javascript/Node.js",
+    "icon": "webuntis2.png",
+    "enabled": true,
+    "extIcon": "https://raw.githubusercontent.com/Voodoo2man/ioBroker.webuntis2/main/admin/webuntis2.png",
+    "readme": "https://github.com/Voodoo2man/ioBroker.webuntis2/blob/main/README.md",
+    "loglevel": "info",
+    "tier": 3,
+    "mode": "daemon",
+    "type": "date-and-time",
+    "compact": true,
+    "messagebox": true,
+    "connectionType": "cloud",
+    "dataSource": "poll",
+    "adminUI": {
+      "config": "html"
+    },
+    "eraseOnUpload": true,
+    "dependencies": [
+      {
+        "js-controller": ">=6.0.11"
+      }
+    ],
+    "globalDependencies": [
+      {
+        "admin": ">=7.8.23"
+      }
+    ]
+  },
+  "native": {
+    "server": "",
+    "schoolName": "",
+    "schoolDisplayName": "",
+    "schoolAddress": "",
+    "schoolId": null,
+    "username": "",
+    "password": ""
+  },
+  "encryptedNative": [
+    "password"
+  ],
+  "protectedNative": [
+    "password"
+  ],
+  "objects": [],
+  "instanceObjects": [
+    {
+      "_id": "info",
+      "type": "channel",
+      "common": {
+        "name": "Information"
+      },
+      "native": {}
+    },
+    {
+      "_id": "info.connection",
+      "type": "state",
+      "common": {
+        "role": "indicator.connected",
+        "name": "Device or service connected",
+        "type": "boolean",
+        "read": true,
+        "write": false,
+        "def": false
+      },
+      "native": {}
+    },
+    {
+      "_id": "info.lastUpdate",
+      "type": "state",
+      "common": {
+        "name": "Last timetable update attempt",
+        "type": "string",
+        "role": "date",
+        "read": true,
+        "write": false
+      },
+      "native": {}
+    },
+    {
+      "_id": "info.lastSuccessfulUpdate",
+      "type": "state",
+      "common": {
+        "name": "Last successful timetable update",
+        "type": "string",
+        "role": "date",
+        "read": true,
+        "write": false
+      },
+      "native": {}
+    },
+    {
+      "_id": "info.nextUpdate",
+      "type": "state",
+      "common": {
+        "name": "Next timetable update",
+        "type": "string",
+        "role": "date",
+        "read": true,
+        "write": false
+      },
+      "native": {}
+    }
+  ]
 }

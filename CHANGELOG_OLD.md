@@ -7,6 +7,19 @@
 - Added resolved subject, teacher, room, and class names to timetable lessons.
 - Added the React administration interface with school discovery, configuration persistence, and connection testing.
 - Removed unsupported Messages and Exams object areas and cleanly migrates existing installations.
+## 0.1.0 (2026-09-11)
+
+- (@Voodoo2man) Complete feature release with timetable data, holidays, readable lesson names, daily summaries, current and next lesson information, and the React administration interface.
+
+## 0.0.2 (2026-09-11)
+
+- (@Voodoo2man) Prepared the first Trusted Publishing release for npm.
+
+## 0.0.1 (2026-09-11)
+
+- (@Voodoo2man) Initial release with school search, secure login, timetable
+  data, daily summaries, current and next lesson information, holidays,
+  readable master-data names, and cleanup of unsupported legacy namespaces.
 
 ## 0.1.0 - 2026-09-11
 
