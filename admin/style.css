@@ -15,7 +15,9 @@
 }
 
 .m.adapter-container > .App {
-	padding-bottom: 64px;
+	overflow-x: hidden;
+	overflow-y: auto;
+	padding-bottom: 120px;
 }
 
 .m.adapter-container > .App > .MuiToolbar-root {
