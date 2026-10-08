@@ -308,7 +308,12 @@ class Settings extends React.Component<SettingsProps, SettingsState> {
 									value={this.state.query}
 									disabled={this.state.searching}
 									onChange={event =>
-										this.setState({ query: event.target.value, results: [], searchStatus: "", status: "" })
+										this.setState({
+											query: event.target.value,
+											results: [],
+											searchStatus: "",
+											status: "",
+										})
 									}
 									onKeyDown={event => {
 										if (event.key === "Enter") {
