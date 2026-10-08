@@ -50,6 +50,20 @@ const styles = (theme: Theme): StyleRules => ({
 	selectedDetails: { display: "flex", gap: theme.spacing(1), minWidth: 0 },
 	selectedIcon: { color: theme.palette.success.main, marginTop: 2 },
 	address: { wordBreak: "break-word" },
+	searchButtonState: {
+		"&&.Mui-disabled": {
+			backgroundColor: theme.palette.primary.main,
+			color: theme.palette.primary.contrastText,
+			opacity: 0.55,
+		},
+	},
+	testButtonState: {
+		"&&.Mui-disabled": {
+			borderColor: theme.palette.primary.main,
+			color: theme.palette.primary.main,
+			opacity: 0.55,
+		},
+	},
 	results: {
 		marginTop: theme.spacing(1.5),
 		border: `1px solid ${theme.palette.divider}`,
@@ -335,6 +349,7 @@ class Settings extends React.Component<SettingsProps, SettingsState> {
 									type="button"
 									variant="contained"
 									color="primary"
+									className={this.props.classes.searchButtonState}
 									style={{
 										boxSizing: "border-box",
 										width: 220,
@@ -407,6 +422,7 @@ class Settings extends React.Component<SettingsProps, SettingsState> {
 								type="button"
 								variant="outlined"
 								color="primary"
+								className={this.props.classes.testButtonState}
 								style={{
 									boxSizing: "border-box",
 									width: 260,
