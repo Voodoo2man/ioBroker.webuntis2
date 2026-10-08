@@ -50,6 +50,26 @@ const styles = (theme: Theme): StyleRules => ({
 	selectedDetails: { display: "flex", gap: theme.spacing(1), minWidth: 0 },
 	selectedIcon: { color: theme.palette.success.main, marginTop: 2 },
 	address: { wordBreak: "break-word" },
+	searchButtonInteraction: {
+		"&&:hover, &&:active, &&:focus": { backgroundColor: theme.palette.primary.main },
+		"@media (hover: none)": {
+			"&&:hover, &&:active, &&:focus": { backgroundColor: theme.palette.primary.main },
+		},
+	},
+	testButtonInteraction: {
+		"&&:hover, &&:active, &&:focus": {
+			backgroundColor: "transparent",
+			borderColor: theme.palette.primary.main,
+			color: theme.palette.primary.main,
+		},
+		"@media (hover: none)": {
+			"&&:hover, &&:active, &&:focus": {
+				backgroundColor: "transparent",
+				borderColor: theme.palette.primary.main,
+				color: theme.palette.primary.main,
+			},
+		},
+	},
 	results: {
 		marginTop: theme.spacing(1.5),
 		border: `1px solid ${theme.palette.divider}`,
@@ -336,6 +356,7 @@ class Settings extends React.Component<SettingsProps, SettingsState> {
 									type="button"
 									variant="contained"
 									color="primary"
+									className={this.props.classes.searchButtonInteraction}
 									style={{
 										boxSizing: "border-box",
 										width: 220,
@@ -415,6 +436,7 @@ class Settings extends React.Component<SettingsProps, SettingsState> {
 								type="button"
 								variant="outlined"
 								color="primary"
+								className={this.props.classes.testButtonInteraction}
 								style={{
 									boxSizing: "border-box",
 									width: 260,
