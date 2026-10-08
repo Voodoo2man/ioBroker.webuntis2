@@ -50,20 +50,6 @@ const styles = (theme: Theme): StyleRules => ({
 	selectedDetails: { display: "flex", gap: theme.spacing(1), minWidth: 0 },
 	selectedIcon: { color: theme.palette.success.main, marginTop: 2 },
 	address: { wordBreak: "break-word" },
-	searchButtonState: {
-		"&&.Mui-disabled": {
-			backgroundColor: theme.palette.primary.main,
-			color: theme.palette.primary.contrastText,
-			opacity: 0.55,
-		},
-	},
-	testButtonState: {
-		"&&.Mui-disabled": {
-			borderColor: theme.palette.primary.main,
-			color: theme.palette.primary.main,
-			opacity: 0.55,
-		},
-	},
 	results: {
 		marginTop: theme.spacing(1.5),
 		border: `1px solid ${theme.palette.divider}`,
@@ -87,6 +73,7 @@ const styles = (theme: Theme): StyleRules => ({
 
 interface SettingsProps {
 	classes: Record<string, string>;
+	theme: Theme;
 	native: Record<string, unknown>;
 	socket: {
 		sendTo: (
@@ -349,7 +336,6 @@ class Settings extends React.Component<SettingsProps, SettingsState> {
 									type="button"
 									variant="contained"
 									color="primary"
-									className={this.props.classes.searchButtonState}
 									style={{
 										boxSizing: "border-box",
 										width: 220,
@@ -360,6 +346,13 @@ class Settings extends React.Component<SettingsProps, SettingsState> {
 										maxHeight: 40,
 										borderRadius: 8,
 										flexShrink: 0,
+										...(this.state.searching || this.state.query.trim().length < 2
+											? {
+													backgroundColor: this.props.theme.palette.primary.main,
+													color: this.props.theme.palette.primary.contrastText,
+													opacity: 0.55,
+												}
+											: {}),
 									}}
 									startIcon={
 										this.state.searching ? (
@@ -422,7 +415,6 @@ class Settings extends React.Component<SettingsProps, SettingsState> {
 								type="button"
 								variant="outlined"
 								color="primary"
-								className={this.props.classes.testButtonState}
 								style={{
 									boxSizing: "border-box",
 									width: 260,
@@ -432,6 +424,13 @@ class Settings extends React.Component<SettingsProps, SettingsState> {
 									minHeight: 40,
 									maxHeight: 40,
 									flexShrink: 0,
+									...(this.state.testing
+										? {
+												borderColor: this.props.theme.palette.primary.main,
+												color: this.props.theme.palette.primary.main,
+												opacity: 0.55,
+											}
+										: {}),
 								}}
 								startIcon={
 									this.state.testing ? (
@@ -459,4 +458,4 @@ class Settings extends React.Component<SettingsProps, SettingsState> {
 	}
 }
 
-export default withStyles(styles)(Settings);
+export default withStyles(styles, { withTheme: true })(Settings);
