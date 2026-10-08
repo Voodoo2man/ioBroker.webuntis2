@@ -50,7 +50,17 @@ const styles = (theme: Theme): StyleRules => ({
 	selectedDetails: { display: "flex", gap: theme.spacing(1), minWidth: 0 },
 	selectedIcon: { color: theme.palette.success.main, marginTop: 2 },
 	address: { wordBreak: "break-word" },
-	searchButton: { width: 280, minWidth: 280 },
+	searchButton: {
+		boxSizing: "border-box",
+		width: 280,
+		minWidth: 280,
+		maxWidth: 280,
+		height: 48,
+		minHeight: 48,
+		maxHeight: 48,
+		borderRadius: 8,
+		flexShrink: 0,
+	},
 	results: {
 		marginTop: theme.spacing(1.5),
 		border: `1px solid ${theme.palette.divider}`,
