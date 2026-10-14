@@ -90,7 +90,7 @@ nicht vertrauliche Logmeldungen.
 
 ### 0.1.8 (2026-10-14)
 
-- (@Voodoo2man) Dynamische Unterrichtsnamen aktualisiert und Metadaten bestehender Objekte migriert.
+- (@Voodoo2man) Dynamische Unterrichtsnamen aktualisiert, Metadaten bestehender Objekte migriert und alte i18n-Namen korrigiert.
 
 ### 0.1.7 (2026-10-14)
 

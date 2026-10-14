@@ -34,7 +34,8 @@ describe("object translations", () => {
 	it("migrates only the old default name and preserves custom names", () => {
 		expect(needsNameMigration("Lesson count", "Lesson count")).to.equal(true);
 		expect(needsNameMigration("My custom label", "Lesson count")).to.equal(false);
-		expect(needsNameMigration({ en: "Lesson count" }, "Lesson count")).to.equal(false);
+		expect(needsNameMigration({ en: "Lesson count" }, "Lesson count")).to.equal(true);
+		expect(needsNameMigration({ en: "My custom label" }, "Lesson count")).to.equal(false);
 		expect(isGeneratedLessonName("08:00–08:45 · Mathematics · Miller · R101")).to.equal(true);
 		expect(isGeneratedLessonName("My custom lesson name")).to.equal(false);
 		expect(shouldMigrateDynamicName("08:00–08:45 · Mathematics", "08:00–08:45 · Mathematics")).to.equal(true);

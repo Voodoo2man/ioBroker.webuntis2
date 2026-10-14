@@ -993,7 +993,7 @@ function translatedWeekday(day) {
   return { ...WEEKDAY_NAMES[day] || { en: day || "Day" } };
 }
 function needsNameMigration(current, legacy) {
-  return typeof current === "string" && current === legacy;
+  return typeof current === "string" && current === legacy || typeof current === "object" && current !== null && current.en === legacy;
 }
 function isGeneratedLessonName(name) {
   return typeof name === "string" && (/^(?:\d{1,2}:\d{2})(?:–\d{1,2}:\d{2})?(?: · .+)?$/.test(name) || /^Lesson \d{2}$/.test(name));

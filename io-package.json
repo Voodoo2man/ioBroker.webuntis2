@@ -4,17 +4,17 @@
 		"version": "0.1.8",
 		"news": {
 			"0.1.8": {
-				"en": "Update dynamic lesson names and migrate existing object metadata",
-				"de": "Dynamische Unterrichtsnamen aktualisiert und bestehende Objektmetadaten migriert",
-				"ru": "Обновлены динамические названия уроков и перенесены метаданные существующих объектов",
-				"pt": "Nomes dinâmicos das aulas atualizados e metadados dos objetos existentes migrados",
-				"nl": "Dynamische lesnamen bijgewerkt en bestaande objectmetadata gemigreerd",
-				"fr": "Mise à jour des noms de cours dynamiques et migration des métadonnées existantes",
-				"it": "Aggiornati i nomi dinamici delle lezioni e migrati i metadati degli oggetti esistenti",
-				"es": "Actualizados los nombres dinámicos de las clases y migrados los metadatos existentes",
-				"pl": "Zaktualizowano dynamiczne nazwy lekcji i zmigrowano metadane istniejących obiektów",
-				"uk": "Оновлено динамічні назви уроків і перенесено метадані наявних об’єктів",
-				"zh-cn": "更新动态课程名称并迁移现有对象元数据"
+				"en": "Update dynamic lesson names, migrate existing object metadata and repair legacy i18n names",
+				"de": "Dynamische Unterrichtsnamen aktualisiert, bestehende Objektmetadaten migriert und alte i18n-Namen korrigiert",
+				"ru": "Обновлены динамические названия уроков, перенесены метаданные существующих объектов и исправлены старые имена i18n",
+				"pt": "Nomes dinâmicos das aulas atualizados, metadados dos objetos existentes migrados e nomes i18n antigos corrigidos",
+				"nl": "Dynamische lesnamen bijgewerkt, bestaande objectmetadata gemigreerd en oude i18n-namen hersteld",
+				"fr": "Mise à jour des noms de cours dynamiques, migration des métadonnées existantes et correction des anciens noms i18n",
+				"it": "Aggiornati i nomi dinamici delle lezioni, migrati i metadati esistenti e corretti i vecchi nomi i18n",
+				"es": "Actualizados los nombres dinámicos de las clases, migrados los metadatos existentes y corregidos los nombres i18n antiguos",
+				"pl": "Zaktualizowano dynamiczne nazwy lekcji, zmigrowano metadane istniejących obiektów i naprawiono stare nazwy i18n",
+				"uk": "Оновлено динамічні назви уроків, перенесено метадані наявних об’єктів і виправлено старі назви i18n",
+				"zh-cn": "更新动态课程名称、迁移现有对象元数据并修复旧版 i18n 名称"
 			},
 			"0.1.7": {
 				"en": "Improved ioBroker compliance, object translations, shutdown handling and state updates",
