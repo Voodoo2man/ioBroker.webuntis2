@@ -1,7 +1,7 @@
 /* eslint-disable jsdoc/no-blank-blocks, jsdoc/require-param */
 
-import { WebUntisError } from "./WebUntisErrors";
 import type { HolidayEntry } from "./Holidays";
+import { WebUntisError } from "./WebUntisErrors";
 import type {
 	TimetableQuery,
 	WebUntisConnectionConfig,

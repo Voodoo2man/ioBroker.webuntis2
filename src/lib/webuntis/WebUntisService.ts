@@ -1,10 +1,11 @@
 /* eslint-disable jsdoc/no-blank-blocks, jsdoc/require-jsdoc, jsdoc/require-param */
 
-import { searchSchools } from "./SchoolDiscovery";
 import { HolidayCache, summarizeHolidays, type HolidaySummary } from "./Holidays";
+import { searchSchools } from "./SchoolDiscovery";
+import type { TimetableMasterData } from "./Timetable";
+import { normalizeLessons, resolveTimetableReferences, splitTimetable, weekRange } from "./Timetable";
 import { WebUntisClient } from "./WebUntisClient";
 import { classifyWebUntisError, WebUntisError } from "./WebUntisErrors";
-import { normalizeLessons, resolveTimetableReferences, splitTimetable, weekRange } from "./Timetable";
 import type {
 	ConnectionResult,
 	SchoolSearchResult,
@@ -13,7 +14,6 @@ import type {
 	WebUntisPeriod,
 	WebUntisSession,
 } from "./WebUntisTypes";
-import type { TimetableMasterData } from "./Timetable";
 
 const MASTERDATA_TTL_MS = 6 * 60 * 60 * 1000;
 
@@ -285,5 +285,5 @@ export class WebUntisService {
 	}
 }
 
-export { WebUntisError };
 export type * from "./WebUntisTypes";
+export { WebUntisError };
