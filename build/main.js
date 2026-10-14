@@ -693,18 +693,24 @@ class WebuntisNext extends utils.Adapter {
     }
   }
   async onMessage(obj) {
-    if (!obj || !obj.command || !obj.callback) {
+    if (this.unloaded || !obj || !obj.command || !obj.callback) {
       return;
     }
     try {
       if (obj.command === "searchSchools") {
         const results = await this.webUntis.searchSchools(this.getStringPayload(obj.message, "query"));
+        if (this.unloaded) {
+          return;
+        }
         this.log.info(`School search returned ${results.length} results`);
         this.sendTo(obj.from, obj.command, { ok: true, results }, obj.callback);
         return;
       }
       if (obj.command === "testConnection") {
         const result = await this.webUntis.testConnection(this.getConnectionPayload(obj.message));
+        if (this.unloaded) {
+          return;
+        }
         await this.setState("info.connection", result.ok, true);
         if (result.ok) {
           this.log.info("WebUntis authentication successful");
@@ -714,6 +720,9 @@ class WebuntisNext extends utils.Adapter {
         this.sendTo(obj.from, obj.command, result, obj.callback);
       }
     } catch (error) {
+      if (this.unloaded) {
+        return;
+      }
       const code = error instanceof import_WebUntisErrors.WebUntisError ? error.code : "UNEXPECTED_RESPONSE";
       this.log.warn(`WebUntis request failed: ${code}`);
       this.sendTo(obj.from, obj.command, { ok: false, code }, obj.callback);

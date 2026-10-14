@@ -22,11 +22,11 @@ __export(WebUntisService_exports, {
   WebUntisService: () => WebUntisService
 });
 module.exports = __toCommonJS(WebUntisService_exports);
-var import_SchoolDiscovery = require("./SchoolDiscovery");
 var import_Holidays = require("./Holidays");
+var import_SchoolDiscovery = require("./SchoolDiscovery");
+var import_Timetable = require("./Timetable");
 var import_WebUntisClient = require("./WebUntisClient");
 var import_WebUntisErrors = require("./WebUntisErrors");
-var import_Timetable = require("./Timetable");
 const MASTERDATA_TTL_MS = 6 * 60 * 60 * 1e3;
 class WebUntisService {
   constructor(onDiagnostic, onInfo, onWarning, fetchImpl = fetch, onDebug) {
@@ -47,7 +47,7 @@ class WebUntisService {
    *
    */
   searchSchools(query) {
-    return (0, import_SchoolDiscovery.searchSchools)(query);
+    return (0, import_SchoolDiscovery.searchSchools)(query, this.fetchImpl, this.abortController.signal);
   }
   async loadTimetable(config, now = /* @__PURE__ */ new Date()) {
     var _a;
