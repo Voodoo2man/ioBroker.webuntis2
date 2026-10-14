@@ -161,21 +161,26 @@ class WebUntisClient {
   /**
    *
    */
-  constructor(config, fetchImpl = fetch, requestTimeoutMs = REQUEST_TIMEOUT_MS, onDiagnostic) {
+  constructor(config, fetchImpl = fetch, requestTimeoutMs = REQUEST_TIMEOUT_MS, onDiagnostic, abortSignal) {
     this.fetchImpl = fetchImpl;
     this.requestTimeoutMs = requestTimeoutMs;
     this.onDiagnostic = onDiagnostic;
+    this.abortSignal = abortSignal;
     this.endpoint = getEndpoint(config.server, config.schoolName);
   }
   endpoint;
   sessionCookie;
   authenticatedAt;
   requestSequence = 0;
+  getRequestSignal() {
+    const timeoutSignal = AbortSignal.timeout(this.requestTimeoutMs);
+    return this.abortSignal ? AbortSignal.any([timeoutSignal, this.abortSignal]) : timeoutSignal;
+  }
   /**
    *
    */
   async authenticate(username, password) {
-    var _a;
+    var _a, _b, _c;
     try {
       const response = await this.fetchImpl(this.endpoint, {
         method: "POST",
@@ -186,7 +191,7 @@ class WebUntisClient {
           params: { user: username, password, client: "ioBroker.webuntis2" },
           jsonrpc: "2.0"
         }),
-        signal: AbortSignal.timeout(this.requestTimeoutMs)
+        signal: this.getRequestSignal()
       });
       this.sessionCookie = getCookieHeader(response.headers);
       this.authenticatedAt = Date.now();
@@ -270,8 +275,11 @@ class WebUntisClient {
       if (error instanceof import_WebUntisErrors.WebUntisError) {
         throw error;
       }
-      if (error instanceof DOMException && error.name === "AbortError") {
-        throw new import_WebUntisErrors.WebUntisError("TIMEOUT", "WebUntis authentication timed out");
+      if (error instanceof DOMException && (error.name === "AbortError" || error.name === "TimeoutError")) {
+        throw new import_WebUntisErrors.WebUntisError(
+          ((_b = this.abortSignal) == null ? void 0 : _b.aborted) ? "ABORTED" : "TIMEOUT",
+          ((_c = this.abortSignal) == null ? void 0 : _c.aborted) ? "WebUntis authentication was aborted" : "WebUntis authentication timed out"
+        );
       }
       throw new import_WebUntisErrors.WebUntisError("SERVER_UNREACHABLE", "WebUntis authentication failed", { cause: error });
     }
@@ -320,7 +328,7 @@ class WebUntisClient {
     const url = this.endpoint.replace(/\/jsonrpc\.do\?.*$/i, "/api/daytimetable/config");
     const response = await this.fetchImpl(url, {
       method: "GET",
-      signal: AbortSignal.timeout(this.requestTimeoutMs),
+      signal: this.getRequestSignal(),
       headers: {
         accept: "application/json",
         ...this.sessionCookie ? { cookie: this.sessionCookie } : { cookie: `JSESSIONID=${session.sessionId}` }
@@ -383,7 +391,7 @@ class WebUntisClient {
     url.searchParams.set("formatId", "1");
     const response = await this.fetchImpl(url, {
       method: "GET",
-      signal: AbortSignal.timeout(this.requestTimeoutMs),
+      signal: this.getRequestSignal(),
       headers: {
         accept: "application/json",
         ...this.sessionCookie ? { cookie: this.sessionCookie } : { cookie: `JSESSIONID=${session.sessionId}` }
@@ -431,7 +439,7 @@ class WebUntisClient {
     const url = this.endpoint.replace(/\/jsonrpc\.do\?.*$/i, "/api/app/config");
     const response = await this.fetchImpl(url, {
       method: "GET",
-      signal: AbortSignal.timeout(this.requestTimeoutMs),
+      signal: this.getRequestSignal(),
       headers: {
         accept: "application/json",
         ...this.sessionCookie ? { cookie: this.sessionCookie } : { cookie: `JSESSIONID=${session.sessionId}` }
@@ -480,7 +488,7 @@ class WebUntisClient {
     return person;
   }
   async request(method, params, session) {
-    var _a;
+    var _a, _b, _c;
     try {
       const requestSequence = ++this.requestSequence;
       const sessionEndpoint = this.endpoint.replace(
@@ -496,7 +504,7 @@ class WebUntisClient {
           ...this.sessionCookie ? { cookie: this.sessionCookie } : {}
         },
         body: JSON.stringify({ id: Date.now().toString(), method, params, jsonrpc: "2.0" }),
-        signal: AbortSignal.timeout(this.requestTimeoutMs)
+        signal: this.getRequestSignal()
       });
       const body = await response.text();
       const cookie = mergeCookieHeader(this.sessionCookie, response.headers);
@@ -578,8 +586,11 @@ class WebUntisClient {
       if (error instanceof import_WebUntisErrors.WebUntisError) {
         throw error;
       }
-      if (error instanceof DOMException && error.name === "AbortError") {
-        throw new import_WebUntisErrors.WebUntisError("TIMEOUT", "WebUntis timetable request timed out");
+      if (error instanceof DOMException && (error.name === "AbortError" || error.name === "TimeoutError")) {
+        throw new import_WebUntisErrors.WebUntisError(
+          ((_b = this.abortSignal) == null ? void 0 : _b.aborted) ? "ABORTED" : "TIMEOUT",
+          ((_c = this.abortSignal) == null ? void 0 : _c.aborted) ? "WebUntis timetable request was aborted" : "WebUntis timetable request timed out"
+        );
       }
       throw new import_WebUntisErrors.WebUntisError("SERVER_UNREACHABLE", "WebUntis timetable request failed", { cause: error });
     }
