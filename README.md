@@ -81,6 +81,10 @@ in a browser first. Then run the connection test in the adapter configuration
 and include only relevant, non-sensitive log messages when asking for help.
 
 ## Changelog
+### 0.1.8 (2026-10-14)
+
+- (@Voodoo2man) Updated dynamic lesson names and migrated metadata for existing objects.
+
 ### 0.1.7 (2026-10-14)
 
 - (@Voodoo2man) Improved ioBroker compliance, multilingual object names, shutdown handling, and state updates.

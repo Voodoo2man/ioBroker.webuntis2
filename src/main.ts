@@ -1,19 +1,9 @@
 import * as utils from "@iobroker/adapter-core";
-import { WebUntisService, type WebUntisConnectionConfig } from "./lib/webuntis/WebUntisService";
 import { cleanupLegacyNamespace } from "./lib/LegacyNamespaceCleanup";
-import type { HolidaySummary } from "./lib/webuntis/Holidays";
-import { WebUntisError } from "./lib/webuntis/WebUntisErrors";
-import {
-	lessonChannelName,
-	summarizeTimetable,
-	nextWeekday,
-	type TimetableLesson,
-	type TimetableSummary,
-} from "./lib/webuntis/Timetable";
-import type { WebUntisHttpDiagnostic } from "./lib/webuntis/WebUntisTypes";
-import { deriveCurrentNextLesson, type CurrentNextLessonSummary } from "./lib/webuntis/CurrentNextLesson";
 import { removeStaleLessonStates } from "./lib/LessonStateCleanup";
 import {
+	hasObjectValueChanged,
+	isGeneratedLessonName,
 	needsNameMigration,
 	translatedLessonFallback,
 	translatedName,
@@ -21,6 +11,18 @@ import {
 	translatedTimetableGroup,
 	translatedWeekday,
 } from "./lib/ObjectTranslations";
+import { deriveCurrentNextLesson, type CurrentNextLessonSummary } from "./lib/webuntis/CurrentNextLesson";
+import type { HolidaySummary } from "./lib/webuntis/Holidays";
+import {
+	lessonChannelName,
+	nextWeekday,
+	summarizeTimetable,
+	type TimetableLesson,
+	type TimetableSummary,
+} from "./lib/webuntis/Timetable";
+import { WebUntisError } from "./lib/webuntis/WebUntisErrors";
+import { WebUntisService, type WebUntisConnectionConfig } from "./lib/webuntis/WebUntisService";
+import type { WebUntisHttpDiagnostic } from "./lib/webuntis/WebUntisTypes";
 
 const TIMETABLE_INTERVAL_MS = 5 * 60 * 1000;
 const CURRENT_NEXT_INTERVAL_MS = 60 * 1000;
@@ -135,15 +137,44 @@ class WebuntisNext extends utils.Adapter {
 		id: string,
 		object: ioBroker.SettableObject,
 		legacyName?: string,
+		dynamicName = false,
 	): Promise<void> {
 		await this.setObjectNotExistsAsync(id, object);
-		if (!legacyName || this.migratedNames.has(id)) {
+		if (!legacyName || (!dynamicName && this.migratedNames.has(id))) {
 			return;
 		}
 		const existing = await this.getObjectAsync(id);
-		this.migratedNames.add(id);
-		if (existing && needsNameMigration(existing.common.name, legacyName)) {
-			await this.extendObjectAsync(id, { common: { name: object.common?.name } });
+		if (!dynamicName) {
+			this.migratedNames.add(id);
+		}
+		if (!existing) {
+			return;
+		}
+		const currentName = existing.common.name;
+		const shouldMigrateName =
+			needsNameMigration(currentName, legacyName) || (dynamicName && isGeneratedLessonName(currentName));
+		const desiredCommon = (object.common || {}) as Record<string, unknown>;
+		const common: Record<string, unknown> = {};
+		for (const key of ["type", "role", "read", "write", "def"]) {
+			if (key in desiredCommon && hasObjectValueChanged(existing.common[key], desiredCommon[key])) {
+				common[key] = desiredCommon[key];
+			}
+		}
+		if ("unit" in desiredCommon && hasObjectValueChanged(existing.common.unit, desiredCommon.unit)) {
+			common.unit = desiredCommon.unit;
+		} else if (
+			!("unit" in desiredCommon) &&
+			existing.common.type === "number" &&
+			"unit" in existing.common &&
+			hasObjectValueChanged(existing.common.unit, "")
+		) {
+			common.unit = "";
+		}
+		if (shouldMigrateName && hasObjectValueChanged(existing.common.name, object.common?.name)) {
+			common.name = object.common?.name;
+		}
+		if (Object.keys(common).length) {
+			await this.extendObjectAsync(id, { common });
 		}
 	}
 
@@ -698,6 +729,7 @@ class WebuntisNext extends utils.Adapter {
 				native: {},
 			},
 			`Lesson ${slot}`,
+			true,
 		);
 		const values: Record<
 			string,
