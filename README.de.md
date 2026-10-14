@@ -88,6 +88,11 @@ nicht vertrauliche Logmeldungen.
 
 ## Änderungsverlauf
 
+### 0.1.7 (2026-10-14)
+
+- (@Voodoo2man) ioBroker-Konformität, mehrsprachige Objektnamen, Beenden des Adapters und Statusaktualisierungen verbessert.
+- (@Voodoo2man) Regressionstests ergänzt und den historischen Object-Dump mit Adapterdaten entfernt.
+
 ### 0.1.6 (2026-10-08)
 
 - (@Voodoo2man) Rückmeldungen bei der Schulsuche, mobile Darstellung und Buttonverhalten in der Admin-Oberfläche verbessert.
