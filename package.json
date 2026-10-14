@@ -76,6 +76,7 @@
 		"test:package": "mocha test/package --exit",
 		"test:integration": "mocha test/integration --exit",
 		"test": "npm run test:ts && npm run test:package",
+		"test:unit": "npm run test:ts",
 		"check": "tsc --noEmit && tsc --noEmit -p admin/tsconfig.json",
 		"coverage": "nyc npm run test:ts",
 		"lint": "eslint -c eslint.config.mjs .",
