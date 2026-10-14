@@ -93,19 +93,6 @@
 				"pl": "Ulepszony kroczący tygodniowy plan lekcji, podsumowania dni tygodnia i stany dat z sygnaturami czasu Unix",
 				"uk": "Покращений ковзний тижневий розклад, підсумки днів тижня та стани дат із часовими мітками Unix",
 				"zh-cn": "改进的滚动周课表、每周每日摘要以及带 Unix 时间戳的日期状态"
-			},
-			"0.1.0": {
-				"en": "complete feature release",
-				"de": "vollständige Funktionsveröffentlichung",
-				"ru": "полный выпуск функций",
-				"pt": "versão com todas as funcionalidades",
-				"nl": "volledige functierelease",
-				"fr": "version avec toutes les fonctionnalités",
-				"it": "versione con tutte le funzionalità",
-				"es": "versión con todas las funcionalidades",
-				"pl": "wydanie z pełnym zestawem funkcji",
-				"uk": "повний випуск функцій",
-				"zh-cn": "完整功能版本"
 			}
 		},
 		"titleLang": {
