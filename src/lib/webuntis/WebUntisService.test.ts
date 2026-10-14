@@ -114,4 +114,22 @@ describe("WebUntis service session and master data caching", () => {
 		expect(calls.filter(method => method === "authenticate")).to.have.length(2);
 		expect(calls.filter(method => method === "getTimetable")).to.have.length(2);
 	});
+
+	it("aborts an in-flight request during shutdown", async () => {
+		const service = new WebUntisService(undefined, undefined, undefined, async (_input, init) => {
+			await new Promise<never>((_resolve, reject) => {
+				init?.signal?.addEventListener("abort", () => reject(new DOMException("Aborted", "AbortError")));
+			});
+			throw new Error("request did not abort");
+		});
+		const loading = service.loadTimetable(config);
+		await Promise.resolve();
+		service.shutdown();
+		try {
+			await loading;
+			expect.fail("expected shutdown abort");
+		} catch (error) {
+			expect((error as { code: string }).code).to.equal("ABORTED");
+		}
+	});
 });

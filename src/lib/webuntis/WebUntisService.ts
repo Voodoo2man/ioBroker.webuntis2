@@ -28,6 +28,7 @@ interface MasterDataCache {
  *
  */
 export class WebUntisService {
+	private readonly abortController = new AbortController();
 	private readonly holidayCache = new HolidayCache();
 	private sessionClient?: WebUntisClient;
 	private session?: WebUntisSession;
@@ -151,7 +152,13 @@ export class WebUntisService {
 		if (this.sessionLoading?.key === key) {
 			return this.sessionLoading.promise;
 		}
-		const client = new WebUntisClient(config, this.fetchImpl, undefined, this.onDiagnostic);
+		const client = new WebUntisClient(
+			config,
+			this.fetchImpl,
+			undefined,
+			this.onDiagnostic,
+			this.abortController.signal,
+		);
 		const promise = client.authenticate(config.username, config.password).then(session => {
 			this.sessionClient = client;
 			this.session = session;
@@ -260,14 +267,21 @@ export class WebUntisService {
 			return { ok: false, code: "PASSWORD_REQUIRED" };
 		}
 		try {
-			await new WebUntisClient(config, this.fetchImpl, undefined, this.onDiagnostic).authenticate(
-				config.username,
-				config.password,
-			);
+			await new WebUntisClient(
+				config,
+				this.fetchImpl,
+				undefined,
+				this.onDiagnostic,
+				this.abortController.signal,
+			).authenticate(config.username, config.password);
 			return { ok: true };
 		} catch (error) {
 			return { ok: false, code: classifyWebUntisError(error) };
 		}
+	}
+
+	public shutdown(): void {
+		this.abortController.abort();
 	}
 }
 

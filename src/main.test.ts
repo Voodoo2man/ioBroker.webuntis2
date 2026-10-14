@@ -370,6 +370,17 @@ describe("WebUntis username/password authentication", () => {
 			expect((error as WebUntisError).code).to.equal("TIMEOUT");
 		}
 	});
+
+	it("classifies TimeoutError as a timeout", async () => {
+		try {
+			await new WebUntisClient(config, async () => {
+				throw new DOMException("Timed out", "TimeoutError");
+			}).authenticate("alice", "secret");
+			expect.fail("expected timeout");
+		} catch (error) {
+			expect((error as WebUntisError).code).to.equal("TIMEOUT");
+		}
+	});
 });
 
 describe("WebUntis connection configuration", () => {

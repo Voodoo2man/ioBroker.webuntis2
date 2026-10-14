@@ -28,65 +28,72 @@ var import_WebUntisErrors = require("./lib/webuntis/WebUntisErrors");
 var import_Timetable = require("./lib/webuntis/Timetable");
 var import_CurrentNextLesson = require("./lib/webuntis/CurrentNextLesson");
 var import_LessonStateCleanup = require("./lib/LessonStateCleanup");
+var import_ObjectTranslations = require("./lib/ObjectTranslations");
 const TIMETABLE_INTERVAL_MS = 5 * 60 * 1e3;
 const CURRENT_NEXT_INTERVAL_MS = 60 * 1e3;
 const TIMETABLE_GROUPS = ["today", "tomorrow", "week"];
 const SUMMARY_STATE_DEFINITIONS = {
-  hasSchool: { type: "boolean", role: "indicator", name: "Has school", def: false },
-  lessonCount: { type: "number", role: "value", name: "Lesson count", def: 0 },
-  lessonDurationMinutes: { type: "number", role: "value", name: "Lesson duration in minutes", def: 0 },
-  schoolStart: { type: "string", role: "text", name: "School start", def: "" },
-  schoolEnd: { type: "string", role: "text", name: "School end", def: "" },
-  subjects: { type: "string", role: "text", name: "Subjects", def: "" },
-  subjectCount: { type: "number", role: "value", name: "Subject count", def: 0 },
-  firstSubject: { type: "string", role: "text", name: "First subject", def: "" },
-  lastSubject: { type: "string", role: "text", name: "Last subject", def: "" },
-  hasChanges: { type: "boolean", role: "indicator", name: "Has changes", def: false },
-  changeCount: { type: "number", role: "value", name: "Change count", def: 0 },
-  cancellationCount: { type: "number", role: "value", name: "Cancellation count", def: 0 }
+  hasSchool: { type: "boolean", role: "indicator", name: (0, import_ObjectTranslations.translatedName)("hasSchool"), def: false },
+  lessonCount: { type: "number", role: "value", name: (0, import_ObjectTranslations.translatedName)("lessonCount"), def: 0 },
+  lessonDurationMinutes: {
+    type: "number",
+    role: "value.timer",
+    name: (0, import_ObjectTranslations.translatedName)("lessonDurationMinutes"),
+    def: 0,
+    unit: "min"
+  },
+  schoolStart: { type: "string", role: "text", name: (0, import_ObjectTranslations.translatedName)("schoolStart"), def: "" },
+  schoolEnd: { type: "string", role: "text", name: (0, import_ObjectTranslations.translatedName)("schoolEnd"), def: "" },
+  subjects: { type: "string", role: "text", name: (0, import_ObjectTranslations.translatedName)("subjects"), def: "" },
+  subjectCount: { type: "number", role: "value", name: (0, import_ObjectTranslations.translatedName)("subjectCount"), def: 0 },
+  firstSubject: { type: "string", role: "text", name: (0, import_ObjectTranslations.translatedName)("firstSubject"), def: "" },
+  lastSubject: { type: "string", role: "text", name: (0, import_ObjectTranslations.translatedName)("lastSubject"), def: "" },
+  hasChanges: { type: "boolean", role: "indicator", name: (0, import_ObjectTranslations.translatedName)("hasChanges"), def: false },
+  changeCount: { type: "number", role: "value", name: (0, import_ObjectTranslations.translatedName)("changeCount"), def: 0 },
+  cancellationCount: { type: "number", role: "value", name: (0, import_ObjectTranslations.translatedName)("cancellationCount"), def: 0 }
 };
 const LESSON_STATE_NAMES = {
-  date: "Date",
-  dateTimestamp: "Date (Unix timestamp ms)",
-  startTime: "Lesson start",
-  endTime: "Lesson end",
-  subject: "Subject",
-  subjectLong: "Subject name",
-  teacher: "Teacher",
-  room: "Room",
-  class: "Class",
-  lessonId: "WebUntis lesson ID",
-  periodId: "WebUntis period ID",
-  status: "Lesson status",
-  changed: "Lesson changed",
-  cancelled: "Lesson cancelled",
-  substitution: "Substitution",
-  originalTeacher: "Original teacher",
-  originalRoom: "Original room",
-  originalSubject: "Original subject"
+  date: (0, import_ObjectTranslations.translatedName)("date"),
+  dateTimestamp: (0, import_ObjectTranslations.translatedName)("dateTimestamp"),
+  startTime: (0, import_ObjectTranslations.translatedName)("startTime"),
+  endTime: (0, import_ObjectTranslations.translatedName)("endTime"),
+  subject: (0, import_ObjectTranslations.translatedName)("subject"),
+  subjectLong: (0, import_ObjectTranslations.translatedName)("subjectLong"),
+  teacher: (0, import_ObjectTranslations.translatedName)("teacher"),
+  room: (0, import_ObjectTranslations.translatedName)("room"),
+  class: (0, import_ObjectTranslations.translatedName)("class"),
+  lessonId: (0, import_ObjectTranslations.translatedName)("lessonId"),
+  periodId: (0, import_ObjectTranslations.translatedName)("periodId"),
+  status: (0, import_ObjectTranslations.translatedName)("status"),
+  changed: (0, import_ObjectTranslations.translatedName)("changed"),
+  cancelled: (0, import_ObjectTranslations.translatedName)("cancelled"),
+  substitution: (0, import_ObjectTranslations.translatedName)("substitution"),
+  originalTeacher: (0, import_ObjectTranslations.translatedName)("originalTeacher"),
+  originalRoom: (0, import_ObjectTranslations.translatedName)("originalRoom"),
+  originalSubject: (0, import_ObjectTranslations.translatedName)("originalSubject")
 };
 const CURRENT_NEXT_STATE_DEFINITIONS = {
-  currentLesson: { type: "string", role: "text", name: "Current lesson", def: "" },
-  currentSubject: { type: "string", role: "text", name: "Current subject", def: "" },
-  currentRoom: { type: "string", role: "text", name: "Current room", def: "" },
-  currentTeacher: { type: "string", role: "text", name: "Current teacher", def: "" },
-  nextLesson: { type: "string", role: "text", name: "Next lesson", def: "" },
-  nextSubject: { type: "string", role: "text", name: "Next subject", def: "" },
-  nextRoom: { type: "string", role: "text", name: "Next room", def: "" },
-  nextTeacher: { type: "string", role: "text", name: "Next teacher", def: "" },
-  nextLessonStart: { type: "string", role: "text", name: "Next lesson start", def: "" },
+  currentLesson: { type: "string", role: "text", name: (0, import_ObjectTranslations.translatedName)("currentLesson"), def: "" },
+  currentSubject: { type: "string", role: "text", name: (0, import_ObjectTranslations.translatedName)("currentSubject"), def: "" },
+  currentRoom: { type: "string", role: "text", name: (0, import_ObjectTranslations.translatedName)("currentRoom"), def: "" },
+  currentTeacher: { type: "string", role: "text", name: (0, import_ObjectTranslations.translatedName)("currentTeacher"), def: "" },
+  nextLesson: { type: "string", role: "text", name: (0, import_ObjectTranslations.translatedName)("nextLesson"), def: "" },
+  nextSubject: { type: "string", role: "text", name: (0, import_ObjectTranslations.translatedName)("nextSubject"), def: "" },
+  nextRoom: { type: "string", role: "text", name: (0, import_ObjectTranslations.translatedName)("nextRoom"), def: "" },
+  nextTeacher: { type: "string", role: "text", name: (0, import_ObjectTranslations.translatedName)("nextTeacher"), def: "" },
+  nextLessonStart: { type: "string", role: "text", name: (0, import_ObjectTranslations.translatedName)("nextLessonStart"), def: "" },
   minutesUntilNextLesson: {
     type: "number",
     role: "value.interval",
-    name: "Minutes until next lesson",
+    name: (0, import_ObjectTranslations.translatedName)("minutesUntilNextLesson"),
     def: 0,
     unit: "m"
   },
-  schoolRunning: { type: "boolean", role: "indicator", name: "School running", def: false },
+  schoolRunning: { type: "boolean", role: "indicator", name: (0, import_ObjectTranslations.translatedName)("schoolRunning"), def: false },
   minutesUntilSchoolEnd: {
     type: "number",
     role: "value.interval",
-    name: "Minutes until school end",
+    name: (0, import_ObjectTranslations.translatedName)("minutesUntilSchoolEnd"),
     def: 0,
     unit: "m"
   }
@@ -104,6 +111,19 @@ class WebuntisNext extends utils.Adapter {
   currentNextTimer;
   todayLessons = [];
   unloaded = false;
+  migratedNames = /* @__PURE__ */ new Set();
+  async ensureTranslatedObject(id, object, legacyName) {
+    var _a;
+    await this.setObjectNotExistsAsync(id, object);
+    if (!legacyName || this.migratedNames.has(id)) {
+      return;
+    }
+    const existing = await this.getObjectAsync(id);
+    this.migratedNames.add(id);
+    if (existing && (0, import_ObjectTranslations.needsNameMigration)(existing.common.name, legacyName)) {
+      await this.extendObjectAsync(id, { common: { name: (_a = object.common) == null ? void 0 : _a.name } });
+    }
+  }
   constructor(options = {}) {
     super({ ...options, name: "webuntis2" });
     this.webUntis = new import_WebUntisService.WebUntisService(
@@ -121,6 +141,74 @@ class WebuntisNext extends utils.Adapter {
     this.log.debug(`WebUntis ${diagnostic.method || "request"} HTTP ${JSON.stringify(diagnostic)}`);
   }
   async onReady() {
+    if (this.unloaded) {
+      return;
+    }
+    await this.ensureTranslatedObject(
+      "info",
+      { type: "channel", common: { name: (0, import_ObjectTranslations.translatedName)("information") }, native: {} },
+      "Information"
+    );
+    await this.ensureTranslatedObject(
+      "info.connection",
+      {
+        type: "state",
+        common: {
+          name: (0, import_ObjectTranslations.translatedName)("deviceOrServiceConnected"),
+          type: "boolean",
+          role: "indicator.connected",
+          read: true,
+          write: false
+        },
+        native: {}
+      },
+      "Device or service connected"
+    );
+    await this.ensureTranslatedObject(
+      "info.lastUpdate",
+      {
+        type: "state",
+        common: {
+          name: (0, import_ObjectTranslations.translatedName)("lastUpdateAttempt"),
+          type: "string",
+          role: "date",
+          read: true,
+          write: false
+        },
+        native: {}
+      },
+      "Last timetable update attempt"
+    );
+    await this.ensureTranslatedObject(
+      "info.lastSuccessfulUpdate",
+      {
+        type: "state",
+        common: {
+          name: (0, import_ObjectTranslations.translatedName)("lastSuccessfulUpdate"),
+          type: "string",
+          role: "date",
+          read: true,
+          write: false
+        },
+        native: {}
+      },
+      "Last successful timetable update"
+    );
+    await this.ensureTranslatedObject(
+      "info.nextUpdate",
+      {
+        type: "state",
+        common: {
+          name: (0, import_ObjectTranslations.translatedName)("nextUpdate"),
+          type: "string",
+          role: "date",
+          read: true,
+          write: false
+        },
+        native: {}
+      },
+      "Next timetable update"
+    );
     await this.setState("info.connection", false, true);
     if (!this.hasConnectionConfig()) {
       return;
@@ -153,6 +241,9 @@ class WebuntisNext extends utils.Adapter {
     );
   }
   async updateTimetable() {
+    if (this.unloaded) {
+      return;
+    }
     await this.setState("info.lastUpdate", (/* @__PURE__ */ new Date()).toISOString(), true);
     try {
       await (0, import_LegacyNamespaceCleanup.cleanupLegacyNamespace)(this, "messages");
@@ -161,6 +252,9 @@ class WebuntisNext extends utils.Adapter {
       await this.cleanupObsoleteStructure();
       const now = /* @__PURE__ */ new Date();
       const data = await this.webUntis.loadTimetable(this.config, now);
+      if (this.unloaded) {
+        return;
+      }
       this.todayLessons = data.today;
       let updated = 0;
       let removed = 0;
@@ -179,6 +273,9 @@ class WebuntisNext extends utils.Adapter {
       await this.setState("info.connection", true, true);
       this.log.debug(`Timetable updated: ${updated} lessons updated, ${removed} obsolete lessons removed`);
     } catch (error) {
+      if (this.unloaded) {
+        return;
+      }
       await this.setState("info.connection", false, true);
       await this.setState("info.nextUpdate", new Date(Date.now() + TIMETABLE_INTERVAL_MS).toISOString(), true);
       const code = error instanceof import_WebUntisErrors.WebUntisError ? error.code : "UNEXPECTED_RESPONSE";
@@ -187,28 +284,44 @@ class WebuntisNext extends utils.Adapter {
     }
   }
   async ensureTimetableRoot() {
-    await this.setObjectNotExistsAsync("timetable", {
-      type: "channel",
-      common: { name: "Timetable" },
-      native: {}
-    });
+    await this.ensureTranslatedObject(
+      "timetable",
+      {
+        type: "channel",
+        common: { name: (0, import_ObjectTranslations.translatedName)("timetable") },
+        native: {}
+      },
+      "Timetable"
+    );
   }
   async ensureHolidaysRoot() {
-    await this.setObjectNotExistsAsync("holidays", {
-      type: "channel",
-      common: { name: "Holidays" },
-      native: {}
-    });
-    await this.setObjectNotExistsAsync("holidays.current", {
-      type: "channel",
-      common: { name: "Current holiday" },
-      native: {}
-    });
-    await this.setObjectNotExistsAsync("holidays.next", {
-      type: "channel",
-      common: { name: "Next holiday" },
-      native: {}
-    });
+    await this.ensureTranslatedObject(
+      "holidays",
+      {
+        type: "channel",
+        common: { name: (0, import_ObjectTranslations.translatedName)("holidays") },
+        native: {}
+      },
+      "Holidays"
+    );
+    await this.ensureTranslatedObject(
+      "holidays.current",
+      {
+        type: "channel",
+        common: { name: (0, import_ObjectTranslations.translatedName)("currentHoliday") },
+        native: {}
+      },
+      "Current holiday"
+    );
+    await this.ensureTranslatedObject(
+      "holidays.next",
+      {
+        type: "channel",
+        common: { name: (0, import_ObjectTranslations.translatedName)("nextHoliday") },
+        native: {}
+      },
+      "Next holiday"
+    );
   }
   async writeHolidaySummary(summary) {
     await this.writeSimpleState(
@@ -233,7 +346,7 @@ class WebuntisNext extends utils.Adapter {
       dateOnly(summary.current.startDate),
       "Start date",
       "string",
-      "text",
+      "date",
       ""
     );
     await this.writeSimpleState(
@@ -241,7 +354,7 @@ class WebuntisNext extends utils.Adapter {
       numericDate(summary.current.startDate),
       "Start date (Unix timestamp ms)",
       "number",
-      "value",
+      "date",
       0
     );
     await this.writeSimpleState(
@@ -249,7 +362,7 @@ class WebuntisNext extends utils.Adapter {
       dateOnly(summary.current.endDate),
       "End date",
       "string",
-      "text",
+      "date",
       ""
     );
     await this.writeSimpleState(
@@ -257,7 +370,7 @@ class WebuntisNext extends utils.Adapter {
       numericDate(summary.current.endDate),
       "End date (Unix timestamp ms)",
       "number",
-      "value",
+      "date",
       0
     );
     await this.writeSimpleState("holidays.next.name", summary.next.name, "Name", "string", "text", "");
@@ -267,7 +380,7 @@ class WebuntisNext extends utils.Adapter {
       dateOnly(summary.next.startDate),
       "Start date",
       "string",
-      "text",
+      "date",
       ""
     );
     await this.writeSimpleState(
@@ -275,7 +388,7 @@ class WebuntisNext extends utils.Adapter {
       numericDate(summary.next.startDate),
       "Start date (Unix timestamp ms)",
       "number",
-      "value",
+      "date",
       0
     );
     await this.writeSimpleState(
@@ -283,7 +396,7 @@ class WebuntisNext extends utils.Adapter {
       dateOnly(summary.next.endDate),
       "End date",
       "string",
-      "text",
+      "date",
       ""
     );
     await this.writeSimpleState(
@@ -291,15 +404,16 @@ class WebuntisNext extends utils.Adapter {
       summary.next.daysUntil,
       "Days until",
       "number",
-      "value",
-      0
+      "value.interval",
+      0,
+      "d"
     );
     await this.writeSimpleState(
       "holidays.next.endDateTimestamp",
       numericDate(summary.next.endDate),
       "End date (Unix timestamp ms)",
       "number",
-      "value",
+      "date",
       0
     );
   }
@@ -308,52 +422,53 @@ class WebuntisNext extends utils.Adapter {
       if (name === "lessonCount") {
         continue;
       }
-      await this.setObjectNotExistsAsync(`timetable.${path}.${name}`, {
-        type: "state",
-        common: {
-          name: definition.name,
-          type: definition.type,
-          role: definition.role,
-          read: true,
-          write: false,
-          def: definition.def
+      await this.ensureTranslatedObject(
+        `timetable.${path}.${name}`,
+        {
+          type: "state",
+          common: {
+            name: definition.name,
+            type: definition.type,
+            role: definition.role,
+            read: true,
+            write: false,
+            def: definition.def,
+            ...definition.unit ? { unit: definition.unit } : {}
+          },
+          native: {}
         },
-        native: {}
-      });
-      await this.extendObjectAsync(`timetable.${path}.${name}`, {
-        common: { type: definition.type, role: definition.role, def: definition.def }
-      });
-      await this.setStateAsync(`timetable.${path}.${name}`, summary[name], true);
+        definition.name.en
+      );
+      await this.setStateChangedAsync(`timetable.${path}.${name}`, summary[name], true);
     }
   }
   async writeCurrentNextSummary(lessons, now) {
     const summary = (0, import_CurrentNextLesson.deriveCurrentNextLesson)(lessons, now);
     for (const [name, definition] of Object.entries(CURRENT_NEXT_STATE_DEFINITIONS)) {
-      await this.setObjectNotExistsAsync(`timetable.today.${name}`, {
-        type: "state",
-        common: {
-          name: definition.name,
-          type: definition.type,
-          role: definition.role,
-          read: true,
-          write: false,
-          def: definition.def,
-          ...definition.unit ? { unit: definition.unit } : {}
+      await this.ensureTranslatedObject(
+        `timetable.today.${name}`,
+        {
+          type: "state",
+          common: {
+            name: definition.name,
+            type: definition.type,
+            role: definition.role,
+            read: true,
+            write: false,
+            def: definition.def,
+            ...definition.unit ? { unit: definition.unit } : {}
+          },
+          native: {}
         },
-        native: {}
-      });
-      await this.extendObjectAsync(`timetable.today.${name}`, {
-        common: {
-          type: definition.type,
-          role: definition.role,
-          def: definition.def,
-          ...definition.unit ? { unit: definition.unit } : {}
-        }
-      });
-      await this.setStateAsync(`timetable.today.${name}`, summary[name], true);
+        definition.name.en
+      );
+      await this.setStateChangedAsync(`timetable.today.${name}`, summary[name], true);
     }
   }
   async updateCurrentNextStates() {
+    if (this.unloaded) {
+      return;
+    }
     await this.writeCurrentNextSummary(this.todayLessons, /* @__PURE__ */ new Date());
   }
   async cleanupObsoleteStructure() {
@@ -371,11 +486,15 @@ class WebuntisNext extends utils.Adapter {
     }
   }
   async writeTimetableGroup(group, lessons, now) {
-    await this.setObjectNotExistsAsync(`timetable.${group}`, {
-      type: "channel",
-      common: { name: `Timetable ${group}` },
-      native: {}
-    });
+    await this.ensureTranslatedObject(
+      `timetable.${group}`,
+      {
+        type: "channel",
+        common: { name: (0, import_ObjectTranslations.translatedTimetableGroup)(group) },
+        native: {}
+      },
+      `Timetable ${group}`
+    );
     let removed = await this.removeLegacyLessons(group);
     if (group === "week") {
       const weekdayNames = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"];
@@ -424,26 +543,35 @@ class WebuntisNext extends utils.Adapter {
     return legacy.size;
   }
   async writeTimetableDay(path, lessons, date) {
-    await this.setObjectNotExistsAsync(path, {
-      type: "channel",
-      common: { name: path.split(".").at(-1) || "Day" },
-      native: {}
-    });
+    const dayName = path.split(".").at(-1) || "Day";
+    await this.ensureTranslatedObject(
+      path,
+      {
+        type: "channel",
+        common: { name: (0, import_ObjectTranslations.translatedWeekday)(dayName) },
+        native: {}
+      },
+      dayName
+    );
     await this.writeSimpleState(`${path}.date`, dateOnly(date), "Date", "string", "text", "");
     await this.writeSimpleState(
       `${path}.dateTimestamp`,
       numericDate(date),
       "Date (Unix timestamp ms)",
       "number",
-      "value",
+      "date",
       0
     );
     await this.writeSimpleState(`${path}.lessonCount`, lessons.length, "Lesson count", "number", "value", 0);
-    await this.setObjectNotExistsAsync(`${path}.lessons`, {
-      type: "channel",
-      common: { name: "Lessons" },
-      native: {}
-    });
+    await this.ensureTranslatedObject(
+      `${path}.lessons`,
+      {
+        type: "channel",
+        common: { name: (0, import_ObjectTranslations.translatedName)("lessons") },
+        native: {}
+      },
+      "Lessons"
+    );
     const expected = new Set(lessons.map((_lesson, index) => String(index + 1).padStart(2, "0")));
     const existing = await this.getObjectListAsync({
       startkey: `${this.namespace}.${path}.lessons.`,
@@ -467,27 +595,42 @@ class WebuntisNext extends utils.Adapter {
   timetableDate(date) {
     return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
   }
-  async writeSimpleState(id, value, name, type, role, def) {
-    await this.setObjectNotExistsAsync(id, {
-      type: "state",
-      common: { name, type, role, read: true, write: false, def },
-      native: {}
-    });
-    await this.extendObjectAsync(id, { common: { name, type, role, read: true, write: false, def } });
-    await this.setStateAsync(id, value, true);
+  async writeSimpleState(id, value, name, type, role, def, unit) {
+    await this.ensureTranslatedObject(
+      id,
+      {
+        type: "state",
+        common: {
+          name: (0, import_ObjectTranslations.translatedStateName)(name),
+          type,
+          role,
+          read: true,
+          write: false,
+          def,
+          ...unit ? { unit } : {}
+        },
+        native: {}
+      },
+      name
+    );
+    await this.setStateChangedAsync(id, value, true);
   }
   async writeLesson(path, slot, lesson) {
+    var _a;
     const base = `${path}.lessons.${slot}`;
     const label = (0, import_Timetable.lessonChannelName)(lesson);
-    await this.setObjectNotExistsAsync(base, {
-      type: "channel",
-      common: { name: label || `Lesson ${slot}` },
-      native: {}
-    });
-    await this.extendObjectAsync(base, { common: { name: label || `Lesson ${slot}` } });
+    await this.ensureTranslatedObject(
+      base,
+      {
+        type: "channel",
+        common: { name: label || (0, import_ObjectTranslations.translatedLessonFallback)(slot) },
+        native: {}
+      },
+      `Lesson ${slot}`
+    );
     const values = {
       date: { value: dateOnly(lesson.date), type: "string", role: "text" },
-      dateTimestamp: { value: numericDate(lesson.date), type: "number", role: "value" },
+      dateTimestamp: { value: numericDate(lesson.date), type: "number", role: "date" },
       startTime: { value: lesson.startTime, type: "string", role: "text" },
       endTime: { value: lesson.endTime, type: "string", role: "text" },
       subject: { value: lesson.subject, type: "string", role: "text" },
@@ -507,22 +650,23 @@ class WebuntisNext extends utils.Adapter {
     };
     await (0, import_LessonStateCleanup.removeStaleLessonStates)(base, values, this.getObjectAsync.bind(this), this.delObjectAsync.bind(this));
     for (const [name, item] of Object.entries(values)) {
-      await this.setObjectNotExistsAsync(`${base}.${name}`, {
-        type: "state",
-        common: {
-          name: LESSON_STATE_NAMES[name] || name,
-          type: item.type,
-          role: item.role,
-          read: true,
-          write: false,
-          def: item.value
+      await this.ensureTranslatedObject(
+        `${base}.${name}`,
+        {
+          type: "state",
+          common: {
+            name: LESSON_STATE_NAMES[name] || name,
+            type: item.type,
+            role: item.role,
+            read: true,
+            write: false,
+            def: item.type === "string" ? "" : item.type === "boolean" ? false : 0
+          },
+          native: {}
         },
-        native: {}
-      });
-      await this.extendObjectAsync(`${base}.${name}`, {
-        common: { name: LESSON_STATE_NAMES[name] || name, type: item.type, role: item.role, def: item.value }
-      });
-      await this.setStateAsync(`${base}.${name}`, item.value, true);
+        typeof ((_a = LESSON_STATE_NAMES[name]) == null ? void 0 : _a.en) === "string" ? LESSON_STATE_NAMES[name].en : name
+      );
+      await this.setStateChangedAsync(`${base}.${name}`, item.value, true);
     }
   }
   async onMessage(obj) {
@@ -575,7 +719,11 @@ class WebuntisNext extends utils.Adapter {
     };
   }
   onUnload(callback) {
+    if (this.unloaded) {
+      return;
+    }
     this.unloaded = true;
+    this.webUntis.shutdown();
     if (this.timetableTimer) {
       this.clearTimeout(this.timetableTimer);
     }

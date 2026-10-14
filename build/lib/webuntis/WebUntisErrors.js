@@ -37,7 +37,7 @@ function classifyWebUntisError(error) {
   if (error instanceof WebUntisError) {
     return error.code;
   }
-  if (error instanceof DOMException && error.name === "AbortError") {
+  if (error instanceof DOMException && (error.name === "AbortError" || error.name === "TimeoutError")) {
     return "TIMEOUT";
   }
   if (error instanceof TypeError) {

@@ -36,6 +36,7 @@ class WebUntisService {
     this.fetchImpl = fetchImpl;
     this.onDebug = onDebug;
   }
+  abortController = new AbortController();
   holidayCache = new import_Holidays.HolidayCache();
   sessionClient;
   session;
@@ -133,7 +134,13 @@ class WebUntisService {
     if (((_a = this.sessionLoading) == null ? void 0 : _a.key) === key) {
       return this.sessionLoading.promise;
     }
-    const client = new import_WebUntisClient.WebUntisClient(config, this.fetchImpl, void 0, this.onDiagnostic);
+    const client = new import_WebUntisClient.WebUntisClient(
+      config,
+      this.fetchImpl,
+      void 0,
+      this.onDiagnostic,
+      this.abortController.signal
+    );
     const promise = client.authenticate(config.username, config.password).then((session) => {
       var _a2;
       this.sessionClient = client;
@@ -234,14 +241,20 @@ class WebUntisService {
       return { ok: false, code: "PASSWORD_REQUIRED" };
     }
     try {
-      await new import_WebUntisClient.WebUntisClient(config, this.fetchImpl, void 0, this.onDiagnostic).authenticate(
-        config.username,
-        config.password
-      );
+      await new import_WebUntisClient.WebUntisClient(
+        config,
+        this.fetchImpl,
+        void 0,
+        this.onDiagnostic,
+        this.abortController.signal
+      ).authenticate(config.username, config.password);
       return { ok: true };
     } catch (error) {
       return { ok: false, code: (0, import_WebUntisErrors.classifyWebUntisError)(error) };
     }
+  }
+  shutdown() {
+    this.abortController.abort();
   }
 }
 // Annotate the CommonJS export names for ESM import in node:
