@@ -22,6 +22,7 @@ __export(ObjectTranslations_exports, {
   hasObjectValueChanged: () => hasObjectValueChanged,
   isGeneratedLessonName: () => isGeneratedLessonName,
   needsNameMigration: () => needsNameMigration,
+  shouldMigrateDynamicName: () => shouldMigrateDynamicName,
   translatedLessonFallback: () => translatedLessonFallback,
   translatedName: () => translatedName,
   translatedStateName: () => translatedStateName,
@@ -997,6 +998,9 @@ function needsNameMigration(current, legacy) {
 function isGeneratedLessonName(name) {
   return typeof name === "string" && (/^(?:\d{1,2}:\d{2})(?:–\d{1,2}:\d{2})?(?: · .+)?$/.test(name) || /^Lesson \d{2}$/.test(name));
 }
+function shouldMigrateDynamicName(current, generatedName) {
+  return typeof generatedName === "string" ? generatedName === current : isGeneratedLessonName(current);
+}
 function hasObjectValueChanged(current, desired) {
   return JSON.stringify(current) !== JSON.stringify(desired);
 }
@@ -1013,6 +1017,7 @@ function translatedStateName(name) {
   hasObjectValueChanged,
   isGeneratedLessonName,
   needsNameMigration,
+  shouldMigrateDynamicName,
   translatedLessonFallback,
   translatedName,
   translatedStateName,

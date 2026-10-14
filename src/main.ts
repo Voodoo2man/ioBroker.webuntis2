@@ -3,7 +3,7 @@ import { cleanupLegacyNamespace } from "./lib/LegacyNamespaceCleanup";
 import { removeStaleLessonStates } from "./lib/LessonStateCleanup";
 import {
 	hasObjectValueChanged,
-	isGeneratedLessonName,
+	shouldMigrateDynamicName,
 	needsNameMigration,
 	translatedLessonFallback,
 	translatedName,
@@ -126,6 +126,7 @@ function numericDate(value: string): number {
 }
 
 class WebuntisNext extends utils.Adapter {
+	private static readonly generatedLessonNameKey = "webuntis2GeneratedName";
 	private readonly webUntis: WebUntisService;
 	private timetableTimer?: ioBroker.Timeout;
 	private currentNextTimer?: ioBroker.Timeout;
@@ -139,7 +140,9 @@ class WebuntisNext extends utils.Adapter {
 		legacyName?: string,
 		dynamicName = false,
 	): Promise<void> {
+		this.ensureActive();
 		await this.setObjectNotExistsAsync(id, object);
+		this.ensureActive();
 		if (!legacyName || (!dynamicName && this.migratedNames.has(id))) {
 			return;
 		}
@@ -151,8 +154,10 @@ class WebuntisNext extends utils.Adapter {
 			return;
 		}
 		const currentName = existing.common.name;
+		const generatedName = existing.native?.[WebuntisNext.generatedLessonNameKey];
 		const shouldMigrateName =
-			needsNameMigration(currentName, legacyName) || (dynamicName && isGeneratedLessonName(currentName));
+			needsNameMigration(currentName, legacyName) ||
+			(dynamicName && shouldMigrateDynamicName(currentName, generatedName));
 		const desiredCommon = (object.common || {}) as Record<string, unknown>;
 		const common: Record<string, unknown> = {};
 		for (const key of ["type", "role", "read", "write", "def"]) {
@@ -162,19 +167,31 @@ class WebuntisNext extends utils.Adapter {
 		}
 		if ("unit" in desiredCommon && hasObjectValueChanged(existing.common.unit, desiredCommon.unit)) {
 			common.unit = desiredCommon.unit;
-		} else if (
-			!("unit" in desiredCommon) &&
-			existing.common.type === "number" &&
-			"unit" in existing.common &&
-			hasObjectValueChanged(existing.common.unit, "")
-		) {
-			common.unit = "";
 		}
 		if (shouldMigrateName && hasObjectValueChanged(existing.common.name, object.common?.name)) {
 			common.name = object.common?.name;
 		}
-		if (Object.keys(common).length) {
-			await this.extendObjectAsync(id, { common });
+		const native =
+			dynamicName && object.native && typeof object.native === "object"
+				? (object.native as Record<string, unknown>)
+				: undefined;
+		const shouldMigrateMarker =
+			dynamicName &&
+			native &&
+			shouldMigrateName &&
+			(typeof generatedName !== "string" || generatedName === currentName) &&
+			hasObjectValueChanged(
+				existing.native?.[WebuntisNext.generatedLessonNameKey],
+				native[WebuntisNext.generatedLessonNameKey],
+			);
+		if (Object.keys(common).length || shouldMigrateMarker) {
+			await this.extendObjectAsync(id, { common, ...(shouldMigrateMarker ? { native } : {}) });
+		}
+	}
+
+	private ensureActive(): void {
+		if (this.unloaded) {
+			throw new WebUntisError("ABORTED", "Adapter is shutting down");
 		}
 	}
 
@@ -698,6 +715,7 @@ class WebuntisNext extends utils.Adapter {
 		def: string | number | boolean,
 		unit?: string,
 	): Promise<void> {
+		this.ensureActive();
 		await this.ensureTranslatedObject(
 			id,
 			{
@@ -715,10 +733,12 @@ class WebuntisNext extends utils.Adapter {
 			},
 			name,
 		);
+		this.ensureActive();
 		await this.setStateChangedAsync(id, value, true);
 	}
 
 	private async writeLesson(path: string, slot: string, lesson: TimetableLesson): Promise<void> {
+		this.ensureActive();
 		const base = `${path}.lessons.${slot}`;
 		const label = lessonChannelName(lesson);
 		await this.ensureTranslatedObject(
@@ -726,11 +746,12 @@ class WebuntisNext extends utils.Adapter {
 			{
 				type: "channel",
 				common: { name: label || translatedLessonFallback(slot) },
-				native: {},
+				native: { [WebuntisNext.generatedLessonNameKey]: label || translatedLessonFallback(slot) },
 			},
 			`Lesson ${slot}`,
 			true,
 		);
+		this.ensureActive();
 		const values: Record<
 			string,
 			{ value: string | number | boolean; type: "string" | "number" | "boolean"; role: string }

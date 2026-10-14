@@ -106,6 +106,7 @@ function numericDate(value) {
   return year && month && day ? new Date(year, month - 1, day).getTime() : 0;
 }
 class WebuntisNext extends utils.Adapter {
+  static generatedLessonNameKey = "webuntis2GeneratedName";
   webUntis;
   timetableTimer;
   currentNextTimer;
@@ -113,8 +114,10 @@ class WebuntisNext extends utils.Adapter {
   unloaded = false;
   migratedNames = /* @__PURE__ */ new Set();
   async ensureTranslatedObject(id, object, legacyName, dynamicName = false) {
-    var _a, _b;
+    var _a, _b, _c, _d;
+    this.ensureActive();
     await this.setObjectNotExistsAsync(id, object);
+    this.ensureActive();
     if (!legacyName || !dynamicName && this.migratedNames.has(id)) {
       return;
     }
@@ -126,7 +129,8 @@ class WebuntisNext extends utils.Adapter {
       return;
     }
     const currentName = existing.common.name;
-    const shouldMigrateName = (0, import_ObjectTranslations.needsNameMigration)(currentName, legacyName) || dynamicName && (0, import_ObjectTranslations.isGeneratedLessonName)(currentName);
+    const generatedName = (_a = existing.native) == null ? void 0 : _a[WebuntisNext.generatedLessonNameKey];
+    const shouldMigrateName = (0, import_ObjectTranslations.needsNameMigration)(currentName, legacyName) || dynamicName && (0, import_ObjectTranslations.shouldMigrateDynamicName)(currentName, generatedName);
     const desiredCommon = object.common || {};
     const common = {};
     for (const key of ["type", "role", "read", "write", "def"]) {
@@ -136,14 +140,22 @@ class WebuntisNext extends utils.Adapter {
     }
     if ("unit" in desiredCommon && (0, import_ObjectTranslations.hasObjectValueChanged)(existing.common.unit, desiredCommon.unit)) {
       common.unit = desiredCommon.unit;
-    } else if (!("unit" in desiredCommon) && existing.common.type === "number" && "unit" in existing.common && (0, import_ObjectTranslations.hasObjectValueChanged)(existing.common.unit, "")) {
-      common.unit = "";
     }
-    if (shouldMigrateName && (0, import_ObjectTranslations.hasObjectValueChanged)(existing.common.name, (_a = object.common) == null ? void 0 : _a.name)) {
-      common.name = (_b = object.common) == null ? void 0 : _b.name;
+    if (shouldMigrateName && (0, import_ObjectTranslations.hasObjectValueChanged)(existing.common.name, (_b = object.common) == null ? void 0 : _b.name)) {
+      common.name = (_c = object.common) == null ? void 0 : _c.name;
     }
-    if (Object.keys(common).length) {
-      await this.extendObjectAsync(id, { common });
+    const native = dynamicName && object.native && typeof object.native === "object" ? object.native : void 0;
+    const shouldMigrateMarker = dynamicName && native && shouldMigrateName && (typeof generatedName !== "string" || generatedName === currentName) && (0, import_ObjectTranslations.hasObjectValueChanged)(
+      (_d = existing.native) == null ? void 0 : _d[WebuntisNext.generatedLessonNameKey],
+      native[WebuntisNext.generatedLessonNameKey]
+    );
+    if (Object.keys(common).length || shouldMigrateMarker) {
+      await this.extendObjectAsync(id, { common, ...shouldMigrateMarker ? { native } : {} });
+    }
+  }
+  ensureActive() {
+    if (this.unloaded) {
+      throw new import_WebUntisErrors.WebUntisError("ABORTED", "Adapter is shutting down");
     }
   }
   constructor(options = {}) {
@@ -618,6 +630,7 @@ class WebuntisNext extends utils.Adapter {
     return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
   }
   async writeSimpleState(id, value, name, type, role, def, unit) {
+    this.ensureActive();
     await this.ensureTranslatedObject(
       id,
       {
@@ -635,10 +648,12 @@ class WebuntisNext extends utils.Adapter {
       },
       name
     );
+    this.ensureActive();
     await this.setStateChangedAsync(id, value, true);
   }
   async writeLesson(path, slot, lesson) {
     var _a;
+    this.ensureActive();
     const base = `${path}.lessons.${slot}`;
     const label = (0, import_Timetable.lessonChannelName)(lesson);
     await this.ensureTranslatedObject(
@@ -646,11 +661,12 @@ class WebuntisNext extends utils.Adapter {
       {
         type: "channel",
         common: { name: label || (0, import_ObjectTranslations.translatedLessonFallback)(slot) },
-        native: {}
+        native: { [WebuntisNext.generatedLessonNameKey]: label || (0, import_ObjectTranslations.translatedLessonFallback)(slot) }
       },
       `Lesson ${slot}`,
       true
     );
+    this.ensureActive();
     const values = {
       date: { value: dateOnly(lesson.date), type: "string", role: "text" },
       dateTimestamp: { value: numericDate(lesson.date), type: "number", role: "date" },
