@@ -24,6 +24,8 @@ describe("object translations", () => {
 		expect(translatedWeekday("monday")["zh-cn"]).to.equal("星期一");
 		expect(translatedLessonFallback("03").fr).to.equal("Cours 03");
 		expect(translatedStateName("Teacher").de).to.equal("Lehrkraft");
+		expect(translatedStateName("Start date (Unix timestamp ms)").de).to.equal("Startdatum (Unix-Zeitstempel ms)");
+		expect(translatedStateName("End date (Unix timestamp ms)").de).to.equal("Enddatum (Unix-Zeitstempel ms)");
 	});
 
 	it("migrates only the old default name and preserves custom names", () => {

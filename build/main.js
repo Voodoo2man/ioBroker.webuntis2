@@ -144,6 +144,71 @@ class WebuntisNext extends utils.Adapter {
     if (this.unloaded) {
       return;
     }
+    await this.ensureTranslatedObject(
+      "info",
+      { type: "channel", common: { name: (0, import_ObjectTranslations.translatedName)("information") }, native: {} },
+      "Information"
+    );
+    await this.ensureTranslatedObject(
+      "info.connection",
+      {
+        type: "state",
+        common: {
+          name: (0, import_ObjectTranslations.translatedName)("deviceOrServiceConnected"),
+          type: "boolean",
+          role: "indicator.connected",
+          read: true,
+          write: false
+        },
+        native: {}
+      },
+      "Device or service connected"
+    );
+    await this.ensureTranslatedObject(
+      "info.lastUpdate",
+      {
+        type: "state",
+        common: {
+          name: (0, import_ObjectTranslations.translatedName)("lastUpdateAttempt"),
+          type: "string",
+          role: "date",
+          read: true,
+          write: false
+        },
+        native: {}
+      },
+      "Last timetable update attempt"
+    );
+    await this.ensureTranslatedObject(
+      "info.lastSuccessfulUpdate",
+      {
+        type: "state",
+        common: {
+          name: (0, import_ObjectTranslations.translatedName)("lastSuccessfulUpdate"),
+          type: "string",
+          role: "date",
+          read: true,
+          write: false
+        },
+        native: {}
+      },
+      "Last successful timetable update"
+    );
+    await this.ensureTranslatedObject(
+      "info.nextUpdate",
+      {
+        type: "state",
+        common: {
+          name: (0, import_ObjectTranslations.translatedName)("nextUpdate"),
+          type: "string",
+          role: "date",
+          read: true,
+          write: false
+        },
+        native: {}
+      },
+      "Next timetable update"
+    );
     await this.setState("info.connection", false, true);
     if (!this.hasConnectionConfig()) {
       return;
