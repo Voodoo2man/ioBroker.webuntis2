@@ -84,7 +84,7 @@ and include only relevant, non-sensitive log messages when asking for help.
 
 ### 0.1.8 (2026-10-14)
 
-- (@Voodoo2man) Updated dynamic lesson names and migrated metadata for existing objects.
+- (@Voodoo2man) Updated dynamic lesson names, migrated metadata for existing objects, and repaired legacy i18n names.
 
 ### 0.1.7 (2026-10-14)
 

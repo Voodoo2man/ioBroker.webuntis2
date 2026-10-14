@@ -1001,7 +1001,10 @@ export function translatedWeekday(day: string): TranslatedName {
  * @param legacy The legacy default name.
  */
 export function needsNameMigration(current: ioBroker.StringOrTranslated | undefined, legacy: string): boolean {
-	return typeof current === "string" && current === legacy;
+	return (
+		(typeof current === "string" && current === legacy) ||
+		(typeof current === "object" && current !== null && current.en === legacy)
+	);
 }
 
 /**
