@@ -132,4 +132,22 @@ describe("WebUntis service session and master data caching", () => {
 			expect((error as { code: string }).code).to.equal("ABORTED");
 		}
 	});
+
+	it("aborts an in-flight school search during shutdown", async () => {
+		const service = new WebUntisService(undefined, undefined, undefined, async (_input, init) => {
+			await new Promise<never>((_resolve, reject) => {
+				init?.signal?.addEventListener("abort", () => reject(new DOMException("Aborted", "AbortError")));
+			});
+			throw new Error("request did not abort");
+		});
+		const searching = service.searchSchools("Berlin");
+		await Promise.resolve();
+		service.shutdown();
+		try {
+			await searching;
+			expect.fail("expected shutdown abort");
+		} catch (error) {
+			expect((error as { code: string }).code).to.equal("ABORTED");
+		}
+	});
 });

@@ -47,7 +47,7 @@ export class WebUntisService {
 	 *
 	 */
 	public searchSchools(query: string): Promise<SchoolSearchResult[]> {
-		return searchSchools(query);
+		return searchSchools(query, this.fetchImpl, this.abortController.signal);
 	}
 
 	public async loadTimetable(
