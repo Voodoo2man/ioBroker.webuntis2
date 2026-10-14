@@ -1,8 +1,21 @@
 {
 	"common": {
 		"name": "webuntis2",
-		"version": "0.1.6",
+		"version": "0.1.7",
 		"news": {
+			"0.1.7": {
+				"en": "Improved ioBroker compliance, object translations, shutdown handling and state updates",
+				"de": "ioBroker-Konformität, Objektübersetzungen, Beenden des Adapters und Statusaktualisierungen verbessert",
+				"ru": "Улучшены совместимость с ioBroker, переводы объектов, завершение работы и обновление состояний",
+				"pt": "Melhoradas a compatibilidade com o ioBroker, as traduções dos objetos, o encerramento e as atualizações dos estados",
+				"nl": "ioBroker-compatibiliteit, objectvertalingen, afsluiten en statusupdates verbeterd",
+				"fr": "Amélioration de la compatibilité ioBroker, des traductions d’objets, de l’arrêt et des mises à jour d’états",
+				"it": "Migliorate la compatibilità con ioBroker, le traduzioni degli oggetti, l'arresto e gli aggiornamenti degli stati",
+				"es": "Mejoradas la compatibilidad con ioBroker, las traducciones de objetos, el apagado y las actualizaciones de estados",
+				"pl": "Ulepszono zgodność z ioBroker, tłumaczenia obiektów, zamykanie adaptera i aktualizacje stanów",
+				"uk": "Покращено сумісність з ioBroker, переклади об’єктів, завершення роботи та оновлення станів",
+				"zh-cn": "改进了 ioBroker 兼容性、对象翻译、关闭处理和状态更新"
+			},
 			"0.1.6": {
 				"en": "Improved Admin setup, school search feedback and mobile layout",
 				"de": "Admin-Einrichtung, Rückmeldungen bei der Schulsuche und mobile Darstellung verbessert",
