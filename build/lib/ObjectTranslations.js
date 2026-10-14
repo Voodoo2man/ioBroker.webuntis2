@@ -19,7 +19,10 @@ var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: tru
 var ObjectTranslations_exports = {};
 __export(ObjectTranslations_exports, {
   SUPPORTED_LANGUAGES: () => SUPPORTED_LANGUAGES,
+  hasObjectValueChanged: () => hasObjectValueChanged,
+  isGeneratedLessonName: () => isGeneratedLessonName,
   needsNameMigration: () => needsNameMigration,
+  shouldMigrateDynamicName: () => shouldMigrateDynamicName,
   translatedLessonFallback: () => translatedLessonFallback,
   translatedName: () => translatedName,
   translatedStateName: () => translatedStateName,
@@ -992,6 +995,15 @@ function translatedWeekday(day) {
 function needsNameMigration(current, legacy) {
   return typeof current === "string" && current === legacy;
 }
+function isGeneratedLessonName(name) {
+  return typeof name === "string" && (/^(?:\d{1,2}:\d{2})(?:–\d{1,2}:\d{2})?(?: · .+)?$/.test(name) || /^Lesson \d{2}$/.test(name));
+}
+function shouldMigrateDynamicName(current, generatedName) {
+  return typeof generatedName === "string" ? generatedName === current : isGeneratedLessonName(current);
+}
+function hasObjectValueChanged(current, desired) {
+  return JSON.stringify(current) !== JSON.stringify(desired);
+}
 const LEGACY_STATE_NAMES = Object.fromEntries(
   Object.entries(STATE_NAMES).map(([key, value]) => [value.en, key])
 );
@@ -1002,7 +1014,10 @@ function translatedStateName(name) {
 // Annotate the CommonJS export names for ESM import in node:
 0 && (module.exports = {
   SUPPORTED_LANGUAGES,
+  hasObjectValueChanged,
+  isGeneratedLessonName,
   needsNameMigration,
+  shouldMigrateDynamicName,
   translatedLessonFallback,
   translatedName,
   translatedStateName,

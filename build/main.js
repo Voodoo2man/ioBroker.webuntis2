@@ -22,13 +22,13 @@ var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__ge
   mod
 ));
 var utils = __toESM(require("@iobroker/adapter-core"));
-var import_WebUntisService = require("./lib/webuntis/WebUntisService");
 var import_LegacyNamespaceCleanup = require("./lib/LegacyNamespaceCleanup");
-var import_WebUntisErrors = require("./lib/webuntis/WebUntisErrors");
-var import_Timetable = require("./lib/webuntis/Timetable");
-var import_CurrentNextLesson = require("./lib/webuntis/CurrentNextLesson");
 var import_LessonStateCleanup = require("./lib/LessonStateCleanup");
 var import_ObjectTranslations = require("./lib/ObjectTranslations");
+var import_CurrentNextLesson = require("./lib/webuntis/CurrentNextLesson");
+var import_Timetable = require("./lib/webuntis/Timetable");
+var import_WebUntisErrors = require("./lib/webuntis/WebUntisErrors");
+var import_WebUntisService = require("./lib/webuntis/WebUntisService");
 const TIMETABLE_INTERVAL_MS = 5 * 60 * 1e3;
 const CURRENT_NEXT_INTERVAL_MS = 60 * 1e3;
 const TIMETABLE_GROUPS = ["today", "tomorrow", "week"];
@@ -106,22 +106,56 @@ function numericDate(value) {
   return year && month && day ? new Date(year, month - 1, day).getTime() : 0;
 }
 class WebuntisNext extends utils.Adapter {
+  static generatedLessonNameKey = "webuntis2GeneratedName";
   webUntis;
   timetableTimer;
   currentNextTimer;
   todayLessons = [];
   unloaded = false;
   migratedNames = /* @__PURE__ */ new Set();
-  async ensureTranslatedObject(id, object, legacyName) {
-    var _a;
+  async ensureTranslatedObject(id, object, legacyName, dynamicName = false) {
+    var _a, _b, _c, _d;
+    this.ensureActive();
     await this.setObjectNotExistsAsync(id, object);
-    if (!legacyName || this.migratedNames.has(id)) {
+    this.ensureActive();
+    if (!legacyName || !dynamicName && this.migratedNames.has(id)) {
       return;
     }
     const existing = await this.getObjectAsync(id);
-    this.migratedNames.add(id);
-    if (existing && (0, import_ObjectTranslations.needsNameMigration)(existing.common.name, legacyName)) {
-      await this.extendObjectAsync(id, { common: { name: (_a = object.common) == null ? void 0 : _a.name } });
+    if (!dynamicName) {
+      this.migratedNames.add(id);
+    }
+    if (!existing) {
+      return;
+    }
+    const currentName = existing.common.name;
+    const generatedName = (_a = existing.native) == null ? void 0 : _a[WebuntisNext.generatedLessonNameKey];
+    const shouldMigrateName = (0, import_ObjectTranslations.needsNameMigration)(currentName, legacyName) || dynamicName && (0, import_ObjectTranslations.shouldMigrateDynamicName)(currentName, generatedName);
+    const desiredCommon = object.common || {};
+    const common = {};
+    for (const key of ["type", "role", "read", "write", "def"]) {
+      if (key in desiredCommon && (0, import_ObjectTranslations.hasObjectValueChanged)(existing.common[key], desiredCommon[key])) {
+        common[key] = desiredCommon[key];
+      }
+    }
+    if ("unit" in desiredCommon && (0, import_ObjectTranslations.hasObjectValueChanged)(existing.common.unit, desiredCommon.unit)) {
+      common.unit = desiredCommon.unit;
+    }
+    if (shouldMigrateName && (0, import_ObjectTranslations.hasObjectValueChanged)(existing.common.name, (_b = object.common) == null ? void 0 : _b.name)) {
+      common.name = (_c = object.common) == null ? void 0 : _c.name;
+    }
+    const native = dynamicName && object.native && typeof object.native === "object" ? object.native : void 0;
+    const shouldMigrateMarker = dynamicName && native && shouldMigrateName && (typeof generatedName !== "string" || generatedName === currentName) && (0, import_ObjectTranslations.hasObjectValueChanged)(
+      (_d = existing.native) == null ? void 0 : _d[WebuntisNext.generatedLessonNameKey],
+      native[WebuntisNext.generatedLessonNameKey]
+    );
+    if (Object.keys(common).length || shouldMigrateMarker) {
+      await this.extendObjectAsync(id, { common, ...shouldMigrateMarker ? { native } : {} });
+    }
+  }
+  ensureActive() {
+    if (this.unloaded) {
+      throw new import_WebUntisErrors.WebUntisError("ABORTED", "Adapter is shutting down");
     }
   }
   constructor(options = {}) {
@@ -596,6 +630,7 @@ class WebuntisNext extends utils.Adapter {
     return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
   }
   async writeSimpleState(id, value, name, type, role, def, unit) {
+    this.ensureActive();
     await this.ensureTranslatedObject(
       id,
       {
@@ -613,10 +648,12 @@ class WebuntisNext extends utils.Adapter {
       },
       name
     );
+    this.ensureActive();
     await this.setStateChangedAsync(id, value, true);
   }
   async writeLesson(path, slot, lesson) {
     var _a;
+    this.ensureActive();
     const base = `${path}.lessons.${slot}`;
     const label = (0, import_Timetable.lessonChannelName)(lesson);
     await this.ensureTranslatedObject(
@@ -624,10 +661,12 @@ class WebuntisNext extends utils.Adapter {
       {
         type: "channel",
         common: { name: label || (0, import_ObjectTranslations.translatedLessonFallback)(slot) },
-        native: {}
+        native: { [WebuntisNext.generatedLessonNameKey]: label || (0, import_ObjectTranslations.translatedLessonFallback)(slot) }
       },
-      `Lesson ${slot}`
+      `Lesson ${slot}`,
+      true
     );
+    this.ensureActive();
     const values = {
       date: { value: dateOnly(lesson.date), type: "string", role: "text" },
       dateTimestamp: { value: numericDate(lesson.date), type: "number", role: "date" },
@@ -670,18 +709,24 @@ class WebuntisNext extends utils.Adapter {
     }
   }
   async onMessage(obj) {
-    if (!obj || !obj.command || !obj.callback) {
+    if (this.unloaded || !obj || !obj.command || !obj.callback) {
       return;
     }
     try {
       if (obj.command === "searchSchools") {
         const results = await this.webUntis.searchSchools(this.getStringPayload(obj.message, "query"));
+        if (this.unloaded) {
+          return;
+        }
         this.log.info(`School search returned ${results.length} results`);
         this.sendTo(obj.from, obj.command, { ok: true, results }, obj.callback);
         return;
       }
       if (obj.command === "testConnection") {
         const result = await this.webUntis.testConnection(this.getConnectionPayload(obj.message));
+        if (this.unloaded) {
+          return;
+        }
         await this.setState("info.connection", result.ok, true);
         if (result.ok) {
           this.log.info("WebUntis authentication successful");
@@ -691,6 +736,9 @@ class WebuntisNext extends utils.Adapter {
         this.sendTo(obj.from, obj.command, result, obj.callback);
       }
     } catch (error) {
+      if (this.unloaded) {
+        return;
+      }
       const code = error instanceof import_WebUntisErrors.WebUntisError ? error.code : "UNEXPECTED_RESPONSE";
       this.log.warn(`WebUntis request failed: ${code}`);
       this.sendTo(obj.from, obj.command, { ok: false, code }, obj.callback);

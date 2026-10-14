@@ -1,6 +1,7 @@
 /* eslint-disable @typescript-eslint/require-await, @typescript-eslint/no-base-to-string */
 
 import { expect } from "chai";
+import { removeStaleLessonStates } from "./lib/LessonStateCleanup";
 import {
 	mergeSchoolSelection,
 	rankSchoolResults,
@@ -10,7 +11,6 @@ import {
 import { WebUntisClient } from "./lib/webuntis/WebUntisClient";
 import { WebUntisError } from "./lib/webuntis/WebUntisErrors";
 import { WebUntisService } from "./lib/webuntis/WebUntisService";
-import { removeStaleLessonStates } from "./lib/LessonStateCleanup";
 
 function response(body: unknown, status = 200): Response {
 	return new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });

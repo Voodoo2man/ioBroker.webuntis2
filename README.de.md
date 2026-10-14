@@ -88,6 +88,10 @@ nicht vertrauliche Logmeldungen.
 
 ## Änderungsverlauf
 
+### 0.1.8 (2026-10-14)
+
+- (@Voodoo2man) Dynamische Unterrichtsnamen aktualisiert und Metadaten bestehender Objekte migriert.
+
 ### 0.1.7 (2026-10-14)
 
 - (@Voodoo2man) ioBroker-Konformität, mehrsprachige Objektnamen, Beenden des Adapters und Statusaktualisierungen verbessert.

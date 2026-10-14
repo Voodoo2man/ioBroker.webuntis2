@@ -1,6 +1,9 @@
 import { expect } from "chai";
 import {
+	hasObjectValueChanged,
+	isGeneratedLessonName,
 	needsNameMigration,
+	shouldMigrateDynamicName,
 	SUPPORTED_LANGUAGES,
 	translatedLessonFallback,
 	translatedName,
@@ -32,5 +35,12 @@ describe("object translations", () => {
 		expect(needsNameMigration("Lesson count", "Lesson count")).to.equal(true);
 		expect(needsNameMigration("My custom label", "Lesson count")).to.equal(false);
 		expect(needsNameMigration({ en: "Lesson count" }, "Lesson count")).to.equal(false);
+		expect(isGeneratedLessonName("08:00–08:45 · Mathematics · Miller · R101")).to.equal(true);
+		expect(isGeneratedLessonName("My custom lesson name")).to.equal(false);
+		expect(shouldMigrateDynamicName("08:00–08:45 · Mathematics", "08:00–08:45 · Mathematics")).to.equal(true);
+		expect(shouldMigrateDynamicName("08:00–08:45 · Mathematics", "My custom label")).to.equal(false);
+		expect(shouldMigrateDynamicName("08:00–08:45 · Mathematics")).to.equal(true);
+		expect(hasObjectValueChanged({ en: "Lesson" }, { en: "Lesson" })).to.equal(false);
+		expect(hasObjectValueChanged({ en: "Lesson" }, { en: "Updated lesson" })).to.equal(true);
 	});
 });

@@ -42,7 +42,11 @@ function isSchoolSearchResponse(value: unknown): value is SchoolSearchResponse {
 /**
  *
  */
-export async function searchSchools(query: string, fetchImpl: typeof fetch = fetch): Promise<SchoolSearchResult[]> {
+export async function searchSchools(
+	query: string,
+	fetchImpl: typeof fetch = fetch,
+	abortSignal?: AbortSignal,
+): Promise<SchoolSearchResult[]> {
 	const normalizedQuery = query.trim();
 	if (normalizedQuery.length < 2) {
 		return [];
@@ -57,7 +61,9 @@ export async function searchSchools(query: string, fetchImpl: typeof fetch = fet
 				params: [{ schoolid: 0, search: normalizedQuery }],
 				jsonrpc: "2.0",
 			}),
-			signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+			signal: abortSignal
+				? AbortSignal.any([AbortSignal.timeout(REQUEST_TIMEOUT_MS), abortSignal])
+				: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
 		});
 		if (!response.ok) {
 			throw new WebUntisError("SERVER_UNREACHABLE", `School search HTTP ${response.status}`);
@@ -75,7 +81,10 @@ export async function searchSchools(query: string, fetchImpl: typeof fetch = fet
 			throw error;
 		}
 		if (error instanceof DOMException && (error.name === "AbortError" || error.name === "TimeoutError")) {
-			throw new WebUntisError("TIMEOUT", "School search timed out");
+			throw new WebUntisError(
+				abortSignal?.aborted ? "ABORTED" : "TIMEOUT",
+				abortSignal?.aborted ? "School search was aborted" : "School search timed out",
+			);
 		}
 		throw new WebUntisError("SERVER_UNREACHABLE", "School search failed", { cause: error });
 	}
