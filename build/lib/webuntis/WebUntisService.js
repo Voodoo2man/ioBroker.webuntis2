@@ -158,11 +158,9 @@ class WebUntisService {
       this.abortController.signal
     );
     const promise = client.authenticate(config.username, config.password).then((session) => {
-      var _a2;
       this.sessionClient = client;
       this.session = session;
       this.sessionKey = key;
-      (_a2 = this.onInfo) == null ? void 0 : _a2.call(this, "WebUntis login successful");
       return { client, session };
     });
     this.sessionLoading = { key, promise };
