@@ -93,19 +93,6 @@
 				"pl": "Zaktualizowano zależności testowe adaptera na potrzeby przeglądu repozytorium",
 				"uk": "Оновлено залежності тестування адаптера для перевірки репозиторію",
 				"zh-cn": "更新适配器测试依赖以进行仓库审查"
-			},
-			"0.1.2": {
-				"en": "Improved WebUntis request timeouts and polling reliability",
-				"de": "WebUntis-Timeouts und Zuverlässigkeit der Aktualisierungen verbessert",
-				"ru": "Улучшены тайм-ауты запросов WebUntis и надежность обновлений",
-				"pt": "Melhorados os tempos limite das solicitações WebUntis e a confiabilidade das atualizações",
-				"nl": "WebUntis-aanvraagtime-outs en de betrouwbaarheid van updates verbeterd",
-				"fr": "Amélioration des délais d'attente des requêtes WebUntis et de la fiabilité des mises à jour",
-				"it": "Migliorati i timeout delle richieste WebUntis e l'affidabilità degli aggiornamenti",
-				"es": "Mejorados los tiempos de espera de las solicitudes WebUntis y la fiabilidad de las actualizaciones",
-				"pl": "Ulepszono limity czasu żądań WebUntis i niezawodność aktualizacji",
-				"uk": "Покращено тайм-аути запитів WebUntis та надійність оновлень",
-				"zh-cn": "改进了 WebUntis 请求超时和更新可靠性"
 			}
 		},
 		"titleLang": {
