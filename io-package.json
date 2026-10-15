@@ -4,17 +4,17 @@
 		"version": "0.1.9",
 		"news": {
 			"0.1.9": {
-				"en": "Improved timetable data and reliability with lesson numbers, comparisons, long names and automatic re-authentication for expired sessions; added an inbox for unread WebUntis messages with improved retrieval compatibility",
-				"de": "Stundenplandaten und Zuverlässigkeit mit Stundennummern, Gegenüberstellungen, Langnamen und automatischer Neuanmeldung bei abgelaufenen Sitzungen verbessert; Postfach für ungelesene WebUntis-Mitteilungen hinzugefügt und deren Abruf verbessert",
-				"ru": "Улучшены данные расписания и его надёжность: добавлены номера уроков, сравнения, полные имена и автоматическая повторная аутентификация после истечения срока действия сеанса; добавлен почтовый ящик непрочитанных сообщений WebUntis и улучшен их поиск",
-				"pt": "Melhorados os dados e a fiabilidade do horário com números das aulas, comparações, nomes completos e reautenticação automática após a expiração da sessão; adicionada uma caixa de entrada para mensagens WebUntis não lidas e melhorada a sua obtenção",
-				"nl": "Roostergegevens en betrouwbaarheid verbeterd met lesnummers, vergelijkingen, volledige namen en automatisch opnieuw aanmelden na het verlopen van een sessie; een inbox voor ongelezen WebUntis-berichten toegevoegd en het ophalen daarvan verbeterd",
-				"fr": "Amélioration des données et de la fiabilité de l’emploi du temps avec les numéros de cours, les comparaisons, les noms complets et la reconnexion automatique après expiration de la session ; ajout d’une boîte de réception des messages WebUntis non lus et amélioration de leur récupération",
-				"it": "Migliorati i dati e l’affidabilità dell’orario con numeri delle lezioni, confronti, nomi completi e nuova autenticazione automatica dopo la scadenza della sessione; aggiunta una casella per i messaggi WebUntis non letti e migliorato il loro recupero",
-				"es": "Mejorados los datos y la fiabilidad del horario con números de clase, comparaciones, nombres completos y reautenticación automática al caducar la sesión; añadido un buzón para los mensajes no leídos de WebUntis y mejorada su obtención",
-				"pl": "Ulepszono dane i niezawodność planu lekcji dzięki numerom lekcji, porównaniom, pełnym nazwom i automatycznemu ponownemu logowaniu po wygaśnięciu sesji; dodano skrzynkę nieprzeczytanych wiadomości WebUntis i poprawiono ich pobieranie",
-				"uk": "Покращено дані та надійність розкладу: додано номери уроків, порівняння, повні назви й автоматичну повторну автентифікацію після завершення сеансу; додано скриньку непрочитаних повідомлень WebUntis і покращено їх отримання",
-				"zh-cn": "改进了课程表数据和可靠性，增加了课时编号、对比、完整名称和会话过期后的自动重新认证；新增 WebUntis 未读消息收件箱并改进消息获取"
+				"en": "Improved timetable data and reliability with lesson numbers, comparisons, long names and automatic re-authentication for expired sessions; added an inbox for unread WebUntis messages",
+				"de": "Stundenplandaten und Zuverlässigkeit mit Stundennummern, Gegenüberstellungen, Langnamen und automatischer Neuanmeldung bei abgelaufenen Sitzungen verbessert; Postfach für ungelesene WebUntis-Mitteilungen hinzugefügt",
+				"ru": "Улучшены данные расписания и его надёжность: добавлены номера уроков, сравнения, полные имена и автоматическая повторная аутентификация после истечения срока действия сеанса; добавлен почтовый ящик непрочитанных сообщений WebUntis",
+				"pt": "Melhorados os dados e a fiabilidade do horário com números das aulas, comparações, nomes completos e reautenticação automática após a expiração da sessão; adicionada uma caixa de entrada para mensagens WebUntis não lidas",
+				"nl": "Roostergegevens en betrouwbaarheid verbeterd met lesnummers, vergelijkingen, volledige namen en automatisch opnieuw aanmelden na het verlopen van een sessie; een inbox voor ongelezen WebUntis-berichten toegevoegd",
+				"fr": "Amélioration des données et de la fiabilité de l’emploi du temps avec les numéros de cours, les comparaisons, les noms complets et la reconnexion automatique après expiration de la session ; ajout d’une boîte de réception des messages WebUntis non lus",
+				"it": "Migliorati i dati e l’affidabilità dell’orario con numeri delle lezioni, confronti, nomi completi e nuova autenticazione automatica dopo la scadenza della sessione; aggiunta una casella per i messaggi WebUntis non letti",
+				"es": "Mejorados los datos y la fiabilidad del horario con números de clase, comparaciones, nombres completos y reautenticación automática al caducar la sesión; añadido un buzón para los mensajes no leídos de WebUntis",
+				"pl": "Ulepszono dane i niezawodność planu lekcji dzięki numerom lekcji, porównaniom, pełnym nazwom i automatycznemu ponownemu logowaniu po wygaśnięciu sesji; dodano skrzynkę nieprzeczytanych wiadomości WebUntis",
+				"uk": "Покращено дані та надійність розкладу: додано номери уроків, порівняння, повні назви й автоматичну повторну автентифікацію після завершення сеансу; додано скриньку непрочитаних повідомлень WebUntis",
+				"zh-cn": "改进了课程表数据和可靠性，增加了课时编号、对比、完整名称和会话过期后的自动重新认证；新增 WebUntis 未读消息收件箱"
 			},
 			"0.1.8": {
 				"en": "Update dynamic lesson names, migrate existing object metadata and repair legacy i18n names",

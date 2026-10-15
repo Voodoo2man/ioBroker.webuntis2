@@ -103,7 +103,7 @@ nicht vertrauliche Logmeldungen.
 ### 0.1.9 (2026-10-15)
 
 - (@Voodoo2man) Stundenplandaten und Zuverlässigkeit mit Stundennummern, Gegenüberstellungen, Langnamen und automatischer Neuanmeldung bei abgelaufenen Sitzungen verbessert
-- (@Voodoo2man) Postfach für ungelesene Mitteilungen hinzugefügt und deren Abrufkompatibilität verbessert.
+- (@Voodoo2man) Postfach für Mitteilungen hinzugefügt.
 
 ### 0.1.8 (2026-10-14)
 
