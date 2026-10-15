@@ -94,6 +94,10 @@ and include only relevant, non-sensitive log messages when asking for help.
 
 ## Changelog
 
+### WORK IN PROGRESS
+
+- (@Voodoo2man) Design adjustments.
+
 ### 0.1.9 (2026-10-15)
 
 - (@Voodoo2man) Improved timetable data and reliability with comparisons, long names, and automatic re-authentication for expired sessions
