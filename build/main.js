@@ -66,7 +66,6 @@ const LESSON_STATE_NAMES = {
   roomLong: (0, import_ObjectTranslations.translatedName)("longName"),
   class: (0, import_ObjectTranslations.translatedName)("class"),
   classLong: (0, import_ObjectTranslations.translatedName)("longName"),
-  lessonNumber: (0, import_ObjectTranslations.translatedName)("lessonNumber"),
   lessonId: (0, import_ObjectTranslations.translatedName)("lessonId"),
   periodId: (0, import_ObjectTranslations.translatedName)("periodId"),
   status: (0, import_ObjectTranslations.translatedName)("status"),
@@ -749,7 +748,7 @@ class WebuntisNext extends utils.Adapter {
     await (0, import_StateWriter.setStateChangedOrInitialize)(this, id, value);
   }
   async writeLesson(path, slot, lesson) {
-    var _a, _b;
+    var _a;
     this.ensureActive();
     const base = `${path}.lessons.${slot}`;
     const label = (0, import_Timetable.lessonChannelName)(lesson);
@@ -777,11 +776,6 @@ class WebuntisNext extends utils.Adapter {
       roomLong: { value: lesson.roomLong, type: "string", role: "text" },
       class: { value: lesson.class, type: "string", role: "text" },
       classLong: { value: lesson.classLong, type: "string", role: "text" },
-      lessonNumber: {
-        value: (_a = lesson.lessonNumber) != null ? _a : Number(slot),
-        type: "number",
-        role: "value"
-      },
       ...lesson.lessonId === null ? {} : { lessonId: { value: String(lesson.lessonId), type: "string", role: "text" } },
       ...lesson.periodId === null ? {} : { periodId: { value: String(lesson.periodId), type: "string", role: "text" } },
       status: { value: lesson.status, type: "string", role: "text" },
@@ -826,7 +820,7 @@ class WebuntisNext extends utils.Adapter {
           },
           native: {}
         },
-        typeof ((_b = LESSON_STATE_NAMES[name]) == null ? void 0 : _b.en) === "string" ? LESSON_STATE_NAMES[name].en : name
+        typeof ((_a = LESSON_STATE_NAMES[name]) == null ? void 0 : _a.en) === "string" ? LESSON_STATE_NAMES[name].en : name
       );
       await (0, import_StateWriter.setStateChangedOrInitialize)(this, `${base}.${name}`, item.value);
     }

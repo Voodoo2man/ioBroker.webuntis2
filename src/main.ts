@@ -74,7 +74,6 @@ const LESSON_STATE_NAMES: Record<string, ioBroker.Translated> = {
 	roomLong: translatedName("longName"),
 	class: translatedName("class"),
 	classLong: translatedName("longName"),
-	lessonNumber: translatedName("lessonNumber"),
 	lessonId: translatedName("lessonId"),
 	periodId: translatedName("periodId"),
 	status: translatedName("status"),
@@ -868,11 +867,6 @@ class WebuntisNext extends utils.Adapter {
 			roomLong: { value: lesson.roomLong, type: "string", role: "text" },
 			class: { value: lesson.class, type: "string", role: "text" },
 			classLong: { value: lesson.classLong, type: "string", role: "text" },
-			lessonNumber: {
-				value: lesson.lessonNumber ?? Number(slot),
-				type: "number",
-				role: "value",
-			},
 			...(lesson.lessonId === null
 				? {}
 				: { lessonId: { value: String(lesson.lessonId), type: "string" as const, role: "text" } }),

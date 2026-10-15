@@ -70,15 +70,6 @@ function timeString(value) {
 function bool(value) {
   return value === true || value === 1 || value === "1" || value === "true";
 }
-function lessonNumber(value) {
-  if (typeof value === "number" && Number.isFinite(value)) {
-    return value;
-  }
-  if (typeof value === "string" && /^\d+$/.test(value)) {
-    return Number(value);
-  }
-  return null;
-}
 function stableId(period) {
   var _a, _b;
   const id = (_b = (_a = period.id) != null ? _a : period.lessonId) != null ? _b : period.periodId;
@@ -107,7 +98,6 @@ function normalizeLesson(period) {
     roomLong: firstName(period.ro, true),
     class: firstName(period.kl),
     classLong: firstName(period.kl, true),
-    lessonNumber: lessonNumber(period.lsnumber),
     lessonId: typeof period.id === "number" ? period.id : null,
     periodId: typeof period.periodId === "number" ? period.periodId : null,
     status: text((_h = period.activityType) != null ? _h : period.status),
@@ -168,10 +158,9 @@ function durationMinutes(startTime, endTime) {
 }
 function buildLessonComparison(lessons) {
   return lessons.map((lesson, index) => {
-    var _a;
     const subject = lesson.subjectLong || lesson.subject;
     return {
-      lessonNumber: (_a = lesson.lessonNumber) != null ? _a : index + 1,
+      lessonNumber: index + 1,
       date: lesson.date,
       original: {
         startTime: lesson.startTime,

@@ -62,9 +62,9 @@ Die Tagesübersicht zeigt, ob Schule stattfindet, die Anzahl und Dauer der
 Stunden, die erste und letzte Stunde, die Fächer in Stundenplanreihenfolge
 sowie Änderungen und Ausfälle. Jeder Tages-Channel enthält außerdem das
 JSON-Array `lessonComparison` mit Stundennummer, ursprünglichem und
-aktuellem Fach, Lehrer, Raum und Status. Die Stundennummer stammt aus WebUntis
-`lsnumber`; fehlt sie, wird die Position in der Tagesliste verwendet.
-Ursprüngliche und tatsächliche Beginn- und Endzeiten sind vorerst identisch.
+aktuellem Fach, Lehrer, Raum und Status. Die Stundennummer entspricht der
+Position in der Tagesliste. Ursprüngliche und tatsächliche Beginn- und
+Endzeiten sind vorerst identisch.
 Im Bereich `info` befinden sich Verbindungsstatus und Aktualisierungsinformationen.
 Ferientermine stehen unter `holidays`.
 
@@ -102,7 +102,7 @@ nicht vertrauliche Logmeldungen.
 
 ### 0.1.9 (2026-10-15)
 
-- (@Voodoo2man) Stundenplandaten und Zuverlässigkeit mit Stundennummern, Gegenüberstellungen, Langnamen und automatischer Neuanmeldung bei abgelaufenen Sitzungen verbessert
+- (@Voodoo2man) Stundenplandaten und Zuverlässigkeit mit Gegenüberstellungen, Langnamen und automatischer Neuanmeldung bei abgelaufenen Sitzungen verbessert
 - (@Voodoo2man) Postfach für Mitteilungen hinzugefügt.
 
 ### 0.1.8 (2026-10-14)
