@@ -102,7 +102,7 @@ nicht vertrauliche Logmeldungen.
 
 ### WORK IN PROGRESS
 
-- Ferienlangnamen korrigiert.
+- (@Voodoo2man) Ferienlangnamen wurden korrigiert.
 - (@Voodoo2man) Designanpassungen
 
 ### 0.1.9 (2026-10-15)
