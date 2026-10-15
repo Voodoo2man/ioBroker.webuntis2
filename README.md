@@ -98,7 +98,7 @@ and include only relevant, non-sensitive log messages when asking for help.
 ### 0.1.9 (2026-10-15)
 
 - (@Voodoo2man) Improved timetable data and reliability with lesson numbers, comparisons, long names, and automatic re-authentication for expired sessions
-- @Voodoo2man Added inbox
+- (@Voodoo2man) Added an inbox for unread messages.
 
 ### 0.1.8 (2026-10-14)
 

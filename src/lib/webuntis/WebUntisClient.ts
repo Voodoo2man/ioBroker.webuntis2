@@ -470,7 +470,7 @@ export class WebUntisClient {
 		const response = await this.fetchImpl(url, {
 			method: "GET",
 			signal: this.getRequestSignal(),
-			headers: { accept: "text/plain", cookie: this.restCookie(session) },
+			headers: { accept: "application/json", cookie: this.restCookie(session) },
 		});
 		const cookie = mergeCookieHeader(this.sessionCookie, response.headers);
 		this.sessionCookie = cookie.value;
