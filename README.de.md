@@ -102,9 +102,8 @@ nicht vertrauliche Logmeldungen.
 
 ### WORK IN PROGRESS
 
-- (@Voodoo2man) Datumsbereiche wurden nicht mehr als Ferienlangnamen verwendet.
-- (@Voodoo2man) Anmeldeprobleme wurden behoben.
-- (@Voodoo2man) Designanpassungen
+- (@Voodoo2man) Kleinere Datenpunktanpassungen.
+- (@Voodoo2man) Designanpassungen in der Konfiguration.
 
 ### 0.1.9 (2026-10-15)
 
