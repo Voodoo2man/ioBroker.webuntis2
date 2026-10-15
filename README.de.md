@@ -102,7 +102,7 @@ nicht vertrauliche Logmeldungen.
 
 ### WORK IN PROGRESS
 
-- (@Voodoo2man) Designanpassungen
+- Weniger routinemäßige Logmeldungen.
 
 ### 0.1.9 (2026-10-15)
 

@@ -36,7 +36,14 @@ describe("WebUntis service session and master data caching", () => {
 	it("authenticates and loads master data only once within the cache TTL", async () => {
 		const calls: string[] = [];
 		const info: string[] = [];
-		const service = new WebUntisService(undefined, message => info.push(message), undefined, fetchFor(calls));
+		const debug: string[] = [];
+		const service = new WebUntisService(
+			undefined,
+			message => info.push(message),
+			undefined,
+			fetchFor(calls),
+			message => debug.push(message),
+		);
 		await service.loadTimetable(config, new Date("2026-09-11T08:00:00"));
 		await service.loadTimetable(config, new Date("2026-09-11T08:05:00"));
 		expect(calls.filter(method => method === "authenticate")).to.have.length(1);
@@ -49,6 +56,8 @@ describe("WebUntis service session and master data caching", () => {
 		}
 		expect(info.filter(message => message.startsWith("Master data loaded"))).to.have.length(1);
 		expect(info.filter(message => message.startsWith("Holidays loaded"))).to.have.length(1);
+		expect(info.filter(message => message === "WebUntis login successful")).to.have.length(0);
+		expect(debug.filter(message => message === "WebUntis login successful")).to.have.length(0);
 	});
 
 	it("deduplicates a concurrent authentication and master data load", async () => {

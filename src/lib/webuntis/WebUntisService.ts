@@ -182,7 +182,6 @@ export class WebUntisService {
 			this.sessionClient = client;
 			this.session = session;
 			this.sessionKey = key;
-			this.onInfo?.("WebUntis login successful");
 			return { client, session };
 		});
 		this.sessionLoading = { key, promise };
