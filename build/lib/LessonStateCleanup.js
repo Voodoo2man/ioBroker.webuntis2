@@ -23,6 +23,7 @@ __export(LessonStateCleanup_exports, {
 module.exports = __toCommonJS(LessonStateCleanup_exports);
 async function removeStaleLessonStates(base, values, getObject, deleteObject) {
   const optional = [
+    "lessonNumber",
     "lessonId",
     "periodId",
     "substitution",
