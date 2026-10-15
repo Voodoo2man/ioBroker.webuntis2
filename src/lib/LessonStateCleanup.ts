@@ -14,6 +14,7 @@ export async function removeStaleLessonStates(
 	deleteObject: (id: string) => Promise<unknown>,
 ): Promise<void> {
 	const optional = [
+		"lessonNumber",
 		"lessonId",
 		"periodId",
 		"substitution",

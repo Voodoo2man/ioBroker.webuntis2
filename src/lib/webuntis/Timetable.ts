@@ -59,10 +59,6 @@ export interface TimetableLesson {
 	/**
 	 *
 	 */
-	lessonNumber: number | null;
-	/**
-	 *
-	 */
 	lessonId: number | null;
 	/**
 	 *
@@ -215,16 +211,6 @@ function bool(value: unknown): boolean {
 	return value === true || value === 1 || value === "1" || value === "true";
 }
 
-function lessonNumber(value: unknown): number | null {
-	if (typeof value === "number" && Number.isFinite(value)) {
-		return value;
-	}
-	if (typeof value === "string" && /^\d+$/.test(value)) {
-		return Number(value);
-	}
-	return null;
-}
-
 function stableId(period: WebUntisPeriod): string {
 	const id = period.id ?? period.lessonId ?? period.periodId;
 	if (typeof id === "number" || typeof id === "string") {
@@ -257,7 +243,6 @@ export function normalizeLesson(period: WebUntisPeriod): TimetableLesson {
 		roomLong: firstName(period.ro, true),
 		class: firstName(period.kl),
 		classLong: firstName(period.kl, true),
-		lessonNumber: lessonNumber(period.lsnumber),
 		lessonId: typeof period.id === "number" ? period.id : null,
 		periodId: typeof period.periodId === "number" ? period.periodId : null,
 		status: text(period.activityType ?? period.status),
@@ -332,7 +317,7 @@ export function buildLessonComparison(lessons: TimetableLesson[]): LessonCompari
 	return lessons.map((lesson, index) => {
 		const subject = lesson.subjectLong || lesson.subject;
 		return {
-			lessonNumber: lesson.lessonNumber ?? index + 1,
+			lessonNumber: index + 1,
 			date: lesson.date,
 			original: {
 				startTime: lesson.startTime,

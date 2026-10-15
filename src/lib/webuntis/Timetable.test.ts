@@ -45,20 +45,6 @@ describe("WebUntis timetable normalization", () => {
 		});
 	});
 
-	it("uses the WebUntis lesson number and keeps an ordered fallback when it is missing", () => {
-		const lesson = normalizeLesson({
-			date: 20261015,
-			startTime: 800,
-			endTime: 845,
-			lsnumber: "4",
-		});
-		const fallback = normalizeLesson({ date: 20261015, startTime: 900, endTime: 945 });
-
-		expect(lesson.lessonNumber).to.equal(4);
-		expect(buildLessonComparison([lesson])[0].lessonNumber).to.equal(4);
-		expect(buildLessonComparison([lesson, fallback]).map(item => item.lessonNumber)).to.deep.equal([4, 2]);
-	});
-
 	it("handles missing teacher and room without failing", () => {
 		const lesson = normalizeLesson({ id: 7, date: 20260909, startTime: 900, endTime: 945, su: [] });
 		expect(lesson.teacher).to.equal("");
@@ -77,6 +63,7 @@ describe("WebUntis timetable normalization", () => {
 			startTime: 800,
 			endTime: 845,
 			activityType: "Unterricht",
+			lsnumber: "4",
 			substText: "Vertretung",
 			su: [{ name: "Ma", longname: "Mathematik" }],
 			te: [{ name: "Neuer Lehrer" }],

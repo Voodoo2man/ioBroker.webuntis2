@@ -60,9 +60,8 @@ Daily summaries show whether there is school, the number and duration of
 lessons, the first and last lesson, the subjects in timetable order, and
 changes or cancellations. Each day channel also contains a `lessonComparison`
 JSON array with the lesson number, original and actual subject, teacher, room,
-and status. The number uses WebUntis `lsnumber` when provided and falls back to
-its position in the daily list when missing. Original and actual start/end
-times are currently identical. The `info` section contains the connection
+and status. The lesson number reflects the position in the daily list. Original
+and actual start/end times are currently identical. The `info` section contains the connection
 status and update information. Holiday information is available below
 `holidays`.
 
@@ -97,7 +96,7 @@ and include only relevant, non-sensitive log messages when asking for help.
 
 ### 0.1.9 (2026-10-15)
 
-- (@Voodoo2man) Improved timetable data and reliability with lesson numbers, comparisons, long names, and automatic re-authentication for expired sessions
+- (@Voodoo2man) Improved timetable data and reliability with comparisons, long names, and automatic re-authentication for expired sessions
 - (@Voodoo2man) Added an inbox for unread messages.
 
 ### 0.1.8 (2026-10-14)

@@ -316,8 +316,12 @@ describe("WebUntis username/password authentication", () => {
 		}
 	});
 
-	it("removes stale lesson IDs when an updated lesson has no IDs", async () => {
-		const existing = new Set(["timetable.today.lessons.01.lessonId", "timetable.today.lessons.01.periodId"]);
+	it("removes stale lesson numbers and IDs when an updated lesson no longer has them", async () => {
+		const existing = new Set([
+			"timetable.today.lessons.01.lessonNumber",
+			"timetable.today.lessons.01.lessonId",
+			"timetable.today.lessons.01.periodId",
+		]);
 		const deleted: string[] = [];
 		await removeStaleLessonStates(
 			"timetable.today.lessons.01",
@@ -327,7 +331,11 @@ describe("WebUntis username/password authentication", () => {
 				deleted.push(id);
 			},
 		);
-		expect(deleted).to.have.members(["timetable.today.lessons.01.lessonId", "timetable.today.lessons.01.periodId"]);
+		expect(deleted).to.have.members([
+			"timetable.today.lessons.01.lessonNumber",
+			"timetable.today.lessons.01.lessonId",
+			"timetable.today.lessons.01.periodId",
+		]);
 	});
 
 	it("uses the local calendar date for public timetables", async () => {

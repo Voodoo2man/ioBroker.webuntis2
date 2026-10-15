@@ -762,19 +762,6 @@ const STATE_NAMES = {
     uk: "\u041D\u0435\u043F\u0440\u043E\u0447\u0438\u0442\u0430\u043D\u0456 \u043F\u043E\u0432\u0456\u0434\u043E\u043C\u043B\u0435\u043D\u043D\u044F",
     "zh-cn": "\u672A\u8BFB\u6D88\u606F"
   },
-  lessonNumber: {
-    en: "Lesson number",
-    de: "Stundennummer",
-    es: "N\xFAmero de clase",
-    fr: "Num\xE9ro de cours",
-    it: "Numero della lezione",
-    nl: "Lesnummer",
-    pl: "Numer lekcji",
-    pt: "N\xFAmero da aula",
-    ru: "\u041D\u043E\u043C\u0435\u0440 \u0443\u0440\u043E\u043A\u0430",
-    uk: "\u041D\u043E\u043C\u0435\u0440 \u0443\u0440\u043E\u043A\u0443",
-    "zh-cn": "\u8BFE\u7A0B\u7F16\u53F7"
-  },
   lessonId: {
     en: "WebUntis lesson ID",
     de: "WebUntis-Unterrichts-ID",

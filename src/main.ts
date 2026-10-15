@@ -74,7 +74,6 @@ const LESSON_STATE_NAMES: Record<string, ioBroker.Translated> = {
 	roomLong: translatedName("longName"),
 	class: translatedName("class"),
 	classLong: translatedName("longName"),
-	lessonNumber: translatedName("lessonNumber"),
 	lessonId: translatedName("lessonId"),
 	periodId: translatedName("periodId"),
 	status: translatedName("status"),
@@ -378,7 +377,8 @@ class WebuntisNext extends utils.Adapter {
 				const warningIntervalMs = 30 * 60 * 1000;
 				if (Date.now() - this.lastMessageWarningAt >= warningIntervalMs) {
 					const code = error instanceof WebUntisError ? error.code : "UNEXPECTED_RESPONSE";
-					this.log.warn(`WebUntis messages refresh failed: ${code}; previous message data was kept`);
+					const detail = error instanceof Error ? ` (${error.message})` : "";
+					this.log.warn(`WebUntis messages refresh failed: ${code}${detail}; previous message data was kept`);
 					this.lastMessageWarningAt = Date.now();
 				}
 			}
@@ -867,11 +867,6 @@ class WebuntisNext extends utils.Adapter {
 			roomLong: { value: lesson.roomLong, type: "string", role: "text" },
 			class: { value: lesson.class, type: "string", role: "text" },
 			classLong: { value: lesson.classLong, type: "string", role: "text" },
-			lessonNumber: {
-				value: lesson.lessonNumber ?? Number(slot),
-				type: "number",
-				role: "value",
-			},
 			...(lesson.lessonId === null
 				? {}
 				: { lessonId: { value: String(lesson.lessonId), type: "string" as const, role: "text" } }),

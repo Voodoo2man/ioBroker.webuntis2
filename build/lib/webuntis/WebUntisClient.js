@@ -195,6 +195,7 @@ class WebUntisClient {
   endpoint;
   schoolName;
   sessionCookie;
+  messageSchoolCookie;
   authenticatedAt;
   requestSequence = 0;
   getRequestSignal() {
@@ -402,7 +403,8 @@ class WebUntisClient {
   restUrl(path) {
     return this.endpoint.replace(/\/jsonrpc\.do\?.*$/i, path);
   }
-  restCookie(session) {
+  restCookie(session, schoolNameCookie) {
+    var _a;
     const cookies = /* @__PURE__ */ new Map();
     for (const cookie of (this.sessionCookie || "").split(/;\s*/)) {
       const separator = cookie.indexOf("=");
@@ -411,54 +413,67 @@ class WebUntisClient {
       }
     }
     cookies.set("JSESSIONID", `JSESSIONID=${session.sessionId}`);
-    cookies.set("schoolname", `schoolname=_${Buffer.from(this.schoolName).toString("base64")}`);
+    const schoolCookie = (_a = schoolNameCookie != null ? schoolNameCookie : this.messageSchoolCookie) != null ? _a : `_${Buffer.from(this.schoolName).toString("base64")}`;
+    cookies.set("schoolname", `schoolname=${schoolCookie}`);
     return [...cookies.values()].join("; ");
   }
   async getRestToken(session) {
     var _a;
     const url = this.restUrl("/api/token/new");
-    const response = await this.fetchImpl(url, {
-      method: "GET",
-      signal: this.getRequestSignal(),
-      headers: { accept: "text/plain", cookie: this.restCookie(session) }
-    });
-    const cookie = mergeCookieHeader(this.sessionCookie, response.headers);
-    this.sessionCookie = cookie.value;
-    const body = await response.text();
-    (_a = this.onDiagnostic) == null ? void 0 : _a.call(this, {
-      method: "getMessageToken",
-      status: response.status,
-      contentType: response.headers.get("content-type") || "",
-      url: redactUrl(response.url),
-      redirected: response.redirected,
-      length: body.length,
-      type: getResponseType(body, response.headers.get("content-type") || ""),
-      cookiePresent: Boolean(this.sessionCookie),
-      cookieChanged: cookie.changed,
-      sessionCookieChanged: cookie.sessionCookieChanged
-    });
-    if (!response.ok || response.redirected) {
-      throw new import_WebUntisErrors.WebUntisError(
-        response.status === 401 || response.redirected ? "SESSION_EXPIRED" : "API_REQUEST",
-        "WebUntis message authentication failed"
-      );
-    }
-    let token = body.trim();
-    if (token.startsWith('"') && token.endsWith('"')) {
-      try {
-        const parsed = JSON.parse(token);
-        if (typeof parsed !== "string") {
-          throw new Error("Token is not a string");
+    const schoolCookies = [.../* @__PURE__ */ new Set([`_${Buffer.from(this.schoolName).toString("base64")}`, this.schoolName])];
+    for (let index = 0; index < schoolCookies.length; index++) {
+      const schoolCookie = schoolCookies[index];
+      const response = await this.fetchImpl(url, {
+        method: "GET",
+        signal: this.getRequestSignal(),
+        headers: { accept: "application/json", cookie: this.restCookie(session, schoolCookie) }
+      });
+      const cookie = mergeCookieHeader(this.sessionCookie, response.headers);
+      this.sessionCookie = cookie.value;
+      const body = await response.text();
+      (_a = this.onDiagnostic) == null ? void 0 : _a.call(this, {
+        method: "getMessageToken",
+        status: response.status,
+        contentType: response.headers.get("content-type") || "",
+        url: redactUrl(response.url),
+        redirected: response.redirected,
+        length: body.length,
+        type: getResponseType(body, response.headers.get("content-type") || ""),
+        cookiePresent: Boolean(this.sessionCookie),
+        cookieChanged: cookie.changed,
+        sessionCookieChanged: cookie.sessionCookieChanged,
+        schoolCookieFormat: index === 0 ? "base64" : "plain"
+      });
+      if (!response.ok || response.redirected) {
+        const responseDetail = response.redirected ? "redirected" : `HTTP ${response.status}`;
+        const error = new import_WebUntisErrors.WebUntisError(
+          response.status === 401 || response.redirected ? "SESSION_EXPIRED" : "API_REQUEST",
+          `WebUntis message authentication failed (${responseDetail})`
+        );
+        if (error.code === "SESSION_EXPIRED" || response.status !== 406 || index === schoolCookies.length - 1) {
+          throw error;
         }
-        token = parsed;
-      } catch {
+        continue;
+      }
+      let token = body.trim();
+      if (token.startsWith('"') && token.endsWith('"')) {
+        try {
+          const parsed = JSON.parse(token);
+          if (typeof parsed !== "string") {
+            throw new Error("Token is not a string");
+          }
+          token = parsed;
+        } catch {
+          throw new import_WebUntisErrors.WebUntisError("INVALID_RESPONSE", "Invalid WebUntis message token response");
+        }
+      }
+      if (!token || token.startsWith("<")) {
         throw new import_WebUntisErrors.WebUntisError("INVALID_RESPONSE", "Invalid WebUntis message token response");
       }
+      this.messageSchoolCookie = schoolCookie;
+      return token;
     }
-    if (!token || token.startsWith("<")) {
-      throw new import_WebUntisErrors.WebUntisError("INVALID_RESPONSE", "Invalid WebUntis message token response");
-    }
-    return token;
+    throw new import_WebUntisErrors.WebUntisError("API_REQUEST", "WebUntis message authentication failed");
   }
   async restRequest(path, session, token, method) {
     var _a;

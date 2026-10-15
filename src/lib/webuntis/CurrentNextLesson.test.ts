@@ -16,7 +16,6 @@ function lesson(startTime: string, endTime: string, changes: Partial<TimetableLe
 		roomLong: "Room 204",
 		class: "5A",
 		classLong: "Class 5A",
-		lessonNumber: null,
 		lessonId: 1,
 		periodId: 1,
 		status: "Unterricht",
