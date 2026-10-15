@@ -96,7 +96,7 @@ and include only relevant, non-sensitive log messages when asking for help.
 
 ### WORK IN PROGRESS
 
-- (@Voodoo2man) Design adjustments.
+- Reduced routine log output.
 
 ### 0.1.9 (2026-10-15)
 
