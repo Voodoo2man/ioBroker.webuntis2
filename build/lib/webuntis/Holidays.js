@@ -50,6 +50,12 @@ function datePart(value) {
 function text(value) {
   return typeof value === "string" ? value.trim() : "";
 }
+function isDateRange(value) {
+  return /^\d{1,2}\.\d{1,2}\.\d{4}\s*[-–]\s*\d{1,2}\.\d{1,2}\.\d{4}$/.test(value);
+}
+function holidayLongName(entry) {
+  return entry.longName && !isDateRange(entry.longName) ? entry.longName : entry.name;
+}
 function localDatePart(date) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
 }
@@ -68,6 +74,7 @@ function normalizeHolidayEntries(value) {
     throw new Error("Invalid WebUntis holiday result");
   }
   return value.flatMap((item) => {
+    var _a;
     if (!isRecord(item)) {
       return [];
     }
@@ -80,7 +87,7 @@ function normalizeHolidayEntries(value) {
       {
         id: typeof item.id === "number" || typeof item.id === "string" ? item.id : null,
         name: text(item.name),
-        longName: text(item.longName),
+        longName: text((_a = item.longName) != null ? _a : item.longname),
         startDate,
         endDate
       }
@@ -96,7 +103,7 @@ function summarizeHolidays(entries, now) {
   if (current) {
     result.current = {
       name: current.name,
-      longName: current.longName || current.name,
+      longName: holidayLongName(current),
       startDate: current.startDate,
       endDate: current.endDate,
       active: true
@@ -105,7 +112,7 @@ function summarizeHolidays(entries, now) {
   if (next) {
     result.next = {
       name: next.name,
-      longName: next.longName || next.name,
+      longName: holidayLongName(next),
       startDate: next.startDate,
       endDate: next.endDate,
       daysUntil: daySerial(next.startDate) - daySerial(today)

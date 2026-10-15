@@ -96,7 +96,8 @@ and include only relevant, non-sensitive log messages when asking for help.
 
 ### WORK IN PROGRESS
 
-- Reduced routine log output.
+- (@Voodoo2man) Made minor datapoint adjustments.
+- (@Voodoo2man) Improved the configuration design.
 
 ### 0.1.9 (2026-10-15)
 

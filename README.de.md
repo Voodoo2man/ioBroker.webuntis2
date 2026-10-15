@@ -102,7 +102,8 @@ nicht vertrauliche Logmeldungen.
 
 ### WORK IN PROGRESS
 
-- Weniger routinemäßige Logmeldungen.
+- (@Voodoo2man) Kleinere Datenpunktanpassungen.
+- (@Voodoo2man) Designanpassungen in der Konfiguration.
 
 ### 0.1.9 (2026-10-15)
 

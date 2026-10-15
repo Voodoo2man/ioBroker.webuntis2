@@ -42,6 +42,32 @@ describe("WebUntis holidays", () => {
 		});
 	});
 
+	it("accepts the lowercase WebUntis longname field", () => {
+		const entries = normalizeHolidayEntries([
+			{
+				id: 1,
+				name: "Break",
+				longname: "Staff development day",
+				startDate: 20261012,
+				endDate: 20261012,
+			},
+		]);
+		expect(summarizeHolidays(entries, new Date(2026, 9, 12)).current.longName).to.equal("Staff development day");
+	});
+
+	it("falls back to the holiday name when longName is a date range", () => {
+		const entries = normalizeHolidayEntries([
+			{
+				id: 1,
+				name: "Ferien2",
+				longName: "12.10.2026-12.10.2026",
+				startDate: 20261012,
+				endDate: 20261012,
+			},
+		]);
+		expect(summarizeHolidays(entries, new Date(2026, 9, 12)).current.longName).to.equal("Ferien2");
+	});
+
 	it("falls back from empty longName to name", () => {
 		const entries = normalizeHolidayEntries([holiday(20260910, 20260912, "Break", "")]);
 		expect(summarizeHolidays(entries, new Date(2026, 8, 10)).current.longName).to.equal("Break");
