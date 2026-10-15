@@ -95,7 +95,7 @@ and include only relevant, non-sensitive log messages when asking for help.
 
 ## Changelog
 
-### WORK IN PROGRESS
+### 0.1.9 (2026-10-15)
 
 - (@Voodoo2man) Improved timetable data and reliability with lesson numbers, comparisons, long names, and automatic re-authentication for expired sessions
 - @Voodoo2man Added inbox
