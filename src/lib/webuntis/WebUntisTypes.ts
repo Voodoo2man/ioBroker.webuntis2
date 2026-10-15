@@ -125,6 +125,7 @@ export interface WebUntisHttpDiagnostic {
 	responseHeaders?: string[];
 	personType?: number;
 	klasseIdPresent?: boolean;
+	schoolCookieFormat?: "base64" | "plain";
 	elementType?: number;
 	startDate?: number;
 	endDate?: number;

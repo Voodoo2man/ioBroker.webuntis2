@@ -378,7 +378,8 @@ class WebuntisNext extends utils.Adapter {
 				const warningIntervalMs = 30 * 60 * 1000;
 				if (Date.now() - this.lastMessageWarningAt >= warningIntervalMs) {
 					const code = error instanceof WebUntisError ? error.code : "UNEXPECTED_RESPONSE";
-					this.log.warn(`WebUntis messages refresh failed: ${code}; previous message data was kept`);
+					const detail = error instanceof Error ? ` (${error.message})` : "";
+					this.log.warn(`WebUntis messages refresh failed: ${code}${detail}; previous message data was kept`);
 					this.lastMessageWarningAt = Date.now();
 				}
 			}
