@@ -28,6 +28,7 @@ var import_Timetable = require("./Timetable");
 var import_WebUntisClient = require("./WebUntisClient");
 var import_WebUntisErrors = require("./WebUntisErrors");
 const MASTERDATA_TTL_MS = 6 * 60 * 60 * 1e3;
+const MASTERDATA_RETRY_MS = 30 * 60 * 1e3;
 class WebUntisService {
   constructor(onDiagnostic, onInfo, onWarning, fetchImpl = fetch, onDebug) {
     this.onDiagnostic = onDiagnostic;
@@ -71,6 +72,21 @@ class WebUntisService {
       this.session = void 0;
       this.sessionKey = void 0;
       return this.loadTimetableWithSession(config, now);
+    }
+  }
+  async loadUnreadMessages(config) {
+    let { client, session } = await this.getSession(config);
+    try {
+      return await client.getUnreadMessages(session);
+    } catch (error) {
+      if (!(error instanceof import_WebUntisErrors.WebUntisError) || error.code !== "SESSION_EXPIRED") {
+        throw error;
+      }
+      this.sessionClient = void 0;
+      this.session = void 0;
+      this.sessionKey = void 0;
+      ({ client, session } = await this.getSession(config));
+      return client.getUnreadMessages(session);
     }
   }
   async loadTimetableWithSession(config, now) {
@@ -171,13 +187,17 @@ class WebUntisService {
     if ((current == null ? void 0 : current.key) === key && current.fetchedAt > 0 && now.getTime() - current.fetchedAt < MASTERDATA_TTL_MS) {
       return current.data;
     }
+    if ((current == null ? void 0 : current.key) === key && current.retryAfter > now.getTime()) {
+      return current.data;
+    }
     if ((current == null ? void 0 : current.key) === key && current.loading) {
       return current.loading;
     }
     const cache = {
       key,
       data: (current == null ? void 0 : current.key) === key ? current.data : { subjects: [], teachers: [], rooms: [], klassen: [] },
-      fetchedAt: (current == null ? void 0 : current.key) === key ? current.fetchedAt : 0
+      fetchedAt: (current == null ? void 0 : current.key) === key ? current.fetchedAt : 0,
+      retryAfter: (current == null ? void 0 : current.key) === key ? current.retryAfter : 0
     };
     this.masterDataCache = cache;
     const loading = this.refreshMasterData(client, session, cache, now);
@@ -206,6 +226,7 @@ class WebUntisService {
     ]);
     const failed = results.some((result) => result.status === "rejected");
     if (failed && cache.fetchedAt > 0) {
+      cache.retryAfter = now.getTime() + MASTERDATA_RETRY_MS;
       (_a = this.onWarning) == null ? void 0 : _a.call(this, "Master data refresh failed; existing master data is being reused");
       return cache.data;
     }
@@ -217,6 +238,7 @@ class WebUntisService {
     };
     cache.data = data;
     cache.fetchedAt = now.getTime();
+    cache.retryAfter = 0;
     if (failed) {
       (_b = this.onWarning) == null ? void 0 : _b.call(this, "Some master data could not be loaded; unavailable lookups remain empty");
     } else {

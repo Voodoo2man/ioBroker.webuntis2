@@ -1,5 +1,6 @@
 import * as utils from "@iobroker/adapter-core";
 import { cleanupLegacyNamespace } from "./lib/LegacyNamespaceCleanup";
+import { setStateChangedOrInitialize } from "./lib/StateWriter";
 import { removeStaleLessonStates } from "./lib/LessonStateCleanup";
 import {
 	hasObjectValueChanged,
@@ -14,6 +15,7 @@ import {
 import { deriveCurrentNextLesson, type CurrentNextLessonSummary } from "./lib/webuntis/CurrentNextLesson";
 import type { HolidaySummary } from "./lib/webuntis/Holidays";
 import {
+	buildLessonComparison,
 	lessonChannelName,
 	nextWeekday,
 	summarizeTimetable,
@@ -22,7 +24,7 @@ import {
 } from "./lib/webuntis/Timetable";
 import { WebUntisError } from "./lib/webuntis/WebUntisErrors";
 import { WebUntisService, type WebUntisConnectionConfig } from "./lib/webuntis/WebUntisService";
-import type { WebUntisHttpDiagnostic } from "./lib/webuntis/WebUntisTypes";
+import type { WebUntisHttpDiagnostic, WebUntisInboxMessage } from "./lib/webuntis/WebUntisTypes";
 
 const TIMETABLE_INTERVAL_MS = 5 * 60 * 1000;
 const CURRENT_NEXT_INTERVAL_MS = 60 * 1000;
@@ -43,7 +45,7 @@ const SUMMARY_STATE_DEFINITIONS: Record<
 	lessonCount: { type: "number", role: "value", name: translatedName("lessonCount"), def: 0 },
 	lessonDurationMinutes: {
 		type: "number",
-		role: "value.timer",
+		role: "value",
 		name: translatedName("lessonDurationMinutes"),
 		def: 0,
 		unit: "min",
@@ -67,8 +69,12 @@ const LESSON_STATE_NAMES: Record<string, ioBroker.Translated> = {
 	subject: translatedName("subject"),
 	subjectLong: translatedName("subjectLong"),
 	teacher: translatedName("teacher"),
+	teacherLong: translatedName("longName"),
 	room: translatedName("room"),
+	roomLong: translatedName("longName"),
 	class: translatedName("class"),
+	classLong: translatedName("longName"),
+	lessonNumber: translatedName("lessonNumber"),
 	lessonId: translatedName("lessonId"),
 	periodId: translatedName("periodId"),
 	status: translatedName("status"),
@@ -76,8 +82,11 @@ const LESSON_STATE_NAMES: Record<string, ioBroker.Translated> = {
 	cancelled: translatedName("cancelled"),
 	substitution: translatedName("substitution"),
 	originalTeacher: translatedName("originalTeacher"),
+	originalTeacherLong: translatedName("longName"),
 	originalRoom: translatedName("originalRoom"),
+	originalRoomLong: translatedName("longName"),
 	originalSubject: translatedName("originalSubject"),
+	originalSubjectLong: translatedName("longName"),
 };
 
 const CURRENT_NEXT_STATE_DEFINITIONS: Record<
@@ -93,26 +102,30 @@ const CURRENT_NEXT_STATE_DEFINITIONS: Record<
 	currentLesson: { type: "string", role: "text", name: translatedName("currentLesson"), def: "" },
 	currentSubject: { type: "string", role: "text", name: translatedName("currentSubject"), def: "" },
 	currentRoom: { type: "string", role: "text", name: translatedName("currentRoom"), def: "" },
+	currentRoomLong: { type: "string", role: "text", name: translatedName("longName"), def: "" },
 	currentTeacher: { type: "string", role: "text", name: translatedName("currentTeacher"), def: "" },
+	currentTeacherLong: { type: "string", role: "text", name: translatedName("longName"), def: "" },
 	nextLesson: { type: "string", role: "text", name: translatedName("nextLesson"), def: "" },
 	nextSubject: { type: "string", role: "text", name: translatedName("nextSubject"), def: "" },
 	nextRoom: { type: "string", role: "text", name: translatedName("nextRoom"), def: "" },
+	nextRoomLong: { type: "string", role: "text", name: translatedName("longName"), def: "" },
 	nextTeacher: { type: "string", role: "text", name: translatedName("nextTeacher"), def: "" },
+	nextTeacherLong: { type: "string", role: "text", name: translatedName("longName"), def: "" },
 	nextLessonStart: { type: "string", role: "text", name: translatedName("nextLessonStart"), def: "" },
 	minutesUntilNextLesson: {
 		type: "number",
-		role: "value.interval",
+		role: "value.timer",
 		name: translatedName("minutesUntilNextLesson"),
 		def: 0,
-		unit: "m",
+		unit: "min",
 	},
 	schoolRunning: { type: "boolean", role: "indicator", name: translatedName("schoolRunning"), def: false },
 	minutesUntilSchoolEnd: {
 		type: "number",
-		role: "value.interval",
+		role: "value.timer",
 		name: translatedName("minutesUntilSchoolEnd"),
 		def: 0,
-		unit: "m",
+		unit: "min",
 	},
 };
 
@@ -131,8 +144,10 @@ class WebuntisNext extends utils.Adapter {
 	private timetableTimer?: ioBroker.Timeout;
 	private currentNextTimer?: ioBroker.Timeout;
 	private todayLessons: TimetableLesson[] = [];
+	private hasTimetableSnapshot = false;
 	private unloaded = false;
 	private readonly migratedNames = new Set<string>();
+	private lastMessageWarningAt = 0;
 
 	private async ensureTranslatedObject(
 		id: string,
@@ -282,6 +297,8 @@ class WebuntisNext extends utils.Adapter {
 			},
 			"Next timetable update",
 		);
+		await this.ensureInboxRoot();
+		await this.cleanupObsoleteStructure();
 		await this.setState("info.connection", false, true);
 		if (!this.hasConnectionConfig()) {
 			return;
@@ -334,13 +351,13 @@ class WebuntisNext extends utils.Adapter {
 			await cleanupLegacyNamespace(this, "messages");
 			await this.ensureTimetableRoot();
 			await this.ensureHolidaysRoot();
-			await this.cleanupObsoleteStructure();
 			const now = new Date();
 			const data = await this.webUntis.loadTimetable(this.config, now);
 			if (this.unloaded) {
 				return;
 			}
 			this.todayLessons = data.today;
+			this.hasTimetableSnapshot = true;
 			let updated = 0;
 			let removed = 0;
 			for (const group of TIMETABLE_GROUPS) {
@@ -352,6 +369,18 @@ class WebuntisNext extends utils.Adapter {
 				await this.writeHolidaySummary(data.holidays);
 			} else {
 				this.log.warn("WebUntis holidays are not available; previous holiday values were preserved");
+			}
+			try {
+				const unreadMessages = await this.webUntis.loadUnreadMessages(this.config);
+				await this.writeUnreadMessages(unreadMessages);
+				this.lastMessageWarningAt = 0;
+			} catch (error) {
+				const warningIntervalMs = 30 * 60 * 1000;
+				if (Date.now() - this.lastMessageWarningAt >= warningIntervalMs) {
+					const code = error instanceof WebUntisError ? error.code : "UNEXPECTED_RESPONSE";
+					this.log.warn(`WebUntis messages refresh failed: ${code}; previous message data was kept`);
+					this.lastMessageWarningAt = Date.now();
+				}
 			}
 			await this.setState("info.lastSuccessfulUpdate", now.toISOString(), true);
 			await this.setState("info.nextUpdate", new Date(now.getTime() + TIMETABLE_INTERVAL_MS).toISOString(), true);
@@ -367,6 +396,58 @@ class WebuntisNext extends utils.Adapter {
 			const detail = error instanceof Error ? ` (${error.message})` : "";
 			this.log.warn(`Timetable update failed: ${code}${detail}; existing timetable data was kept`);
 		}
+	}
+
+	private async ensureInboxRoot(): Promise<void> {
+		await this.ensureTranslatedObject(
+			"inbox",
+			{ type: "channel", common: { name: translatedName("inbox") }, native: {} },
+			"Messages",
+		);
+		await this.ensureTranslatedObject(
+			"inbox.unreadCount",
+			{
+				type: "state",
+				common: {
+					name: translatedName("unreadMessagesCount"),
+					type: "number",
+					role: "value",
+					read: true,
+					write: false,
+					def: 0,
+				},
+				native: {},
+			},
+			"Unread message count",
+		);
+		await this.ensureTranslatedObject(
+			"inbox.unread",
+			{
+				type: "state",
+				common: {
+					name: translatedName("unreadMessages"),
+					type: "string",
+					role: "json",
+					read: true,
+					write: false,
+					def: "[]",
+				},
+				native: {},
+			},
+			"Unread messages",
+		);
+		await this.initializeInboxState("inbox.unreadCount", 0);
+		await this.initializeInboxState("inbox.unread", "[]");
+	}
+
+	private async initializeInboxState(id: string, defaultValue: ioBroker.StateValue): Promise<void> {
+		const current = await this.getStateAsync(id);
+		await setStateChangedOrInitialize(this, id, current?.val ?? defaultValue);
+	}
+
+	private async writeUnreadMessages(messages: WebUntisInboxMessage[]): Promise<void> {
+		await setStateChangedOrInitialize(this, "inbox.unreadCount", messages.length);
+		await setStateChangedOrInitialize(this, "inbox.unread", JSON.stringify(messages));
 	}
 
 	private async ensureTimetableRoot(): Promise<void> {
@@ -442,8 +523,9 @@ class WebuntisNext extends utils.Adapter {
 			numericDate(summary.current.startDate),
 			"Start date (Unix timestamp ms)",
 			"number",
-			"date",
+			"value",
 			0,
+			"ms",
 		);
 		await this.writeSimpleState(
 			"holidays.current.endDate",
@@ -458,8 +540,9 @@ class WebuntisNext extends utils.Adapter {
 			numericDate(summary.current.endDate),
 			"End date (Unix timestamp ms)",
 			"number",
-			"date",
+			"value",
 			0,
+			"ms",
 		);
 		await this.writeSimpleState("holidays.next.name", summary.next.name, "Name", "string", "text", "");
 		await this.writeSimpleState("holidays.next.longName", summary.next.longName, "Long name", "string", "text", "");
@@ -476,8 +559,9 @@ class WebuntisNext extends utils.Adapter {
 			numericDate(summary.next.startDate),
 			"Start date (Unix timestamp ms)",
 			"number",
-			"date",
+			"value",
 			0,
+			"ms",
 		);
 		await this.writeSimpleState(
 			"holidays.next.endDate",
@@ -501,12 +585,13 @@ class WebuntisNext extends utils.Adapter {
 			numericDate(summary.next.endDate),
 			"End date (Unix timestamp ms)",
 			"number",
-			"date",
+			"value",
 			0,
+			"ms",
 		);
 	}
 
-	private async writeDaySummary(path: string, summary: TimetableSummary): Promise<void> {
+	private async writeDaySummary(path: string, summary: TimetableSummary, lessons: TimetableLesson[]): Promise<void> {
 		for (const [name, definition] of Object.entries(SUMMARY_STATE_DEFINITIONS) as [
 			keyof TimetableSummary,
 			(typeof SUMMARY_STATE_DEFINITIONS)[keyof TimetableSummary],
@@ -531,8 +616,16 @@ class WebuntisNext extends utils.Adapter {
 				},
 				definition.name.en,
 			);
-			await this.setStateChangedAsync(`timetable.${path}.${name}`, summary[name], true);
+			await setStateChangedOrInitialize(this, `timetable.${path}.${name}`, summary[name]);
 		}
+		await this.writeSimpleState(
+			`timetable.${path}.lessonComparison`,
+			JSON.stringify(buildLessonComparison(lessons)),
+			"Lesson comparison (JSON)",
+			"string",
+			"json",
+			"[]",
+		);
 	}
 
 	private async writeCurrentNextSummary(lessons: TimetableLesson[], now: Date): Promise<void> {
@@ -558,12 +651,12 @@ class WebuntisNext extends utils.Adapter {
 				},
 				definition.name.en,
 			);
-			await this.setStateChangedAsync(`timetable.today.${name}`, summary[name], true);
+			await setStateChangedOrInitialize(this, `timetable.today.${name}`, summary[name]);
 		}
 	}
 
 	private async updateCurrentNextStates(): Promise<void> {
-		if (this.unloaded) {
+		if (this.unloaded || !this.hasTimetableSnapshot) {
 			return;
 		}
 		await this.writeCurrentNextSummary(this.todayLessons, new Date());
@@ -571,6 +664,7 @@ class WebuntisNext extends utils.Adapter {
 
 	private async cleanupObsoleteStructure(): Promise<void> {
 		for (const id of [
+			"info.apiFieldReport",
 			"info.timetable",
 			"timetable.timetable",
 			"timetable.today.count",
@@ -611,7 +705,11 @@ class WebuntisNext extends utils.Adapter {
 					byDay[index],
 					this.timetableDate(nextWeekday(now, index)),
 				);
-				await this.writeDaySummary(`week.${weekdayNames[index]}`, summarizeTimetable(byDay[index]));
+				await this.writeDaySummary(
+					`week.${weekdayNames[index]}`,
+					summarizeTimetable(byDay[index]),
+					byDay[index],
+				);
 				removed += result.removed;
 			}
 		} else {
@@ -620,7 +718,7 @@ class WebuntisNext extends utils.Adapter {
 				day.setDate(day.getDate() + 1);
 			}
 			const result = await this.writeTimetableDay(`timetable.${group}`, lessons, this.timetableDate(day));
-			await this.writeDaySummary(group, summarizeTimetable(lessons));
+			await this.writeDaySummary(group, summarizeTimetable(lessons), lessons);
 			if (group === "today") {
 				await this.writeCurrentNextSummary(lessons, now);
 			}
@@ -668,8 +766,9 @@ class WebuntisNext extends utils.Adapter {
 			numericDate(date),
 			"Date (Unix timestamp ms)",
 			"number",
-			"date",
+			"value",
 			0,
+			"ms",
 		);
 		await this.writeSimpleState(`${path}.lessonCount`, lessons.length, "Lesson count", "number", "value", 0);
 		await this.ensureTranslatedObject(
@@ -734,7 +833,7 @@ class WebuntisNext extends utils.Adapter {
 			name,
 		);
 		this.ensureActive();
-		await this.setStateChangedAsync(id, value, true);
+		await setStateChangedOrInitialize(this, id, value);
 	}
 
 	private async writeLesson(path: string, slot: string, lesson: TimetableLesson): Promise<void> {
@@ -754,17 +853,25 @@ class WebuntisNext extends utils.Adapter {
 		this.ensureActive();
 		const values: Record<
 			string,
-			{ value: string | number | boolean; type: "string" | "number" | "boolean"; role: string }
+			{ value: string | number | boolean; type: "string" | "number" | "boolean"; role: string; unit?: string }
 		> = {
 			date: { value: dateOnly(lesson.date), type: "string", role: "text" },
-			dateTimestamp: { value: numericDate(lesson.date), type: "number", role: "date" },
+			dateTimestamp: { value: numericDate(lesson.date), type: "number", role: "value", unit: "ms" },
 			startTime: { value: lesson.startTime, type: "string", role: "text" },
 			endTime: { value: lesson.endTime, type: "string", role: "text" },
 			subject: { value: lesson.subject, type: "string", role: "text" },
 			subjectLong: { value: lesson.subjectLong, type: "string", role: "text" },
 			teacher: { value: lesson.teacher, type: "string", role: "text" },
+			teacherLong: { value: lesson.teacherLong, type: "string", role: "text" },
 			room: { value: lesson.room, type: "string", role: "text" },
+			roomLong: { value: lesson.roomLong, type: "string", role: "text" },
 			class: { value: lesson.class, type: "string", role: "text" },
+			classLong: { value: lesson.classLong, type: "string", role: "text" },
+			lessonNumber: {
+				value: lesson.lessonNumber ?? Number(slot),
+				type: "number",
+				role: "value",
+			},
 			...(lesson.lessonId === null
 				? {}
 				: { lessonId: { value: String(lesson.lessonId), type: "string" as const, role: "text" } }),
@@ -778,13 +885,30 @@ class WebuntisNext extends utils.Adapter {
 				? { substitution: { value: lesson.substitution, type: "string" as const, role: "text" } }
 				: {}),
 			...(lesson.originalTeacher && lesson.originalTeacher !== lesson.teacher
-				? { originalTeacher: { value: lesson.originalTeacher, type: "string" as const, role: "text" } }
+				? {
+						originalTeacher: { value: lesson.originalTeacher, type: "string" as const, role: "text" },
+						originalTeacherLong: {
+							value: lesson.originalTeacherLong,
+							type: "string" as const,
+							role: "text",
+						},
+					}
 				: {}),
 			...(lesson.originalRoom && lesson.originalRoom !== lesson.room
-				? { originalRoom: { value: lesson.originalRoom, type: "string" as const, role: "text" } }
+				? {
+						originalRoom: { value: lesson.originalRoom, type: "string" as const, role: "text" },
+						originalRoomLong: { value: lesson.originalRoomLong, type: "string" as const, role: "text" },
+					}
 				: {}),
 			...(lesson.originalSubject && lesson.originalSubject !== lesson.subject
-				? { originalSubject: { value: lesson.originalSubject, type: "string" as const, role: "text" } }
+				? {
+						originalSubject: { value: lesson.originalSubject, type: "string" as const, role: "text" },
+						originalSubjectLong: {
+							value: lesson.originalSubjectLong,
+							type: "string" as const,
+							role: "text",
+						},
+					}
 				: {}),
 		};
 		await removeStaleLessonStates(base, values, this.getObjectAsync.bind(this), this.delObjectAsync.bind(this));
@@ -800,12 +924,13 @@ class WebuntisNext extends utils.Adapter {
 						read: true,
 						write: false,
 						def: item.type === "string" ? "" : item.type === "boolean" ? false : 0,
+						...(item.unit ? { unit: item.unit } : {}),
 					},
 					native: {},
 				},
 				typeof LESSON_STATE_NAMES[name]?.en === "string" ? LESSON_STATE_NAMES[name].en : name,
 			);
-			await this.setStateChangedAsync(`${base}.${name}`, item.value, true);
+			await setStateChangedOrInitialize(this, `${base}.${name}`, item.value);
 		}
 	}
 

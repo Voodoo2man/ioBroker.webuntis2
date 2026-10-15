@@ -105,6 +105,29 @@ function getEndpoint(server, schoolName) {
   const webUntisPath = ((_a = url.pathname.match(/^(.*\/WebUntis)(?:\/|$)/i)) == null ? void 0 : _a[1]) || "/WebUntis";
   return `${url.origin}${webUntisPath}/jsonrpc.do?school=${encodeURIComponent(schoolName)}`;
 }
+function valueText(value) {
+  return typeof value === "string" || typeof value === "number" ? String(value) : "";
+}
+function extractMessageContent(value, depth = 0) {
+  if (typeof value === "string") {
+    return value;
+  }
+  if (depth > 4 || !isRecord(value)) {
+    return "";
+  }
+  for (const key of ["content", "text", "body", "message", "messageContent", "messageText", "fullText"]) {
+    if (typeof value[key] === "string" && value[key]) {
+      return value[key];
+    }
+  }
+  for (const key of ["data", "message", "result", "item"]) {
+    const content = extractMessageContent(value[key], depth + 1);
+    if (content) {
+      return content;
+    }
+  }
+  return "";
+}
 function getResponseType(body, contentType) {
   if (!body) {
     return "empty";
@@ -167,8 +190,10 @@ class WebUntisClient {
     this.onDiagnostic = onDiagnostic;
     this.abortSignal = abortSignal;
     this.endpoint = getEndpoint(config.server, config.schoolName);
+    this.schoolName = config.schoolName;
   }
   endpoint;
+  schoolName;
   sessionCookie;
   authenticatedAt;
   requestSequence = 0;
@@ -319,6 +344,166 @@ class WebUntisClient {
    */
   async getHolidays(session) {
     return this.request("getHolidays", {}, session);
+  }
+  /**
+   *
+   */
+  async getUnreadMessages(session) {
+    const token = await this.getRestToken(session);
+    const payload = await this.restRequest("/api/rest/view/v1/messages", session, token, "getMessages");
+    const inbox = isRecord(payload) && isRecord(payload.data) ? payload.data : payload;
+    if (!isRecord(inbox) || !Array.isArray(inbox.incomingMessages)) {
+      throw new import_WebUntisErrors.WebUntisError("INVALID_RESPONSE", "Invalid WebUntis messages response");
+    }
+    const unread = inbox.incomingMessages.filter(
+      (message) => isRecord(message) && message.isMessageRead === false && (typeof message.id === "number" || typeof message.id === "string")
+    );
+    const result = [];
+    for (let index = 0; index < unread.length; index += 4) {
+      const batch = await Promise.all(
+        unread.slice(index, index + 4).map(async (message) => {
+          var _a;
+          const preview = valueText(message.contentPreview);
+          let content = preview;
+          let contentIsPreview = true;
+          try {
+            const detail = await this.restRequest(
+              `/api/rest/view/v1/messages/${encodeURIComponent(String(message.id))}`,
+              session,
+              token,
+              "getMessage"
+            );
+            const fullContent = extractMessageContent(detail);
+            if (fullContent) {
+              content = fullContent;
+              contentIsPreview = false;
+            }
+          } catch (error) {
+            if (error instanceof import_WebUntisErrors.WebUntisError && error.code === "SESSION_EXPIRED") {
+              throw error;
+            }
+          }
+          const sender = isRecord(message.sender) ? valueText(message.sender.displayName) : valueText(message.sender);
+          return {
+            id: message.id,
+            dateTime: valueText((_a = message.sentDateTime) != null ? _a : message.dateTime),
+            sender,
+            subject: valueText(message.subject),
+            content,
+            contentIsPreview,
+            hasAttachments: message.hasAttachments === true
+          };
+        })
+      );
+      result.push(...batch);
+    }
+    return result;
+  }
+  restUrl(path) {
+    return this.endpoint.replace(/\/jsonrpc\.do\?.*$/i, path);
+  }
+  restCookie(session) {
+    const cookies = /* @__PURE__ */ new Map();
+    for (const cookie of (this.sessionCookie || "").split(/;\s*/)) {
+      const separator = cookie.indexOf("=");
+      if (separator > 0) {
+        cookies.set(cookie.slice(0, separator), cookie);
+      }
+    }
+    cookies.set("JSESSIONID", `JSESSIONID=${session.sessionId}`);
+    cookies.set("schoolname", `schoolname=_${Buffer.from(this.schoolName).toString("base64")}`);
+    return [...cookies.values()].join("; ");
+  }
+  async getRestToken(session) {
+    var _a;
+    const url = this.restUrl("/api/token/new");
+    const response = await this.fetchImpl(url, {
+      method: "GET",
+      signal: this.getRequestSignal(),
+      headers: { accept: "text/plain", cookie: this.restCookie(session) }
+    });
+    const cookie = mergeCookieHeader(this.sessionCookie, response.headers);
+    this.sessionCookie = cookie.value;
+    const body = await response.text();
+    (_a = this.onDiagnostic) == null ? void 0 : _a.call(this, {
+      method: "getMessageToken",
+      status: response.status,
+      contentType: response.headers.get("content-type") || "",
+      url: redactUrl(response.url),
+      redirected: response.redirected,
+      length: body.length,
+      type: getResponseType(body, response.headers.get("content-type") || ""),
+      cookiePresent: Boolean(this.sessionCookie),
+      cookieChanged: cookie.changed,
+      sessionCookieChanged: cookie.sessionCookieChanged
+    });
+    if (!response.ok || response.redirected) {
+      throw new import_WebUntisErrors.WebUntisError(
+        response.status === 401 || response.redirected ? "SESSION_EXPIRED" : "API_REQUEST",
+        "WebUntis message authentication failed"
+      );
+    }
+    let token = body.trim();
+    if (token.startsWith('"') && token.endsWith('"')) {
+      try {
+        const parsed = JSON.parse(token);
+        if (typeof parsed !== "string") {
+          throw new Error("Token is not a string");
+        }
+        token = parsed;
+      } catch {
+        throw new import_WebUntisErrors.WebUntisError("INVALID_RESPONSE", "Invalid WebUntis message token response");
+      }
+    }
+    if (!token || token.startsWith("<")) {
+      throw new import_WebUntisErrors.WebUntisError("INVALID_RESPONSE", "Invalid WebUntis message token response");
+    }
+    return token;
+  }
+  async restRequest(path, session, token, method) {
+    var _a;
+    const url = this.restUrl(path);
+    const response = await this.fetchImpl(url, {
+      method: "GET",
+      signal: this.getRequestSignal(),
+      headers: {
+        accept: "application/json",
+        Authorization: `Bearer ${token}`,
+        cookie: this.restCookie(session)
+      }
+    });
+    const cookie = mergeCookieHeader(this.sessionCookie, response.headers);
+    this.sessionCookie = cookie.value;
+    const body = await response.text();
+    let payload;
+    try {
+      payload = JSON.parse(body);
+    } catch {
+      payload = void 0;
+    }
+    (_a = this.onDiagnostic) == null ? void 0 : _a.call(this, {
+      method,
+      status: response.status,
+      contentType: response.headers.get("content-type") || "",
+      url: redactUrl(response.url),
+      redirected: response.redirected,
+      length: body.length,
+      type: getResponseType(body, response.headers.get("content-type") || ""),
+      cookiePresent: Boolean(this.sessionCookie),
+      cookieChanged: cookie.changed,
+      sessionCookieChanged: cookie.sessionCookieChanged,
+      resultKeys: isRecord(payload) ? Object.keys(payload) : void 0
+    });
+    if (response.status === 401 || response.redirected || isRecord(payload) && isLoginPagePayload(payload)) {
+      throw new import_WebUntisErrors.WebUntisError("SESSION_EXPIRED", "WebUntis session expired while loading messages");
+    }
+    if (!response.ok) {
+      throw new import_WebUntisErrors.WebUntisError("API_REQUEST", `WebUntis ${method} request failed (HTTP ${response.status})`);
+    }
+    if (payload === void 0) {
+      throw new import_WebUntisErrors.WebUntisError("INVALID_RESPONSE", `Invalid WebUntis ${method} response`);
+    }
+    return payload;
   }
   /**
    *
@@ -573,10 +758,17 @@ class WebUntisClient {
         if (payload.error.code === -7001 && typeof payload.error.message === "string" && payload.error.message.startsWith("invalid elementType:")) {
           throw new import_WebUntisErrors.WebUntisError("API_REQUEST", "WebUntis rejected the timetable element type");
         }
-        if (payload.error.code === -7001) {
+        if (payload.error.code === -7001 || payload.error.code === -8520) {
           throw new import_WebUntisErrors.WebUntisError("SESSION_EXPIRED", "WebUntis session expired");
         }
-        throw new import_WebUntisErrors.WebUntisError("UNEXPECTED_RESPONSE", "WebUntis timetable request failed");
+        const details = [
+          typeof payload.error.code === "number" || typeof payload.error.code === "string" ? `code ${payload.error.code}` : "",
+          typeof payload.error.message === "string" ? payload.error.message.slice(0, 120) : ""
+        ].filter(Boolean);
+        throw new import_WebUntisErrors.WebUntisError(
+          "UNEXPECTED_RESPONSE",
+          `WebUntis timetable request failed${details.length ? ` (${details.join(": ")})` : ""}`
+        );
       }
       if (!isPeriodList(payload.result)) {
         throw new import_WebUntisErrors.WebUntisError("INVALID_RESPONSE", "Invalid WebUntis timetable result");

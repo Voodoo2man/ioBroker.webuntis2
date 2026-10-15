@@ -19,6 +19,7 @@ var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: tru
 var Timetable_exports = {};
 __export(Timetable_exports, {
   assertTimetableResponse: () => assertTimetableResponse,
+  buildLessonComparison: () => buildLessonComparison,
   dateNumber: () => dateNumber,
   dayRange: () => dayRange,
   lessonChannelName: () => lessonChannelName,
@@ -35,7 +36,14 @@ var import_node_crypto = require("node:crypto");
 var import_WebUntisErrors = require("./WebUntisErrors");
 function lessonChannelName(lesson) {
   const time = lesson.startTime && lesson.endTime ? `${lesson.startTime}\u2013${lesson.endTime}` : lesson.startTime || lesson.endTime;
-  return [time, lesson.subjectLong || lesson.subject, lesson.teacher, lesson.room].map((value) => value.trim()).filter(Boolean).join(" \xB7 ");
+  const shortName = [time, lesson.subjectLong || lesson.subject, lesson.teacher, lesson.room].map((value) => value.trim()).filter(Boolean).join(" \xB7 ");
+  const longName = [
+    time,
+    lesson.subjectLong || lesson.subject,
+    lesson.teacher ? lesson.teacherLong || lesson.teacher : "",
+    lesson.room ? lesson.roomLong || lesson.room : ""
+  ].map((value) => value.trim()).filter(Boolean).join(" \xB7 ");
+  return longName.length <= 100 ? longName : shortName;
 }
 function text(value) {
   return typeof value === "string" || typeof value === "number" ? String(value) : "";
@@ -62,6 +70,15 @@ function timeString(value) {
 function bool(value) {
   return value === true || value === 1 || value === "1" || value === "true";
 }
+function lessonNumber(value) {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value;
+  }
+  if (typeof value === "string" && /^\d+$/.test(value)) {
+    return Number(value);
+  }
+  return null;
+}
 function stableId(period) {
   var _a, _b;
   const id = (_b = (_a = period.id) != null ? _a : period.lessonId) != null ? _b : period.periodId;
@@ -72,10 +89,11 @@ function stableId(period) {
   return `period-${(0, import_node_crypto.createHash)("sha1").update(key).digest("hex").slice(0, 16)}`;
 }
 function normalizeLesson(period) {
-  var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j;
+  var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l;
   const substitution = text((_b = (_a = period.substText) != null ? _a : period.substitution) != null ? _b : period.subst);
-  const cancelled = bool((_d = (_c = period.cancelled) != null ? _c : period.isCancelled) != null ? _d : period.cancelledLesson);
+  const cancelled = period.code === "cancelled" || bool((_d = (_c = period.cancelled) != null ? _c : period.isCancelled) != null ? _d : period.cancelledLesson);
   const changed = cancelled || Boolean(substitution) || Boolean((_f = (_e = period.substTeacher) != null ? _e : period.substRoom) != null ? _f : period.substSubject);
+  const originalSubject = (_g = period.origSu) != null ? _g : period.originalSubject;
   return {
     id: stableId(period),
     date: dateString(period.date),
@@ -84,17 +102,24 @@ function normalizeLesson(period) {
     subject: firstName(period.su),
     subjectLong: firstName(period.su, true),
     teacher: firstName(period.te),
+    teacherLong: firstName(period.te, true),
     room: firstName(period.ro),
+    roomLong: firstName(period.ro, true),
     class: firstName(period.kl),
+    classLong: firstName(period.kl, true),
+    lessonNumber: lessonNumber(period.lsnumber),
     lessonId: typeof period.id === "number" ? period.id : null,
     periodId: typeof period.periodId === "number" ? period.periodId : null,
-    status: text((_g = period.activityType) != null ? _g : period.status),
+    status: text((_h = period.activityType) != null ? _h : period.status),
     changed,
     cancelled,
     substitution,
-    originalTeacher: firstName((_h = period.origTe) != null ? _h : period.originalTeacher),
-    originalRoom: firstName((_i = period.origRo) != null ? _i : period.originalRoom),
-    originalSubject: firstName((_j = period.origSu) != null ? _j : period.originalSubject)
+    originalTeacher: firstName((_i = period.origTe) != null ? _i : period.originalTeacher),
+    originalTeacherLong: firstName((_j = period.origTe) != null ? _j : period.originalTeacher, true),
+    originalRoom: firstName((_k = period.origRo) != null ? _k : period.originalRoom),
+    originalRoomLong: firstName((_l = period.origRo) != null ? _l : period.originalRoom, true),
+    originalSubject: firstName(originalSubject, true) || firstName(originalSubject),
+    originalSubjectLong: firstName(originalSubject, true)
   };
 }
 function resolveReferences(value, masterData) {
@@ -140,6 +165,44 @@ function durationMinutes(startTime, endTime) {
   const startMinutes = Number(start[1]) * 60 + Number(start[2]);
   const endMinutes = Number(end[1]) * 60 + Number(end[2]);
   return Math.max(0, endMinutes - startMinutes);
+}
+function buildLessonComparison(lessons) {
+  return lessons.map((lesson, index) => {
+    var _a;
+    const subject = lesson.subjectLong || lesson.subject;
+    return {
+      lessonNumber: (_a = lesson.lessonNumber) != null ? _a : index + 1,
+      date: lesson.date,
+      original: {
+        startTime: lesson.startTime,
+        endTime: lesson.endTime,
+        subject: lesson.originalSubject || subject,
+        subjectLong: lesson.originalSubjectLong || lesson.originalSubject || subject,
+        teacher: lesson.originalTeacher || lesson.teacher,
+        teacherLong: lesson.originalTeacherLong || lesson.originalTeacher || lesson.teacherLong || lesson.teacher,
+        room: lesson.originalRoom || lesson.room,
+        roomLong: lesson.originalRoomLong || lesson.originalRoom || lesson.roomLong || lesson.room,
+        class: lesson.class,
+        classLong: lesson.classLong
+      },
+      actual: {
+        startTime: lesson.startTime,
+        endTime: lesson.endTime,
+        subject,
+        subjectLong: lesson.subjectLong || subject,
+        teacher: lesson.teacher,
+        teacherLong: lesson.teacherLong || lesson.teacher,
+        room: lesson.room,
+        roomLong: lesson.roomLong || lesson.room,
+        class: lesson.class,
+        classLong: lesson.classLong
+      },
+      status: lesson.status,
+      changed: lesson.changed,
+      cancelled: lesson.cancelled,
+      substitution: lesson.substitution
+    };
+  });
 }
 function summarizeTimetable(lessons) {
   var _a, _b, _c, _d, _e, _f;
@@ -205,6 +268,7 @@ function assertTimetableResponse(value) {
 // Annotate the CommonJS export names for ESM import in node:
 0 && (module.exports = {
   assertTimetableResponse,
+  buildLessonComparison,
   dateNumber,
   dayRange,
   lessonChannelName,

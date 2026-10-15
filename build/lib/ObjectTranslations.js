@@ -45,6 +45,19 @@ const OBJECT_NAMES = {
     uk: "\u0420\u043E\u0437\u043A\u043B\u0430\u0434",
     "zh-cn": "\u8BFE\u7A0B\u8868"
   },
+  inbox: {
+    en: "Messages",
+    de: "Mitteilungen",
+    es: "Mensajes",
+    fr: "Messages",
+    it: "Messaggi",
+    nl: "Berichten",
+    pl: "Wiadomo\u015Bci",
+    pt: "Mensagens",
+    ru: "\u0421\u043E\u043E\u0431\u0449\u0435\u043D\u0438\u044F",
+    uk: "\u041F\u043E\u0432\u0456\u0434\u043E\u043C\u043B\u0435\u043D\u043D\u044F",
+    "zh-cn": "\u6D88\u606F"
+  },
   holidays: {
     en: "Holidays",
     de: "Ferien",
@@ -452,7 +465,7 @@ const STATE_NAMES = {
   },
   hasSchool: {
     en: "Has school",
-    de: "Schule vorhanden",
+    de: "Hat Schule",
     es: "Tiene escuela",
     fr: "A une \xE9cole",
     it: "Ha una scuola",
@@ -723,6 +736,45 @@ const STATE_NAMES = {
     uk: "\u041A\u043B\u0430\u0441",
     "zh-cn": "\u73ED\u7EA7"
   },
+  unreadMessagesCount: {
+    en: "Unread message count",
+    de: "Anzahl ungelesener Mitteilungen",
+    es: "N\xFAmero de mensajes no le\xEDdos",
+    fr: "Nombre de messages non lus",
+    it: "Numero di messaggi non letti",
+    nl: "Aantal ongelezen berichten",
+    pl: "Liczba nieprzeczytanych wiadomo\u015Bci",
+    pt: "N\xFAmero de mensagens n\xE3o lidas",
+    ru: "\u041A\u043E\u043B\u0438\u0447\u0435\u0441\u0442\u0432\u043E \u043D\u0435\u043F\u0440\u043E\u0447\u0438\u0442\u0430\u043D\u043D\u044B\u0445 \u0441\u043E\u043E\u0431\u0449\u0435\u043D\u0438\u0439",
+    uk: "\u041A\u0456\u043B\u044C\u043A\u0456\u0441\u0442\u044C \u043D\u0435\u043F\u0440\u043E\u0447\u0438\u0442\u0430\u043D\u0438\u0445 \u043F\u043E\u0432\u0456\u0434\u043E\u043C\u043B\u0435\u043D\u044C",
+    "zh-cn": "\u672A\u8BFB\u6D88\u606F\u6570"
+  },
+  unreadMessages: {
+    en: "Unread messages",
+    de: "Ungelesene Mitteilungen",
+    es: "Mensajes no le\xEDdos",
+    fr: "Messages non lus",
+    it: "Messaggi non letti",
+    nl: "Ongelezen berichten",
+    pl: "Nieprzeczytane wiadomo\u015Bci",
+    pt: "Mensagens n\xE3o lidas",
+    ru: "\u041D\u0435\u043F\u0440\u043E\u0447\u0438\u0442\u0430\u043D\u043D\u044B\u0435 \u0441\u043E\u043E\u0431\u0449\u0435\u043D\u0438\u044F",
+    uk: "\u041D\u0435\u043F\u0440\u043E\u0447\u0438\u0442\u0430\u043D\u0456 \u043F\u043E\u0432\u0456\u0434\u043E\u043C\u043B\u0435\u043D\u043D\u044F",
+    "zh-cn": "\u672A\u8BFB\u6D88\u606F"
+  },
+  lessonNumber: {
+    en: "Lesson number",
+    de: "Stundennummer",
+    es: "N\xFAmero de clase",
+    fr: "Num\xE9ro de cours",
+    it: "Numero della lezione",
+    nl: "Lesnummer",
+    pl: "Numer lekcji",
+    pt: "N\xFAmero da aula",
+    ru: "\u041D\u043E\u043C\u0435\u0440 \u0443\u0440\u043E\u043A\u0430",
+    uk: "\u041D\u043E\u043C\u0435\u0440 \u0443\u0440\u043E\u043A\u0443",
+    "zh-cn": "\u8BFE\u7A0B\u7F16\u53F7"
+  },
   lessonId: {
     en: "WebUntis lesson ID",
     de: "WebUntis-Unterrichts-ID",
@@ -839,6 +891,19 @@ const STATE_NAMES = {
     ru: "\u0418\u0441\u0445\u043E\u0434\u043D\u044B\u0439 \u043F\u0440\u0435\u0434\u043C\u0435\u0442",
     uk: "\u041F\u043E\u0447\u0430\u0442\u043A\u043E\u0432\u0438\u0439 \u043F\u0440\u0435\u0434\u043C\u0435\u0442",
     "zh-cn": "\u539F\u79D1\u76EE"
+  },
+  lessonComparison: {
+    en: "Lesson comparison (JSON)",
+    de: "Stundenplanvergleich (JSON)",
+    es: "Comparaci\xF3n de clases (JSON)",
+    fr: "Comparaison des cours (JSON)",
+    it: "Confronto delle lezioni (JSON)",
+    nl: "Lesvergelijking (JSON)",
+    pl: "Por\xF3wnanie lekcji (JSON)",
+    pt: "Compara\xE7\xE3o das aulas (JSON)",
+    ru: "\u0421\u0440\u0430\u0432\u043D\u0435\u043D\u0438\u0435 \u0443\u0440\u043E\u043A\u043E\u0432 (JSON)",
+    uk: "\u041F\u043E\u0440\u0456\u0432\u043D\u044F\u043D\u043D\u044F \u0443\u0440\u043E\u043A\u0456\u0432 (JSON)",
+    "zh-cn": "\u8BFE\u7A0B\u5BF9\u6BD4\uFF08JSON\uFF09"
   }
 };
 function translatedName(key) {

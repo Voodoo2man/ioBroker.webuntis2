@@ -4,6 +4,8 @@
 
 [![NPM-Version](https://img.shields.io/npm/v/iobroker.webuntis2.svg)](https://www.npmjs.com/package/iobroker.webuntis2)
 
+[English](README.md) | [Deutsch](README.de.md)
+
 WebUntis2 verbindet ioBroker mit WebUntis. Der Adapter ruft Stundenpläne für
 ein Schüler- oder Familienkonto ab und stellt sie in ioBroker für
 Visualisierungen, Benachrichtigungen und Automatisierungen bereit.
@@ -15,7 +17,7 @@ Visualisierungen, Benachrichtigungen und Automatisierungen bereit.
 - Geschützte Eingabe von Benutzername und Passwort
 - Verbindungstest vor dem Speichern
 - Stundenpläne für heute, morgen und die aktuelle Woche
-- Unterrichtsdaten wie Fach, Lehrer, Raum, Klasse, Uhrzeit und Status
+- Unterrichtsdaten wie Fach, Lehrer, Raum, Klasse, Uhrzeit und Status; verfügbare Langnamen stehen zusätzlich in eigenen Datenpunkten
 - Erkennung von Änderungen, Vertretungen und ausgefallenen Stunden
 - Tagesübersichten mit Stundenanzahl, Unterrichtszeiten, Fächern und Änderungen
 - Informationen zur aktuellen und nächsten Stunde inklusive Restzeit
@@ -58,9 +60,19 @@ Werte für Fach, Lehrer, Raum, Klasse, Beginn, Ende und Status.
 
 Die Tagesübersicht zeigt, ob Schule stattfindet, die Anzahl und Dauer der
 Stunden, die erste und letzte Stunde, die Fächer in Stundenplanreihenfolge
-sowie Änderungen und Ausfälle. Im Bereich `info` befinden sich der
-Verbindungsstatus und Aktualisierungsinformationen. Ferientermine stehen unter
-`holidays`.
+sowie Änderungen und Ausfälle. Jeder Tages-Channel enthält außerdem das
+JSON-Array `lessonComparison` mit Stundennummer, ursprünglichem und
+aktuellem Fach, Lehrer, Raum und Status. Die Stundennummer stammt aus WebUntis
+`lsnumber`; fehlt sie, wird die Position in der Tagesliste verwendet.
+Ursprüngliche und tatsächliche Beginn- und Endzeiten sind vorerst identisch.
+Im Bereich `info` befinden sich Verbindungsstatus und Aktualisierungsinformationen.
+Ferientermine stehen unter `holidays`.
+
+Ungelesene Mitteilungen stehen unter `inbox`. `unreadCount` enthält ihre
+Anzahl; `unread` ist ein JSON-Array mit Datum/Uhrzeit, Absender, Betreff, Inhalt
+und Anhang-Indikator. Wenn WebUntis den vollständigen Inhalt bereitstellt, wird
+er verwendet, andernfalls die verfügbare Vorschau. `contentIsPreview` zeigt an,
+wenn nur die Vorschau vorliegt.
 
 ## Voraussetzungen und Hinweise
 
@@ -68,7 +80,7 @@ Verbindungsstatus und Aktualisierungsinformationen. Ferientermine stehen unter
   benötigt.
 - Unterstützt wird die Anmeldung mit Benutzername und Passwort.
 - QR-Code-, Microsoft-365-, SAML- und OAuth-Anmeldung werden nicht unterstützt.
-- Prüfungen, Hausaufgaben und Mitteilungen werden nicht bereitgestellt.
+- Prüfungen und Hausaufgaben werden nicht bereitgestellt.
 - [WebUntis](https://webuntis.com/) ist ein externer Dienst. Dieses Projekt ist
   unabhängig und nicht mit der Untis GmbH verbunden.
 
@@ -87,6 +99,10 @@ Adapterkonfiguration aus. Teile bei einer Supportanfrage nur relevante,
 nicht vertrauliche Logmeldungen.
 
 ## Änderungsverlauf
+
+### WORK IN PROGRESS
+
+- Stundenplandaten und Zuverlässigkeit mit Stundennummern, Gegenüberstellungen, Langnamen und automatischer Neuanmeldung verbessern; ungelesene Mitteilungen mit bestätigten States anzeigen und den API-Feldbericht entfernen.
 
 ### 0.1.8 (2026-10-14)
 

@@ -13,7 +13,17 @@ export async function removeStaleLessonStates(
 	getObject: (id: string) => Promise<unknown>,
 	deleteObject: (id: string) => Promise<unknown>,
 ): Promise<void> {
-	const optional = ["lessonId", "periodId", "substitution", "originalTeacher", "originalRoom", "originalSubject"];
+	const optional = [
+		"lessonId",
+		"periodId",
+		"substitution",
+		"originalTeacher",
+		"originalTeacherLong",
+		"originalRoom",
+		"originalRoomLong",
+		"originalSubject",
+		"originalSubjectLong",
+	];
 	for (const name of optional) {
 		if (!(name in values) && (await getObject(`${base}.${name}`))) {
 			await deleteObject(`${base}.${name}`);

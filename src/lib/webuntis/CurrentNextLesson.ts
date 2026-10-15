@@ -6,11 +6,15 @@ export interface CurrentNextLessonSummary {
 	currentLesson: string;
 	currentSubject: string;
 	currentRoom: string;
+	currentRoomLong: string;
 	currentTeacher: string;
+	currentTeacherLong: string;
 	nextLesson: string;
 	nextSubject: string;
 	nextRoom: string;
+	nextRoomLong: string;
 	nextTeacher: string;
+	nextTeacherLong: string;
 	nextLessonStart: string;
 	minutesUntilNextLesson: number;
 	schoolRunning: boolean;
@@ -21,11 +25,15 @@ const EMPTY_SUMMARY: CurrentNextLessonSummary = {
 	currentLesson: "",
 	currentSubject: "",
 	currentRoom: "",
+	currentRoomLong: "",
 	currentTeacher: "",
+	currentTeacherLong: "",
 	nextLesson: "",
 	nextSubject: "",
 	nextRoom: "",
+	nextRoomLong: "",
 	nextTeacher: "",
+	nextTeacherLong: "",
 	nextLessonStart: "",
 	minutesUntilNextLesson: 0,
 	schoolRunning: false,
@@ -54,23 +62,33 @@ function lessonTime(date: Date, time: string): number | null {
 
 function details(
 	lesson: TimetableLesson,
-): Pick<CurrentNextLessonSummary, "currentLesson" | "currentSubject" | "currentRoom" | "currentTeacher"> {
+): Pick<
+	CurrentNextLessonSummary,
+	"currentLesson" | "currentSubject" | "currentRoom" | "currentRoomLong" | "currentTeacher" | "currentTeacherLong"
+> {
 	return {
 		currentLesson: lessonChannelName(lesson),
 		currentSubject: lesson.subjectLong || lesson.subject || "",
 		currentRoom: lesson.room || "",
+		currentRoomLong: lesson.roomLong || lesson.room || "",
 		currentTeacher: lesson.teacher || "",
+		currentTeacherLong: lesson.teacherLong || lesson.teacher || "",
 	};
 }
 
 function nextDetails(
 	lesson: TimetableLesson,
-): Pick<CurrentNextLessonSummary, "nextLesson" | "nextSubject" | "nextRoom" | "nextTeacher" | "nextLessonStart"> {
+): Pick<
+	CurrentNextLessonSummary,
+	"nextLesson" | "nextSubject" | "nextRoom" | "nextRoomLong" | "nextTeacher" | "nextTeacherLong" | "nextLessonStart"
+> {
 	return {
 		nextLesson: lessonChannelName(lesson),
 		nextSubject: lesson.subjectLong || lesson.subject || "",
 		nextRoom: lesson.room || "",
+		nextRoomLong: lesson.roomLong || lesson.room || "",
 		nextTeacher: lesson.teacher || "",
+		nextTeacherLong: lesson.teacherLong || lesson.teacher || "",
 		nextLessonStart: lesson.startTime || "",
 	};
 }
