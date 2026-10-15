@@ -96,7 +96,7 @@ and include only relevant, non-sensitive log messages when asking for help.
 
 ### WORK IN PROGRESS
 
-- (@Voodoo2man) Corrected holiday long names.
+- (@Voodoo2man) Prevented holiday date ranges from being used as long names.
 - (@Voodoo2man) Design adjustments.
 
 ### 0.1.9 (2026-10-15)

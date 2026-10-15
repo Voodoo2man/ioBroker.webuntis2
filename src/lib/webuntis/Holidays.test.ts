@@ -46,13 +46,26 @@ describe("WebUntis holidays", () => {
 		const entries = normalizeHolidayEntries([
 			{
 				id: 1,
-				name: "12.10.2026-12.10.2026",
+				name: "Break",
 				longname: "Staff development day",
 				startDate: 20261012,
 				endDate: 20261012,
 			},
 		]);
 		expect(summarizeHolidays(entries, new Date(2026, 9, 12)).current.longName).to.equal("Staff development day");
+	});
+
+	it("falls back to the holiday name when longName is a date range", () => {
+		const entries = normalizeHolidayEntries([
+			{
+				id: 1,
+				name: "Ferien2",
+				longName: "12.10.2026-12.10.2026",
+				startDate: 20261012,
+				endDate: 20261012,
+			},
+		]);
+		expect(summarizeHolidays(entries, new Date(2026, 9, 12)).current.longName).to.equal("Ferien2");
 	});
 
 	it("falls back from empty longName to name", () => {

@@ -51,6 +51,14 @@ function text(value: unknown): string {
 	return typeof value === "string" ? value.trim() : "";
 }
 
+function isDateRange(value: string): boolean {
+	return /^\d{1,2}\.\d{1,2}\.\d{4}\s*[-–]\s*\d{1,2}\.\d{1,2}\.\d{4}$/.test(value);
+}
+
+function holidayLongName(entry: HolidayEntry): string {
+	return entry.longName && !isDateRange(entry.longName) ? entry.longName : entry.name;
+}
+
 function localDatePart(date: Date): string {
 	return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
 }
@@ -101,7 +109,7 @@ export function summarizeHolidays(entries: HolidayEntry[], now: Date): HolidaySu
 	if (current) {
 		result.current = {
 			name: current.name,
-			longName: current.longName || current.name,
+			longName: holidayLongName(current),
 			startDate: current.startDate,
 			endDate: current.endDate,
 			active: true,
@@ -110,7 +118,7 @@ export function summarizeHolidays(entries: HolidayEntry[], now: Date): HolidaySu
 	if (next) {
 		result.next = {
 			name: next.name,
-			longName: next.longName || next.name,
+			longName: holidayLongName(next),
 			startDate: next.startDate,
 			endDate: next.endDate,
 			daysUntil: daySerial(next.startDate) - daySerial(today),
