@@ -68,6 +68,7 @@ function normalizeHolidayEntries(value) {
     throw new Error("Invalid WebUntis holiday result");
   }
   return value.flatMap((item) => {
+    var _a;
     if (!isRecord(item)) {
       return [];
     }
@@ -80,7 +81,7 @@ function normalizeHolidayEntries(value) {
       {
         id: typeof item.id === "number" || typeof item.id === "string" ? item.id : null,
         name: text(item.name),
-        longName: text(item.longName),
+        longName: text((_a = item.longName) != null ? _a : item.longname),
         startDate,
         endDate
       }

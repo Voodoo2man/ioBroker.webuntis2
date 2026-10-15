@@ -84,7 +84,7 @@ export function normalizeHolidayEntries(value: unknown): HolidayEntry[] {
 			{
 				id: typeof item.id === "number" || typeof item.id === "string" ? item.id : null,
 				name: text(item.name),
-				longName: text(item.longName),
+				longName: text(item.longName ?? item.longname),
 				startDate,
 				endDate,
 			},
