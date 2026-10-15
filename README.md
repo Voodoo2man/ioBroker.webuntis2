@@ -4,6 +4,8 @@
 
 [![NPM version](https://img.shields.io/npm/v/iobroker.webuntis2.svg)](https://www.npmjs.com/package/iobroker.webuntis2)
 
+[English](README.md) | [Deutsch](README.de.md)
+
 WebUntis2 connects ioBroker with WebUntis. It retrieves timetables for a
 student or family account and makes them available in ioBroker for
 visualizations, notifications, and automations.
@@ -15,7 +17,7 @@ visualizations, notifications, and automations.
 - Secure username and password configuration
 - A connection test before saving
 - Timetables for today, tomorrow, and the current week
-- Lesson details such as subject, teacher, room, class, time, and status
+- Lesson details such as subject, teacher, room, class, time, and status, with available long names in additional states
 - Information about changes, substitutions, and cancelled lessons
 - Daily summaries with lesson counts, school times, subjects, and changes
 - Current and next lesson information, including the remaining time
@@ -56,15 +58,26 @@ teacher, room, class, start and end time, and lesson status.
 
 Daily summaries show whether there is school, the number and duration of
 lessons, the first and last lesson, the subjects in timetable order, and
-changes or cancellations. The `info` section contains the connection status
-and update information. Holiday information is available below `holidays`.
+changes or cancellations. Each day channel also contains a `lessonComparison`
+JSON array with the lesson number, original and actual subject, teacher, room,
+and status. The number uses WebUntis `lsnumber` when provided and falls back to
+its position in the daily list when missing. Original and actual start/end
+times are currently identical. The `info` section contains the connection
+status and update information. Holiday information is available below
+`holidays`.
+
+Unread messages are available below `inbox`. `unreadCount` gives their number;
+`unread` contains a JSON array with message date/time, sender, subject, content,
+and an attachment indicator. The adapter retrieves full content when the
+WebUntis endpoint permits it and otherwise uses the available preview; the
+`contentIsPreview` property distinguishes the two.
 
 ## Requirements and notes
 
 - A WebUntis account with access to the selected school is required.
 - Username-and-password login is supported.
 - QR-code, Microsoft 365, SAML, and OAuth login are not supported.
-- Exams, homework, and messages are not provided.
+- Exams and homework are not provided.
 - [WebUntis](https://webuntis.com/) is an external service. This project is
   independent and is not affiliated with Untis GmbH.
 
@@ -81,6 +94,11 @@ in a browser first. Then run the connection test in the adapter configuration
 and include only relevant, non-sensitive log messages when asking for help.
 
 ## Changelog
+
+### 0.1.9 (2026-10-15)
+
+- (@Voodoo2man) Improved timetable data and reliability with lesson numbers, comparisons, long names, and automatic re-authentication for expired sessions
+- @Voodoo2man Added inbox
 
 ### 0.1.8 (2026-10-14)
 

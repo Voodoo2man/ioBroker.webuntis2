@@ -183,6 +183,16 @@ export interface WebUntisPeriod {
 	[key: string]: unknown;
 }
 
+export interface WebUntisInboxMessage {
+	id: number | string;
+	dateTime: string;
+	sender: string;
+	subject: string;
+	content: string;
+	contentIsPreview: boolean;
+	hasAttachments: boolean;
+}
+
 export interface TimetableQuery {
 	startDate: number;
 	endDate: number;

@@ -20,6 +20,7 @@ describe("object translations", () => {
 			expect(name[language]).to.be.a("string");
 		}
 		expect(name.en).to.equal("Lesson count");
+		expect(translatedName("hasSchool").de).to.equal("Hat Schule");
 	});
 
 	it("translates dynamic timetable and weekday names", () => {
@@ -29,6 +30,7 @@ describe("object translations", () => {
 		expect(translatedStateName("Teacher").de).to.equal("Lehrkraft");
 		expect(translatedStateName("Start date (Unix timestamp ms)").de).to.equal("Startdatum (Unix-Zeitstempel ms)");
 		expect(translatedStateName("End date (Unix timestamp ms)").de).to.equal("Enddatum (Unix-Zeitstempel ms)");
+		expect(translatedStateName("Lesson comparison (JSON)").de).to.equal("Stundenplanvergleich (JSON)");
 	});
 
 	it("migrates only the old default name and preserves custom names", () => {

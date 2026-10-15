@@ -11,16 +11,19 @@ import type {
 	SchoolSearchResult,
 	WebUntisConnectionConfig,
 	WebUntisHttpDiagnostic,
+	WebUntisInboxMessage,
 	WebUntisPeriod,
 	WebUntisSession,
 } from "./WebUntisTypes";
 
 const MASTERDATA_TTL_MS = 6 * 60 * 60 * 1000;
+const MASTERDATA_RETRY_MS = 30 * 60 * 1000;
 
 interface MasterDataCache {
 	key: string;
 	data: TimetableMasterData;
 	fetchedAt: number;
+	retryAfter: number;
 	loading?: Promise<TimetableMasterData>;
 }
 
@@ -74,6 +77,22 @@ export class WebUntisService {
 			this.session = undefined;
 			this.sessionKey = undefined;
 			return this.loadTimetableWithSession(config, now);
+		}
+	}
+
+	public async loadUnreadMessages(config: WebUntisConnectionConfig): Promise<WebUntisInboxMessage[]> {
+		let { client, session } = await this.getSession(config);
+		try {
+			return await client.getUnreadMessages(session);
+		} catch (error) {
+			if (!(error instanceof WebUntisError) || error.code !== "SESSION_EXPIRED") {
+				throw error;
+			}
+			this.sessionClient = undefined;
+			this.session = undefined;
+			this.sessionKey = undefined;
+			({ client, session } = await this.getSession(config));
+			return client.getUnreadMessages(session);
 		}
 	}
 
@@ -192,6 +211,9 @@ export class WebUntisService {
 		if (current?.key === key && current.fetchedAt > 0 && now.getTime() - current.fetchedAt < MASTERDATA_TTL_MS) {
 			return current.data;
 		}
+		if (current?.key === key && current.retryAfter > now.getTime()) {
+			return current.data;
+		}
 		if (current?.key === key && current.loading) {
 			return current.loading;
 		}
@@ -199,6 +221,7 @@ export class WebUntisService {
 			key,
 			data: current?.key === key ? current.data : { subjects: [], teachers: [], rooms: [], klassen: [] },
 			fetchedAt: current?.key === key ? current.fetchedAt : 0,
+			retryAfter: current?.key === key ? current.retryAfter : 0,
 		};
 		this.masterDataCache = cache;
 		const loading = this.refreshMasterData(client, session, cache, now);
@@ -232,6 +255,7 @@ export class WebUntisService {
 		]);
 		const failed = results.some(result => result.status === "rejected");
 		if (failed && cache.fetchedAt > 0) {
+			cache.retryAfter = now.getTime() + MASTERDATA_RETRY_MS;
 			this.onWarning?.("Master data refresh failed; existing master data is being reused");
 			return cache.data;
 		}
@@ -243,6 +267,7 @@ export class WebUntisService {
 		};
 		cache.data = data;
 		cache.fetchedAt = now.getTime();
+		cache.retryAfter = 0;
 		if (failed) {
 			this.onWarning?.("Some master data could not be loaded; unavailable lookups remain empty");
 		} else {

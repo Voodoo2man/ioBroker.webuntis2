@@ -74,22 +74,47 @@ describe("WebUntis service session and master data caching", () => {
 		expect(calls.filter(method => method === "getTeachers")).to.have.length(2);
 	});
 
-	it("keeps existing master data when an expired refresh fails", async () => {
+	it("keeps cached master data and throttles retries when an expired refresh fails", async () => {
 		const calls: string[] = [];
+		const warnings: string[] = [];
 		let failing = false;
-		const service = new WebUntisService(undefined, undefined, undefined, async (_input, init) => {
-			const body = JSON.parse(String(init?.body || "{}")) as { method?: string };
-			calls.push(body.method || "http");
-			if (body.method === "authenticate") {
-				return json({ result: { sessionId: "session", personType: 5, personId: 1, klasseId: 2 } });
-			}
-			if (body.method === "getHolidays" || body.method === "getTimetable") return json({ result: [] });
-			return failing ? json({ error: { code: -1 } }) : json({ result: [{ id: 1, name: body.method }] });
-		});
+		const service = new WebUntisService(
+			undefined,
+			undefined,
+			message => warnings.push(message),
+			async (_input, init) => {
+				const body = JSON.parse(String(init?.body || "{}")) as { method?: string };
+				calls.push(body.method || "http");
+				if (body.method === "authenticate") {
+					return json({ result: { sessionId: "session", personType: 5, personId: 1, klasseId: 2 } });
+				}
+				if (body.method === "getHolidays" || body.method === "getTimetable") return json({ result: [] });
+				return failing ? json({ error: { code: -1 } }) : json({ result: [{ id: 1, name: body.method }] });
+			},
+		);
 		await service.loadTimetable(config, new Date("2026-09-11T08:00:00"));
 		failing = true;
 		await service.loadTimetable(config, new Date("2026-09-11T14:01:00"));
+		await service.loadTimetable(config, new Date("2026-09-11T14:06:00"));
 		expect(calls.filter(method => method === "getSubjects")).to.have.length(2);
+		expect(warnings).to.deep.equal(["Master data refresh failed; existing master data is being reused"]);
+	});
+
+	it("includes WebUntis JSON-RPC error details in timetable failures", async () => {
+		const service = new WebUntisService(undefined, undefined, undefined, async (_input, init) => {
+			const body = JSON.parse(String(init?.body || "{}")) as { method?: string };
+			if (body.method === "authenticate") {
+				return json({ result: { sessionId: "session", personType: 5, personId: 1, klasseId: 2 } });
+			}
+			if (body.method === "getHolidays") return json({ result: [] });
+			return json({ error: { code: -1, message: "Temporary timetable error" } });
+		});
+		try {
+			await service.loadTimetable(config, new Date("2026-09-11T08:00:00"));
+			expect.fail("expected timetable request to fail");
+		} catch (error) {
+			expect((error as Error).message).to.include("code -1: Temporary timetable error");
+		}
 	});
 
 	it("reauthenticates once when the cached session expires", async () => {
@@ -107,6 +132,30 @@ describe("WebUntis service session and master data caching", () => {
 			if (method === "getHolidays") return json({ result: [] });
 			if (method === "getTimetable" && timetableRequests++ === 0) {
 				return json({ error: { code: -7001, message: "session expired" } });
+			}
+			return json({ result: [] });
+		});
+		await service.loadTimetable(config, new Date("2026-09-11T08:00:00"));
+		expect(calls.filter(method => method === "authenticate")).to.have.length(2);
+		expect(calls.filter(method => method === "getTimetable")).to.have.length(2);
+	});
+
+	it("reauthenticates when WebUntis rejects a stale session with code -8520", async () => {
+		const calls: string[] = [];
+		let expiredSession = true;
+		const service = new WebUntisService(undefined, undefined, undefined, async (_input, init) => {
+			const body = JSON.parse(String(init?.body || "{}")) as { method?: string };
+			const method = body.method || "http";
+			calls.push(method);
+			if (method === "authenticate") {
+				return json({
+					result: { sessionId: `session-${calls.length}`, personType: 5, personId: 1, klasseId: 2 },
+				});
+			}
+			if (method === "getHolidays") return json({ result: [] });
+			if (method === "getTimetable" && expiredSession) {
+				expiredSession = false;
+				return json({ error: { code: -8520, message: "not authenticated" } });
 			}
 			return json({ result: [] });
 		});

@@ -39,11 +39,27 @@ export interface TimetableLesson {
 	/**
 	 *
 	 */
+	teacherLong: string;
+	/**
+	 *
+	 */
 	room: string;
 	/**
 	 *
 	 */
+	roomLong: string;
+	/**
+	 *
+	 */
 	class: string;
+	/**
+	 *
+	 */
+	classLong: string;
+	/**
+	 *
+	 */
+	lessonNumber: number | null;
 	/**
 	 *
 	 */
@@ -75,11 +91,56 @@ export interface TimetableLesson {
 	/**
 	 *
 	 */
+	originalTeacherLong: string;
+	/**
+	 *
+	 */
 	originalRoom: string;
 	/**
 	 *
 	 */
+	originalRoomLong: string;
+	/**
+	 *
+	 */
 	originalSubject: string;
+	/**
+	 *
+	 */
+	originalSubjectLong: string;
+}
+
+export interface LessonComparison {
+	lessonNumber: number;
+	date: string;
+	original: {
+		startTime: string;
+		endTime: string;
+		subject: string;
+		subjectLong: string;
+		teacher: string;
+		teacherLong: string;
+		room: string;
+		roomLong: string;
+		class: string;
+		classLong: string;
+	};
+	actual: {
+		startTime: string;
+		endTime: string;
+		subject: string;
+		subjectLong: string;
+		teacher: string;
+		teacherLong: string;
+		room: string;
+		roomLong: string;
+		class: string;
+		classLong: string;
+	};
+	status: string;
+	changed: boolean;
+	cancelled: boolean;
+	substitution: string;
 }
 
 export interface TimetableSummary {
@@ -109,10 +170,20 @@ export function lessonChannelName(lesson: TimetableLesson): string {
 		lesson.startTime && lesson.endTime
 			? `${lesson.startTime}–${lesson.endTime}`
 			: lesson.startTime || lesson.endTime;
-	return [time, lesson.subjectLong || lesson.subject, lesson.teacher, lesson.room]
+	const shortName = [time, lesson.subjectLong || lesson.subject, lesson.teacher, lesson.room]
 		.map(value => value.trim())
 		.filter(Boolean)
 		.join(" · ");
+	const longName = [
+		time,
+		lesson.subjectLong || lesson.subject,
+		lesson.teacher ? lesson.teacherLong || lesson.teacher : "",
+		lesson.room ? lesson.roomLong || lesson.room : "",
+	]
+		.map(value => value.trim())
+		.filter(Boolean)
+		.join(" · ");
+	return longName.length <= 100 ? longName : shortName;
 }
 
 function text(value: unknown): string {
@@ -144,6 +215,16 @@ function bool(value: unknown): boolean {
 	return value === true || value === 1 || value === "1" || value === "true";
 }
 
+function lessonNumber(value: unknown): number | null {
+	if (typeof value === "number" && Number.isFinite(value)) {
+		return value;
+	}
+	if (typeof value === "string" && /^\d+$/.test(value)) {
+		return Number(value);
+	}
+	return null;
+}
+
 function stableId(period: WebUntisPeriod): string {
 	const id = period.id ?? period.lessonId ?? period.periodId;
 	if (typeof id === "number" || typeof id === "string") {
@@ -158,9 +239,11 @@ function stableId(period: WebUntisPeriod): string {
  */
 export function normalizeLesson(period: WebUntisPeriod): TimetableLesson {
 	const substitution = text(period.substText ?? period.substitution ?? period.subst);
-	const cancelled = bool(period.cancelled ?? period.isCancelled ?? period.cancelledLesson);
+	const cancelled =
+		period.code === "cancelled" || bool(period.cancelled ?? period.isCancelled ?? period.cancelledLesson);
 	const changed =
 		cancelled || Boolean(substitution) || Boolean(period.substTeacher ?? period.substRoom ?? period.substSubject);
+	const originalSubject = period.origSu ?? period.originalSubject;
 	return {
 		id: stableId(period),
 		date: dateString(period.date),
@@ -169,8 +252,12 @@ export function normalizeLesson(period: WebUntisPeriod): TimetableLesson {
 		subject: firstName(period.su),
 		subjectLong: firstName(period.su, true),
 		teacher: firstName(period.te),
+		teacherLong: firstName(period.te, true),
 		room: firstName(period.ro),
+		roomLong: firstName(period.ro, true),
 		class: firstName(period.kl),
+		classLong: firstName(period.kl, true),
+		lessonNumber: lessonNumber(period.lsnumber),
 		lessonId: typeof period.id === "number" ? period.id : null,
 		periodId: typeof period.periodId === "number" ? period.periodId : null,
 		status: text(period.activityType ?? period.status),
@@ -178,8 +265,11 @@ export function normalizeLesson(period: WebUntisPeriod): TimetableLesson {
 		cancelled,
 		substitution,
 		originalTeacher: firstName(period.origTe ?? period.originalTeacher),
+		originalTeacherLong: firstName(period.origTe ?? period.originalTeacher, true),
 		originalRoom: firstName(period.origRo ?? period.originalRoom),
-		originalSubject: firstName(period.origSu ?? period.originalSubject),
+		originalRoomLong: firstName(period.origRo ?? period.originalRoom, true),
+		originalSubject: firstName(originalSubject, true) || firstName(originalSubject),
+		originalSubjectLong: firstName(originalSubject, true),
 	};
 }
 
@@ -236,6 +326,45 @@ function durationMinutes(startTime: string, endTime: string): number {
 	const startMinutes = Number(start[1]) * 60 + Number(start[2]);
 	const endMinutes = Number(end[1]) * 60 + Number(end[2]);
 	return Math.max(0, endMinutes - startMinutes);
+}
+
+export function buildLessonComparison(lessons: TimetableLesson[]): LessonComparison[] {
+	return lessons.map((lesson, index) => {
+		const subject = lesson.subjectLong || lesson.subject;
+		return {
+			lessonNumber: lesson.lessonNumber ?? index + 1,
+			date: lesson.date,
+			original: {
+				startTime: lesson.startTime,
+				endTime: lesson.endTime,
+				subject: lesson.originalSubject || subject,
+				subjectLong: lesson.originalSubjectLong || lesson.originalSubject || subject,
+				teacher: lesson.originalTeacher || lesson.teacher,
+				teacherLong:
+					lesson.originalTeacherLong || lesson.originalTeacher || lesson.teacherLong || lesson.teacher,
+				room: lesson.originalRoom || lesson.room,
+				roomLong: lesson.originalRoomLong || lesson.originalRoom || lesson.roomLong || lesson.room,
+				class: lesson.class,
+				classLong: lesson.classLong,
+			},
+			actual: {
+				startTime: lesson.startTime,
+				endTime: lesson.endTime,
+				subject,
+				subjectLong: lesson.subjectLong || subject,
+				teacher: lesson.teacher,
+				teacherLong: lesson.teacherLong || lesson.teacher,
+				room: lesson.room,
+				roomLong: lesson.roomLong || lesson.room,
+				class: lesson.class,
+				classLong: lesson.classLong,
+			},
+			status: lesson.status,
+			changed: lesson.changed,
+			cancelled: lesson.cancelled,
+			substitution: lesson.substitution,
+		};
+	});
 }
 
 export function summarizeTimetable(lessons: TimetableLesson[]): TimetableSummary {

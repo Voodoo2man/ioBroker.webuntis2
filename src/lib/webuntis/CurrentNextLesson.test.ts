@@ -11,8 +11,12 @@ function lesson(startTime: string, endTime: string, changes: Partial<TimetableLe
 		subject: "MA",
 		subjectLong: "Mathematics",
 		teacher: "Müller",
+		teacherLong: "Max Müller",
 		room: "R204",
+		roomLong: "Room 204",
 		class: "5A",
+		classLong: "Class 5A",
+		lessonNumber: null,
 		lessonId: 1,
 		periodId: 1,
 		status: "Unterricht",
@@ -20,8 +24,11 @@ function lesson(startTime: string, endTime: string, changes: Partial<TimetableLe
 		cancelled: false,
 		substitution: "",
 		originalTeacher: "",
+		originalTeacherLong: "",
 		originalRoom: "",
+		originalRoomLong: "",
 		originalSubject: "",
+		originalSubjectLong: "",
 		...changes,
 	};
 }
@@ -49,7 +56,9 @@ describe("Current and next lesson states", () => {
 		expect(result.currentLesson).to.equal(lessonChannelName(lessons[0]));
 		expect(result.currentSubject).to.equal("Mathematics");
 		expect(result.currentRoom).to.equal("R204");
+		expect(result.currentRoomLong).to.equal("Room 204");
 		expect(result.currentTeacher).to.equal("Müller");
+		expect(result.currentTeacherLong).to.equal("Max Müller");
 		expect(result.nextLesson).to.equal(lessonChannelName(lessons[1]));
 		expect(result.schoolRunning).to.equal(true);
 	});
@@ -110,11 +119,15 @@ describe("Current and next lesson states", () => {
 				currentLesson: "",
 				currentSubject: "",
 				currentRoom: "",
+				currentRoomLong: "",
 				currentTeacher: "",
+				currentTeacherLong: "",
 				nextLesson: "",
 				nextSubject: "",
 				nextRoom: "",
+				nextRoomLong: "",
 				nextTeacher: "",
+				nextTeacherLong: "",
 				nextLessonStart: "",
 				minutesUntilNextLesson: 0,
 				schoolRunning: false,

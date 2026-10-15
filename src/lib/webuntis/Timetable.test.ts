@@ -1,5 +1,6 @@
 import { expect } from "chai";
 import {
+	buildLessonComparison,
 	dateNumber,
 	lessonChannelName,
 	normalizeLesson,
@@ -33,18 +34,93 @@ describe("WebUntis timetable normalization", () => {
 			subject: "D",
 			subjectLong: "Deutsch",
 			teacher: "Mu",
+			teacherLong: "Muster",
 			room: "101",
+			roomLong: "Raum 101",
 			class: "10A",
+			classLong: "Klasse 10A",
 			changed: true,
 			cancelled: false,
 			substitution: "Vertretung",
 		});
 	});
 
+	it("uses the WebUntis lesson number and keeps an ordered fallback when it is missing", () => {
+		const lesson = normalizeLesson({
+			date: 20261015,
+			startTime: 800,
+			endTime: 845,
+			lsnumber: "4",
+		});
+		const fallback = normalizeLesson({ date: 20261015, startTime: 900, endTime: 945 });
+
+		expect(lesson.lessonNumber).to.equal(4);
+		expect(buildLessonComparison([lesson])[0].lessonNumber).to.equal(4);
+		expect(buildLessonComparison([lesson, fallback]).map(item => item.lessonNumber)).to.deep.equal([4, 2]);
+	});
+
 	it("handles missing teacher and room without failing", () => {
 		const lesson = normalizeLesson({ id: 7, date: 20260909, startTime: 900, endTime: 945, su: [] });
 		expect(lesson.teacher).to.equal("");
 		expect(lesson.room).to.equal("");
+	});
+
+	it("recognizes the WebUntis cancelled period code", () => {
+		const lesson = normalizeLesson({ id: 8, date: 20260909, startTime: 900, endTime: 945, code: "cancelled" });
+		expect(lesson.cancelled).to.equal(true);
+		expect(lesson.changed).to.equal(true);
+	});
+
+	it("compares original and actual lesson details in day order", () => {
+		const lesson = normalizeLesson({
+			date: 20261016,
+			startTime: 800,
+			endTime: 845,
+			activityType: "Unterricht",
+			substText: "Vertretung",
+			su: [{ name: "Ma", longname: "Mathematik" }],
+			te: [{ name: "Neuer Lehrer" }],
+			ro: [{ name: "204" }],
+			origSu: [{ name: "De", longname: "Deutsch" }],
+			origTe: [{ name: "Alter Lehrer" }],
+			origRo: [{ name: "101" }],
+		});
+		const comparison = buildLessonComparison([lesson])[0];
+
+		expect(comparison).to.deep.equal({
+			lessonNumber: 1,
+			date: "2026-10-16",
+			original: {
+				startTime: "08:00",
+				endTime: "08:45",
+				subject: "Deutsch",
+				subjectLong: "Deutsch",
+				teacher: "Alter Lehrer",
+				teacherLong: "Alter Lehrer",
+				room: "101",
+				roomLong: "101",
+				class: "",
+				classLong: "",
+			},
+			actual: {
+				startTime: "08:00",
+				endTime: "08:45",
+				subject: "Mathematik",
+				subjectLong: "Mathematik",
+				teacher: "Neuer Lehrer",
+				teacherLong: "Neuer Lehrer",
+				room: "204",
+				roomLong: "204",
+				class: "",
+				classLong: "",
+			},
+			status: "Unterricht",
+			changed: true,
+			cancelled: false,
+			substitution: "Vertretung",
+		});
+		const secondLesson = normalizeLesson({ date: 20261016, startTime: 900, endTime: 945 });
+		expect(buildLessonComparison([lesson, secondLesson]).map(item => item.lessonNumber)).to.deep.equal([1, 2]);
 	});
 
 	it("creates stable daily summary values and excludes cancelled duration", () => {
@@ -106,10 +182,10 @@ describe("WebUntis timetable normalization", () => {
 			startTime: 750,
 			endTime: 835,
 			su: [{ name: "Ma", longname: "Mathematics" }],
-			te: [{ name: "Mü" }],
-			ro: [{ name: "R204" }],
+			te: [{ name: "Mü", longname: "Müller" }],
+			ro: [{ name: "R204", longname: "Raum 204" }],
 		});
-		expect(lessonChannelName(lesson)).to.equal("07:50–08:35 · Mathematics · Mü · R204");
+		expect(lessonChannelName(lesson)).to.equal("07:50–08:35 · Mathematics · Müller · Raum 204");
 		expect(lessonChannelName({ ...lesson, teacher: "", room: "" })).to.equal("07:50–08:35 · Mathematics");
 		expect(lessonChannelName({ ...lesson, subject: "", subjectLong: "", teacher: "", room: "" })).to.equal(
 			"07:50–08:35",

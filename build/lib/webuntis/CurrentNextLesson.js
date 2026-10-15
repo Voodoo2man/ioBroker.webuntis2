@@ -26,11 +26,15 @@ const EMPTY_SUMMARY = {
   currentLesson: "",
   currentSubject: "",
   currentRoom: "",
+  currentRoomLong: "",
   currentTeacher: "",
+  currentTeacherLong: "",
   nextLesson: "",
   nextSubject: "",
   nextRoom: "",
+  nextRoomLong: "",
   nextTeacher: "",
+  nextTeacherLong: "",
   nextLessonStart: "",
   minutesUntilNextLesson: 0,
   schoolRunning: false,
@@ -53,7 +57,9 @@ function details(lesson) {
     currentLesson: (0, import_Timetable.lessonChannelName)(lesson),
     currentSubject: lesson.subjectLong || lesson.subject || "",
     currentRoom: lesson.room || "",
-    currentTeacher: lesson.teacher || ""
+    currentRoomLong: lesson.roomLong || lesson.room || "",
+    currentTeacher: lesson.teacher || "",
+    currentTeacherLong: lesson.teacherLong || lesson.teacher || ""
   };
 }
 function nextDetails(lesson) {
@@ -61,7 +67,9 @@ function nextDetails(lesson) {
     nextLesson: (0, import_Timetable.lessonChannelName)(lesson),
     nextSubject: lesson.subjectLong || lesson.subject || "",
     nextRoom: lesson.room || "",
+    nextRoomLong: lesson.roomLong || lesson.room || "",
     nextTeacher: lesson.teacher || "",
+    nextTeacherLong: lesson.teacherLong || lesson.teacher || "",
     nextLessonStart: lesson.startTime || ""
   };
 }
