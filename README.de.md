@@ -100,6 +100,10 @@ nicht vertrauliche Logmeldungen.
 
 ## Änderungsverlauf
 
+### WORK IN PROGRESS
+
+- (@Voodoo2man) Designanpassungen
+
 ### 0.1.9 (2026-10-15)
 
 - (@Voodoo2man) Stundenplandaten und Zuverlässigkeit mit Gegenüberstellungen, Langnamen und automatischer Neuanmeldung bei abgelaufenen Sitzungen verbessert

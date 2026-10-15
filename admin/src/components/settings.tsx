@@ -89,6 +89,7 @@ const styles = (theme: Theme): StyleRules => ({
 	status: { marginTop: theme.spacing(2) },
 	statusSuccess: { borderColor: theme.palette.success.main, color: theme.palette.success.main },
 	statusError: { borderColor: theme.palette.error.main, color: theme.palette.error.main },
+	actionStatus: { marginTop: 0 },
 });
 
 interface SettingsProps {
@@ -224,14 +225,14 @@ class Settings extends React.Component<SettingsProps, SettingsState> {
 		);
 	}
 
-	private renderStatus(status = this.state.status): React.JSX.Element | null {
+	private renderStatus(status = this.state.status, extraClassName = ""): React.JSX.Element | null {
 		if (!status) {
 			return null;
 		}
 		const success = status === "CONNECTED" || status === "SCHOOL_SELECTED";
 		return (
 			<Paper
-				className={`${this.props.classes.status} ${success ? this.props.classes.statusSuccess : this.props.classes.statusError}`}
+				className={`${this.props.classes.status} ${extraClassName} ${success ? this.props.classes.statusSuccess : this.props.classes.statusError}`}
 				variant="outlined"
 				role="alert"
 				aria-live="polite"
@@ -471,7 +472,7 @@ class Settings extends React.Component<SettingsProps, SettingsState> {
 									? this.translate("testingConnection")
 									: this.translate("testConnection")}
 							</Button>
-							{this.renderStatus()}
+							{this.renderStatus(this.state.status, this.props.classes.actionStatus)}
 						</div>
 					</CardContent>
 				</Card>
