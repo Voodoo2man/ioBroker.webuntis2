@@ -97,7 +97,8 @@ and include only relevant, non-sensitive log messages when asking for help.
 
 ### WORK IN PROGRESS
 
-- (@Voodoo2man) Improve timetable data and reliability with lesson numbers, comparisons, long names, and automatic re-authentication for expired sessions; add unread-message summaries, initialize their states as acknowledged, and remove the API field report.
+- (@Voodoo2man) Improved timetable data and reliability with lesson numbers, comparisons, long names, and automatic re-authentication for expired sessions
+- @Voodoo2man Added inbox
 
 ### 0.1.8 (2026-10-14)
 

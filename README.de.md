@@ -102,7 +102,8 @@ nicht vertrauliche Logmeldungen.
 
 ### WORK IN PROGRESS
 
-- Stundenplandaten und Zuverlässigkeit mit Stundennummern, Gegenüberstellungen, Langnamen und automatischer Neuanmeldung verbessern; ungelesene Mitteilungen mit bestätigten States anzeigen und den API-Feldbericht entfernen.
+- (@Voodoo2man) Stundenplandaten und Zuverlässigkeit mit Stundennummern, Gegenüberstellungen, Langnamen und automatischer Neuanmeldung bei abgelaufenen Sitzungen verbessert
+- @Voodoo2man Postfach für Mitteilungen hinzugefügt
 
 ### 0.1.8 (2026-10-14)
 
