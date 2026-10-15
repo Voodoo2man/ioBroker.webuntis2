@@ -83,6 +83,7 @@ describe("WebUntis unread messages", () => {
 			Authorization: "Bearer jwt-token",
 		});
 		expect(requests[0].headers).to.deep.include({
+			accept: "application/json",
 			cookie: `JSESSIONID=sid; schoolname=_${Buffer.from("sample").toString("base64")}`,
 		});
 	});
