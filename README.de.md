@@ -103,7 +103,7 @@ nicht vertrauliche Logmeldungen.
 ### WORK IN PROGRESS
 
 - (@Voodoo2man) Datumsbereiche wurden nicht mehr als Ferienlangnamen verwendet.
-- (@Voodoo2man) Routinemäßige Logmeldungen wurden reduziert.
+- (@Voodoo2man) Anmeldeprobleme wurden behoben.
 - (@Voodoo2man) Designanpassungen
 
 ### 0.1.9 (2026-10-15)
