@@ -4,8 +4,6 @@
 
 [![NPM version](https://img.shields.io/npm/v/iobroker.webuntis2.svg)](https://www.npmjs.com/package/iobroker.webuntis2)
 
-[English](README.md) | [Deutsch](README.de.md)
-
 WebUntis2 connects ioBroker with WebUntis. It retrieves timetables for a
 student or family account and makes them available in ioBroker for
 visualizations, notifications, and automations.
@@ -94,45 +92,44 @@ and include only relevant, non-sensitive log messages when asking for help.
 
 ## Changelog
 
-### WORK IN PROGRESS
+### **WORK IN PROGRESS**
 
-- (@Voodoo2man) Made minor datapoint adjustments.
-- (@Voodoo2man) Improved the configuration design.
+- (Voodoo2man) Improved configuration feedback, holiday names, and connection status; reduced routine login log messages; verified Node.js 26 compatibility; and migrated Dependabot auto-merging to the `pull_request` event.
 
 ### 0.1.9 (2026-10-15)
 
-- (@Voodoo2man) Improved timetable data and reliability with comparisons, long names, and automatic re-authentication for expired sessions
-- (@Voodoo2man) Added an inbox for unread messages.
+- (Voodoo2man) Improved timetable data and reliability with comparisons, long names, and automatic re-authentication for expired sessions
+- (Voodoo2man) Added an inbox for unread messages.
 
 ### 0.1.8 (2026-10-14)
 
-- (@Voodoo2man) Updated dynamic lesson names, migrated metadata for existing objects, and repaired legacy i18n names.
+- (Voodoo2man) Updated dynamic lesson names, migrated metadata for existing objects, and repaired legacy i18n names.
 
 ### 0.1.7 (2026-10-14)
 
-- (@Voodoo2man) Improved ioBroker compliance, multilingual object names, shutdown handling, and state updates.
-- (@Voodoo2man) Added regression tests and removed the historical object dump containing adapter data.
+- (Voodoo2man) Improved ioBroker compliance, multilingual object names, shutdown handling, and state updates.
+- (Voodoo2man) Added regression tests and removed the historical object dump containing adapter data.
 
 ### 0.1.6 (2026-10-08)
 
-- (@Voodoo2man) Improved school search feedback, mobile layout, and button behavior in the Admin interface.
-- (@Voodoo2man) Added Ukrainian Admin translations and documented why the adapter uses a custom React configuration interface.
+- (Voodoo2man) Improved school search feedback, mobile layout, and button behavior in the Admin interface.
+- (Voodoo2man) Added Ukrainian Admin translations and documented why the adapter uses a custom React configuration interface.
 
 ### 0.1.5 (2026-10-06)
 
-- (@Voodoo2man) Fixed the empty adapter configuration page in ioBroker Admin.
+- (Voodoo2man) Fixed the empty adapter configuration page in ioBroker Admin.
 
 ### 0.1.3 (2026-10-05)
 
-- (@Voodoo2man) Updated the adapter test dependency for repository review.
+- (Voodoo2man) Updated the adapter test dependency for repository review.
 
 ### 0.1.2 (2026-10-05)
 
-- (@Voodoo2man) Improved WebUntis request timeouts and polling reliability.
+- (Voodoo2man) Improved WebUntis request timeouts and polling reliability.
 
 ### 0.1.1 (2026-09-12)
 
-- (@Voodoo2man) Improved the rolling seven-day timetable and added weekly summary states. Date fields now contain date-only values and companion Unix timestamps in milliseconds.
+- (Voodoo2man) Improved the rolling seven-day timetable and added weekly summary states. Date fields now contain date-only values and companion Unix timestamps in milliseconds.
 
 For earlier releases, see [CHANGELOG_OLD.md](CHANGELOG_OLD.md).
 
