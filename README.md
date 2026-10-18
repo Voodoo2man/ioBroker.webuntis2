@@ -91,8 +91,7 @@ in a browser first. Then run the connection test in the adapter configuration
 and include only relevant, non-sensitive log messages when asking for help.
 
 ## Changelog
-
-### **WORK IN PROGRESS**
+### 0.1.10 (2026-10-18)
 
 - (Voodoo2man) Improved configuration feedback, holiday names, and connection status; reduced routine login log messages; verified Node.js 26 compatibility; and migrated Dependabot auto-merging to the `pull_request` event.
 
@@ -114,22 +113,6 @@ and include only relevant, non-sensitive log messages when asking for help.
 
 - (Voodoo2man) Improved school search feedback, mobile layout, and button behavior in the Admin interface.
 - (Voodoo2man) Added Ukrainian Admin translations and documented why the adapter uses a custom React configuration interface.
-
-### 0.1.5 (2026-10-06)
-
-- (Voodoo2man) Fixed the empty adapter configuration page in ioBroker Admin.
-
-### 0.1.3 (2026-10-05)
-
-- (Voodoo2man) Updated the adapter test dependency for repository review.
-
-### 0.1.2 (2026-10-05)
-
-- (Voodoo2man) Improved WebUntis request timeouts and polling reliability.
-
-### 0.1.1 (2026-09-12)
-
-- (Voodoo2man) Improved the rolling seven-day timetable and added weekly summary states. Date fields now contain date-only values and companion Unix timestamps in milliseconds.
 
 For earlier releases, see [CHANGELOG_OLD.md](CHANGELOG_OLD.md).
 

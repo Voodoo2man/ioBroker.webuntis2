@@ -1,4 +1,19 @@
 # Changelog
+## 0.1.5 (2026-10-06)
+
+- (Voodoo2man) Fixed the empty adapter configuration page in ioBroker Admin.
+
+## 0.1.3 (2026-10-05)
+
+- (Voodoo2man) Updated the adapter test dependency for repository review.
+
+## 0.1.2 (2026-10-05)
+
+- (Voodoo2man) Improved WebUntis request timeouts and polling reliability.
+
+## 0.1.1 (2026-09-12)
+
+- (Voodoo2man) Improved the rolling seven-day timetable and added weekly summary states. Date fields now contain date-only values and companion Unix timestamps in milliseconds.
 
 ## 0.1.0 (2026-09-11)
 
