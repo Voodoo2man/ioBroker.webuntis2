@@ -4,8 +4,6 @@
 
 [![NPM version](https://img.shields.io/npm/v/iobroker.webuntis2.svg)](https://www.npmjs.com/package/iobroker.webuntis2)
 
-[English](README.md) | [Deutsch](README.de.md)
-
 WebUntis2 connects ioBroker with WebUntis. It retrieves timetables for a
 student or family account and makes them available in ioBroker for
 visualizations, notifications, and automations.
