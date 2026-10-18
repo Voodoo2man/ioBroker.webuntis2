@@ -100,57 +100,56 @@ nicht vertrauliche Logmeldungen.
 
 ## Änderungsverlauf
 
-### WORK IN PROGRESS
+### **WORK IN PROGRESS**
 
-- (@Voodoo2man) Kleinere Datenpunktanpassungen.
-- (@Voodoo2man) Designanpassungen in der Konfiguration.
+- (Voodoo2man) Rückmeldungen in der Konfiguration, Feiertagsnamen und Verbindungsstatus verbessert sowie routinemäßige Login-Meldungen reduziert.
 
 ### 0.1.9 (2026-10-15)
 
-- (@Voodoo2man) Stundenplandaten und Zuverlässigkeit mit Gegenüberstellungen, Langnamen und automatischer Neuanmeldung bei abgelaufenen Sitzungen verbessert
-- (@Voodoo2man) Postfach für Mitteilungen hinzugefügt.
+- (Voodoo2man) Stundenplandaten und Zuverlässigkeit mit Gegenüberstellungen, Langnamen und automatischer Neuanmeldung bei abgelaufenen Sitzungen verbessert
+- (Voodoo2man) Postfach für Mitteilungen hinzugefügt.
 
 ### 0.1.8 (2026-10-14)
 
-- (@Voodoo2man) Dynamische Unterrichtsnamen aktualisiert, Metadaten bestehender Objekte migriert und alte i18n-Namen korrigiert.
+- (Voodoo2man) Dynamische Unterrichtsnamen aktualisiert, Metadaten bestehender Objekte migriert und alte i18n-Namen korrigiert.
 
 ### 0.1.7 (2026-10-14)
 
-- (@Voodoo2man) ioBroker-Konformität, mehrsprachige Objektnamen, Beenden des Adapters und Statusaktualisierungen verbessert.
-- (@Voodoo2man) Regressionstests ergänzt und den historischen Object-Dump mit Adapterdaten entfernt.
+- (Voodoo2man) ioBroker-Konformität, mehrsprachige Objektnamen, Beenden des Adapters und Statusaktualisierungen verbessert.
+- (Voodoo2man) Regressionstests ergänzt und den historischen Object-Dump mit Adapterdaten entfernt.
 
 ### 0.1.6 (2026-10-08)
 
-- (@Voodoo2man) Rückmeldungen bei der Schulsuche, mobile Darstellung und Buttonverhalten in der Admin-Oberfläche verbessert.
-- (@Voodoo2man) Ukrainische Admin-Übersetzungen ergänzt und die technische Begründung für die React-Konfigurationsoberfläche dokumentiert.
+- (Voodoo2man) Rückmeldungen bei der Schulsuche, mobile Darstellung und Buttonverhalten in der Admin-Oberfläche verbessert.
+- (Voodoo2man) Ukrainische Admin-Übersetzungen ergänzt und die technische Begründung für die React-Konfigurationsoberfläche dokumentiert.
 
 ### 0.1.5 (2026-10-06)
 
-- (@Voodoo2man) Leere Adapter-Konfigurationsseite in ioBroker Admin behoben.
+- (Voodoo2man) Leere Adapter-Konfigurationsseite in ioBroker Admin behoben.
 
 ### 0.1.3 (2026-10-05)
 
-- (@Voodoo2man) Adapter-Testabhängigkeit für die Repository-Prüfung aktualisiert.
+- (Voodoo2man) Adapter-Testabhängigkeit für die Repository-Prüfung aktualisiert.
 
 ### 0.1.2 (2026-10-05)
 
-- (@Voodoo2man) WebUntis-Timeouts und Zuverlässigkeit der Aktualisierungen verbessert.
+- (Voodoo2man) WebUntis-Timeouts und Zuverlässigkeit der Aktualisierungen verbessert.
 
 ### 0.1.1 (2026-09-12)
 
-- (@Voodoo2man) Verbesserte rollierende Sieben-Tage-Ansicht und Wochentagszusammenfassungen ergänzt. Datumsfelder enthalten jetzt reine Datumswerte sowie zusätzliche Unix-Zeitstempel in Millisekunden.
+- (Voodoo2man) Verbesserte rollierende Sieben-Tage-Ansicht und Wochentagszusammenfassungen ergänzt. Datumsfelder enthalten jetzt reine Datumswerte sowie zusätzliche Unix-Zeitstempel in Millisekunden.
 
 ### 0.1.0 (2026-09-11)
 
-- (@Voodoo2man) Vollständige Funktionsveröffentlichung mit Stundenplandaten, Ferienterminen, verständlichen Stundennamen, Tagesübersichten, Informationen zur aktuellen und nächsten Stunde sowie React-Administrationsoberfläche.
+- (Voodoo2man) Vollständige Funktionsveröffentlichung mit Stundenplandaten, Ferienterminen, verständlichen Stundennamen, Tagesübersichten, Informationen zur aktuellen und nächsten Stunde sowie React-Administrationsoberfläche.
 
 ### 0.0.2 (2026-09-11)
 
-- (@Voodoo2man) Erste Veröffentlichung mit Trusted Publishing für npm vorbereitet.
+- (Voodoo2man) Erste Veröffentlichung mit Trusted Publishing für npm vorbereitet.
 
 ### 0.0.1 (2026-09-11)
 
-- (@Voodoo2man) Erste Veröffentlichung mit Schulsuche, geschützter Anmeldung,
+- (Voodoo2man) Erste Veröffentlichung mit Schulsuche, geschützter Anmeldung,
   Stundenplan, Tagesübersichten, Informationen zur aktuellen und nächsten
   Stunde, Ferienterminen, verständlichen Stammdatennamen und der Bereinigung
   nicht unterstützter alter Bereiche.
