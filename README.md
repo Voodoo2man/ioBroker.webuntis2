@@ -91,6 +91,10 @@ in a browser first. Then run the connection test in the adapter configuration
 and include only relevant, non-sensitive log messages when asking for help.
 
 ## Changelog
+### WORK IN PROGRESS
+
+- (Voodoo2man) Added the Ukrainian Admin translation.
+
 ### 0.1.10 (2026-10-18)
 
 - (Voodoo2man) Improved configuration feedback, holiday names, and connection status; reduced routine login log messages; verified Node.js 26 compatibility; and migrated Dependabot auto-merging to the `pull_request` event.
