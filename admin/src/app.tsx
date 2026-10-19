@@ -20,6 +20,7 @@ class App extends GenericApp {
 				en: require("./i18n/en.json"),
 				de: require("./i18n/de.json"),
 				ru: require("./i18n/ru.json"),
+				uk: require("./i18n/uk.json"),
 				pt: require("./i18n/pt.json"),
 				nl: require("./i18n/nl.json"),
 				fr: require("./i18n/fr.json"),

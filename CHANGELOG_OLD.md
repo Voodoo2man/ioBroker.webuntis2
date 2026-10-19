@@ -35,6 +35,6 @@
 
 ## 0.0.1 - 2026-09-09
 
-- WebUntis-Schulsuche über `schoolquery2` mit Treffer-Auswahl im React-Admin.
-- Username-/Passwort-Verbindungstest mit klassifizierten Fehlern und `info.connection`.
-- Phase-1-Grundlage für weitere WebUntis-Datenpunkte; Stundenplan-States sind noch nicht enthalten.
+- WebUntis school search via `schoolquery2` with result selection in the React Admin interface.
+- Username/password connection test with classified errors and `info.connection`.
+- Phase 1 foundation for additional WebUntis data points; timetable states are not yet included.
