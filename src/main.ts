@@ -170,6 +170,7 @@ class WebuntisNext extends utils.Adapter {
 	private hasTimetableSnapshot = false;
 	private unloaded = false;
 	private readonly migratedNames = new Set<string>();
+	private inboxMutationQueue: Promise<void> = Promise.resolve();
 	private lastMessageWarningAt = 0;
 	private lastExamsWarningAt = 0;
 
@@ -195,10 +196,17 @@ class WebuntisNext extends utils.Adapter {
 		}
 		const currentName = existing.common.name;
 		const generatedName = existing.native?.[WebuntisNext.generatedLessonNameKey];
+		const desiredNative = object.native as Record<string, unknown> | undefined;
+		const messageIdentityChanged =
+			dynamicName &&
+			desiredNative &&
+			"messageId" in desiredNative &&
+			hasObjectValueChanged(existing.native?.messageId, desiredNative.messageId);
 		const shouldMigrateName =
 			(Array.isArray(legacyName)
 				? legacyName.some(name => needsNameMigration(currentName, name))
 				: needsNameMigration(currentName, legacyName)) ||
+			messageIdentityChanged ||
 			(dynamicName && shouldMigrateDynamicName(currentName, generatedName));
 		const desiredCommon = (object.common || {}) as Record<string, unknown>;
 		const common: Record<string, unknown> = {};
@@ -226,7 +234,7 @@ class WebuntisNext extends utils.Adapter {
 			dynamicName &&
 			native &&
 			shouldMigrateName &&
-			(typeof generatedName !== "string" || generatedName === currentName) &&
+			(messageIdentityChanged || typeof generatedName !== "string" || generatedName === currentName) &&
 			hasObjectValueChanged(
 				existing.native?.[WebuntisNext.generatedLessonNameKey],
 				native[WebuntisNext.generatedLessonNameKey],
@@ -234,6 +242,15 @@ class WebuntisNext extends utils.Adapter {
 		if (Object.keys(common).length || shouldMigrateMarker) {
 			await this.extendObjectAsync(id, { common, ...(shouldMigrateMarker ? { native } : {}) });
 		}
+	}
+
+	private enqueueInboxMutation<T>(operation: () => Promise<T>): Promise<T> {
+		const result = this.inboxMutationQueue.then(operation);
+		this.inboxMutationQueue = result.then(
+			() => undefined,
+			() => undefined,
+		);
+		return result;
 	}
 
 	/** Throw when asynchronous work resumes after adapter shutdown. */
@@ -285,7 +302,10 @@ class WebuntisNext extends utils.Adapter {
 		if (!match) {
 			return;
 		}
-		const messageId = match[1];
+		return this.enqueueInboxMutation(() => this.markInboxMessageRead(match[1]));
+	}
+
+	private async markInboxMessageRead(messageId: string): Promise<void> {
 		const sourcePath = `inbox.messages.unread.${messageId}`;
 		const sourceId = await this.getStateAsync(`${sourcePath}.id`);
 		const fields: Array<[string, string, "string" | "number" | "boolean"]> = [
@@ -349,9 +369,10 @@ class WebuntisNext extends utils.Adapter {
 				{
 					type: "channel",
 					common: { name: entrySubject },
-					native: { messageId: entryId },
+					native: { messageId: entryId, [WebuntisNext.generatedLessonNameKey]: entrySubject },
 				},
 				"Read message",
+				true,
 			);
 			for (const [field, name, type] of fields) {
 				const value = entry[field];
@@ -867,7 +888,11 @@ class WebuntisNext extends utils.Adapter {
 		await setStateChangedOrInitialize(this, id, current?.val ?? defaultValue);
 	}
 
-	private async writeUnreadMessages(messages: WebUntisInboxMessage[]): Promise<void> {
+	private writeUnreadMessages(messages: WebUntisInboxMessage[]): Promise<void> {
+		return this.enqueueInboxMutation(() => this.writeUnreadMessagesLocked(messages));
+	}
+
+	private async writeUnreadMessagesLocked(messages: WebUntisInboxMessage[]): Promise<void> {
 		const sortedMessages = [...messages].sort((left, right) => left.dateTime.localeCompare(right.dateTime));
 		const unreadMessages: WebUntisInboxMessage[] = [];
 		const locallyReadIds = new Set<string>();
@@ -909,9 +934,13 @@ class WebuntisNext extends utils.Adapter {
 				{
 					type: "channel",
 					common: { name: message.subject || `Message ${message.id}` },
-					native: { messageId: message.id },
+					native: {
+						messageId: message.id,
+						[WebuntisNext.generatedLessonNameKey]: message.subject || `Message ${message.id}`,
+					},
 				},
 				message.subject || `Message ${message.id}`,
+				true,
 			);
 			if (!message.readInWebUntis && !locallyRead) {
 				await this.ensureTranslatedObject(

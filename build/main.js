@@ -141,10 +141,11 @@ class WebuntisNext extends utils.Adapter {
   hasTimetableSnapshot = false;
   unloaded = false;
   migratedNames = /* @__PURE__ */ new Set();
+  inboxMutationQueue = Promise.resolve();
   lastMessageWarningAt = 0;
   lastExamsWarningAt = 0;
   async ensureTranslatedObject(id, object, legacyName, dynamicName = false, clearDescription = false) {
-    var _a, _b, _c, _d;
+    var _a, _b, _c, _d, _e;
     this.ensureActive();
     await this.setObjectNotExistsAsync(id, object);
     this.ensureActive();
@@ -160,7 +161,9 @@ class WebuntisNext extends utils.Adapter {
     }
     const currentName = existing.common.name;
     const generatedName = (_a = existing.native) == null ? void 0 : _a[WebuntisNext.generatedLessonNameKey];
-    const shouldMigrateName = (Array.isArray(legacyName) ? legacyName.some((name) => (0, import_ObjectTranslations.needsNameMigration)(currentName, name)) : (0, import_ObjectTranslations.needsNameMigration)(currentName, legacyName)) || dynamicName && (0, import_ObjectTranslations.shouldMigrateDynamicName)(currentName, generatedName);
+    const desiredNative = object.native;
+    const messageIdentityChanged = dynamicName && desiredNative && "messageId" in desiredNative && (0, import_ObjectTranslations.hasObjectValueChanged)((_b = existing.native) == null ? void 0 : _b.messageId, desiredNative.messageId);
+    const shouldMigrateName = (Array.isArray(legacyName) ? legacyName.some((name) => (0, import_ObjectTranslations.needsNameMigration)(currentName, name)) : (0, import_ObjectTranslations.needsNameMigration)(currentName, legacyName)) || messageIdentityChanged || dynamicName && (0, import_ObjectTranslations.shouldMigrateDynamicName)(currentName, generatedName);
     const desiredCommon = object.common || {};
     const common = {};
     for (const key of ["type", "role", "read", "write", "def"]) {
@@ -176,17 +179,25 @@ class WebuntisNext extends utils.Adapter {
     } else if (desiredCommon.role === "date" && existing.common.unit !== void 0) {
       common.unit = null;
     }
-    if (shouldMigrateName && (0, import_ObjectTranslations.hasObjectValueChanged)(existing.common.name, (_b = object.common) == null ? void 0 : _b.name)) {
-      common.name = (_c = object.common) == null ? void 0 : _c.name;
+    if (shouldMigrateName && (0, import_ObjectTranslations.hasObjectValueChanged)(existing.common.name, (_c = object.common) == null ? void 0 : _c.name)) {
+      common.name = (_d = object.common) == null ? void 0 : _d.name;
     }
     const native = dynamicName && object.native && typeof object.native === "object" ? object.native : void 0;
-    const shouldMigrateMarker = dynamicName && native && shouldMigrateName && (typeof generatedName !== "string" || generatedName === currentName) && (0, import_ObjectTranslations.hasObjectValueChanged)(
-      (_d = existing.native) == null ? void 0 : _d[WebuntisNext.generatedLessonNameKey],
+    const shouldMigrateMarker = dynamicName && native && shouldMigrateName && (messageIdentityChanged || typeof generatedName !== "string" || generatedName === currentName) && (0, import_ObjectTranslations.hasObjectValueChanged)(
+      (_e = existing.native) == null ? void 0 : _e[WebuntisNext.generatedLessonNameKey],
       native[WebuntisNext.generatedLessonNameKey]
     );
     if (Object.keys(common).length || shouldMigrateMarker) {
       await this.extendObjectAsync(id, { common, ...shouldMigrateMarker ? { native } : {} });
     }
+  }
+  enqueueInboxMutation(operation) {
+    const result = this.inboxMutationQueue.then(operation);
+    this.inboxMutationQueue = result.then(
+      () => void 0,
+      () => void 0
+    );
+    return result;
   }
   /** Throw when asynchronous work resumes after adapter shutdown. */
   ensureActive() {
@@ -214,7 +225,6 @@ class WebuntisNext extends utils.Adapter {
     this.on("unload", this.onUnload.bind(this));
   }
   async onStateChange(id, state) {
-    var _a, _b;
     if (!state || state.val !== true || this.unloaded) {
       return;
     }
@@ -236,7 +246,10 @@ class WebuntisNext extends utils.Adapter {
     if (!match) {
       return;
     }
-    const messageId = match[1];
+    return this.enqueueInboxMutation(() => this.markInboxMessageRead(match[1]));
+  }
+  async markInboxMessageRead(messageId) {
+    var _a, _b;
     const sourcePath = `inbox.messages.unread.${messageId}`;
     const sourceId = await this.getStateAsync(`${sourcePath}.id`);
     const fields = [
@@ -255,9 +268,9 @@ class WebuntisNext extends utils.Adapter {
     });
     const existingSlots = /* @__PURE__ */ new Set();
     for (const row of channelRows.rows || []) {
-      const match2 = /^inbox\.messages\.read\.([^.]+)\./.exec(row.id.replace(`${this.namespace}.`, ""));
-      if (match2) {
-        existingSlots.add(match2[1]);
+      const match = /^inbox\.messages\.read\.([^.]+)\./.exec(row.id.replace(`${this.namespace}.`, ""));
+      if (match) {
+        existingSlots.add(match[1]);
       }
     }
     const readMessages = [];
@@ -303,9 +316,10 @@ class WebuntisNext extends utils.Adapter {
         {
           type: "channel",
           common: { name: entrySubject },
-          native: { messageId: entryId }
+          native: { messageId: entryId, [WebuntisNext.generatedLessonNameKey]: entrySubject }
         },
-        "Read message"
+        "Read message",
+        true
       );
       for (const [field, name, type] of fields) {
         const value = entry[field];
@@ -788,7 +802,10 @@ class WebuntisNext extends utils.Adapter {
     const current = await this.getStateAsync(id);
     await (0, import_StateWriter.setStateChangedOrInitialize)(this, id, (_a = current == null ? void 0 : current.val) != null ? _a : defaultValue);
   }
-  async writeUnreadMessages(messages) {
+  writeUnreadMessages(messages) {
+    return this.enqueueInboxMutation(() => this.writeUnreadMessagesLocked(messages));
+  }
+  async writeUnreadMessagesLocked(messages) {
     const sortedMessages = [...messages].sort((left, right) => left.dateTime.localeCompare(right.dateTime));
     const unreadMessages = [];
     const locallyReadIds = /* @__PURE__ */ new Set();
@@ -830,9 +847,13 @@ class WebuntisNext extends utils.Adapter {
         {
           type: "channel",
           common: { name: message.subject || `Message ${message.id}` },
-          native: { messageId: message.id }
+          native: {
+            messageId: message.id,
+            [WebuntisNext.generatedLessonNameKey]: message.subject || `Message ${message.id}`
+          }
         },
-        message.subject || `Message ${message.id}`
+        message.subject || `Message ${message.id}`,
+        true
       );
       if (!message.readInWebUntis && !locallyRead) {
         await this.ensureTranslatedObject(

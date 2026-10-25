@@ -103,6 +103,7 @@ function makeAdapterHarness(
 	];
 	const overrides: Record<string, unknown> = {
 		unloaded: false,
+		inboxMutationQueue: Promise.resolve(),
 		lastExamsWarningAt: 0,
 		childTodayLessons: new Map(),
 		namespace: "webuntis2.0",
@@ -433,6 +434,99 @@ describe("upcoming exams adapter states", () => {
 
 		expect(updatedCommon.name).to.include({ en: "Refresh now", de: "Jetzt aktualisieren" });
 		expect(updatedCommon.desc).to.equal(null);
+	});
+
+	it("preserves both messages when markRead commands run concurrently", async () => {
+		const harness = makeAdapterHarness(async () => [], [], [], false, true);
+		const messages = [
+			{
+				id: 101,
+				readInWebUntis: false,
+				dateTime: "2026-10-24T10:00:00",
+				sender: "Teacher",
+				subject: "First message",
+				content: "First",
+				contentIsPreview: false,
+				hasAttachments: false,
+			},
+			{
+				id: 102,
+				readInWebUntis: false,
+				dateTime: "2026-10-25T10:00:00",
+				sender: "Office",
+				subject: "Second message",
+				content: "Second",
+				contentIsPreview: false,
+				hasAttachments: false,
+			},
+		];
+		await harness.methods.writeUnreadMessages(messages as never[]);
+
+		await Promise.all([
+			harness.methods.onStateChange("inbox.messages.unread.01.markRead", {
+				val: true,
+				ack: false,
+			} as ioBroker.State),
+			harness.methods.onStateChange("inbox.messages.unread.02.markRead", {
+				val: true,
+				ack: false,
+			} as ioBroker.State),
+		]);
+
+		expect(harness.values.get("inbox.messages.read.count")).to.equal(2);
+		expect(harness.values.get("inbox.messages.read.01.id")).to.equal(101);
+		expect(harness.values.get("inbox.messages.read.02.id")).to.equal(102);
+		expect(harness.values.get("inbox.messages.unread.unreadCount")).to.equal(0);
+	});
+
+	it("updates generated message slot names and native IDs when the slot changes identity", async () => {
+		const AdapterClass = loadAdapterClassForTest();
+		let commonPatch: Record<string, unknown> = {};
+		let nativePatch: Record<string, unknown> = {};
+		const adapter = Object.assign(Object.create(AdapterClass.prototype) as object, {
+			unloaded: false,
+			migratedNames: new Set<string>(),
+			ensureActive: () => undefined,
+			setObjectNotExistsAsync: async () => undefined,
+			getObjectAsync: async () => ({
+				_id: "webuntis2.0.inbox.messages.unread.01",
+				type: "channel",
+				common: { name: "Old message subject" },
+				native: { messageId: 1, webuntis2GeneratedName: "Old message subject" },
+			}),
+			extendObjectAsync: async (
+				_id: string,
+				patch: { common: Record<string, unknown>; native?: Record<string, unknown> },
+			) => {
+				commonPatch = patch.common;
+				nativePatch = patch.native || {};
+			},
+		});
+		const ensureTranslatedObject = (
+			AdapterClass.prototype as unknown as {
+				ensureTranslatedObject: (
+					id: string,
+					object: ioBroker.SettableObject,
+					legacyName?: string | string[],
+					dynamicName?: boolean,
+				) => Promise<void>;
+			}
+		).ensureTranslatedObject;
+
+		await ensureTranslatedObject.call(
+			adapter,
+			"inbox.messages.unread.01",
+			{
+				type: "channel",
+				common: { name: "New message subject" },
+				native: { messageId: 2, webuntis2GeneratedName: "New message subject" },
+			},
+			"New message subject",
+			true,
+		);
+
+		expect(commonPatch.name).to.equal("New message subject");
+		expect(nativePatch).to.deep.equal({ messageId: 2, webuntis2GeneratedName: "New message subject" });
 	});
 
 	it("keeps inbox at the instance root and migrates old info inbox values", async () => {
