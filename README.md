@@ -95,8 +95,7 @@ endpoint permits it and otherwise uses the available preview; the
 
 The `info.refresh` button runs the complete startup refresh immediately:
 timetable, messages, exams, holidays, cleanup, and derived current/next lesson
-states. The weekly `schoolStart` and `schoolEnd` summary states are strings
-with the `time` role and show the first lesson start and last lesson end.
+states.
 
 Upcoming exams are available below each student's `exams` channel.
 `students.<name>.exams.count` gives the number of exams announced in the
@@ -126,11 +125,7 @@ contains the following fields:
 ]
 ```
 
-The individual `entries.<NN>` channels expose `id` as a number, `date` as a
-calendar-date state, and `daysUntil` as the number of local calendar days from
-today to the exam date. The `daysUntil` state uses the `value.interval` role
-with unit `d`. Exam times remain strings in `HH:mm` format. Exam data refreshes
-during the normal five-minute update.
+The individual `entries.<NN>` channels expose `id` as a number.
 Availability depends on the WebUntis account's school permissions and API
 scope. A failed or forbidden request leaves the last successful exam data in
 place; a successful response with no exams clears stale entries. Exam data
@@ -141,11 +136,6 @@ data and reads each student's timetable, so identical exams remain separate
 and are attributed to the correct child. School permissions can still deny
 access to one or more child timetables; a failed refresh preserves the last
 successful data.
-
-Redundant `*Timestamp` aliases for holiday dates and timetable day and lesson
-dates are removed automatically. Use the corresponding `startDate`, `endDate`,
-or `date` state, which already stores the calendar date as a Unix timestamp
-with the `date` role.
 
 ## Requirements and notes
 
@@ -181,7 +171,6 @@ and include only relevant, non-sensitive log messages when asking for help.
 - (Voodoo2man) Added a manual full refresh button
 - (Voodoo2man) Improved timetable details
 - (Voodoo2man) Removed duplicate date states.
-- (Voodoo2man) Restored minute-level current and next lesson updates for accounts without linked students.
 
 ### 0.1.10 (2026-10-18)
 
