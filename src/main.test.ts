@@ -186,14 +186,15 @@ const sampleExam = (id: number, startTime: string, displayText: string): Upcomin
 });
 
 describe("upcoming exams adapter states", () => {
-	it("triggers a timetable refresh from the info button", async () => {
+	it("triggers a timetable refresh from local and fully qualified info button IDs", async () => {
 		const harness = makeAdapterHarness(async () => []);
 		let refreshCount = 0;
 		Object.assign(harness.adapter, { updateTimetable: async () => void (refreshCount += 1) });
 
 		await harness.methods.onStateChange("info.refresh", { val: true, ack: false } as ioBroker.State);
+		await harness.methods.onStateChange("webuntis2.0.info.refresh", { val: true, ack: false } as ioBroker.State);
 
-		expect(refreshCount).to.equal(1);
+		expect(refreshCount).to.equal(2);
 		expect(harness.values.get("info.refresh")).to.equal(false);
 	});
 

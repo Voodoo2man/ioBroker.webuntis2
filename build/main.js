@@ -201,7 +201,7 @@ class WebuntisNext extends utils.Adapter {
     if (!state || state.ack || state.val !== true || this.unloaded) {
       return;
     }
-    if (id === "info.refresh") {
+    if (id === "info.refresh" || id === `${this.namespace}.info.refresh`) {
       try {
         await this.updateTimetable();
       } finally {
