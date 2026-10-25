@@ -1,18 +1,19 @@
 import * as utils from "@iobroker/adapter-core";
 import { cleanupLegacyNamespace } from "./lib/LegacyNamespaceCleanup";
-import { setStateChangedOrInitialize } from "./lib/StateWriter";
 import { removeStaleLessonStates } from "./lib/LessonStateCleanup";
 import {
 	hasObjectValueChanged,
-	shouldMigrateDynamicName,
 	needsNameMigration,
+	shouldMigrateDynamicName,
 	translatedLessonFallback,
 	translatedName,
 	translatedStateName,
 	translatedTimetableGroup,
 	translatedWeekday,
 } from "./lib/ObjectTranslations";
+import { setStateChangedOrInitialize } from "./lib/StateWriter";
 import { deriveCurrentNextLesson, type CurrentNextLessonSummary } from "./lib/webuntis/CurrentNextLesson";
+import type { UpcomingExam } from "./lib/webuntis/Exams";
 import type { HolidaySummary } from "./lib/webuntis/Holidays";
 import {
 	buildLessonComparison,
@@ -28,8 +29,30 @@ import type { WebUntisHttpDiagnostic, WebUntisInboxMessage } from "./lib/webunti
 
 const TIMETABLE_INTERVAL_MS = 5 * 60 * 1000;
 const CURRENT_NEXT_INTERVAL_MS = 60 * 1000;
+const EXAMS_MAX_ATTEMPTS = 3;
 const TIMETABLE_GROUPS = ["today", "tomorrow", "week"] as const;
 type TimetableGroup = (typeof TIMETABLE_GROUPS)[number];
+
+function studentChannelIds(students: Array<{ id: number; name: string }>): Map<number, string> {
+	const normalize = (name: string): string =>
+		name
+			.normalize("NFKD")
+			.replace(/[\u0300-\u036f]/g, "")
+			.toLowerCase()
+			.replace(/[^a-z0-9]+/g, "_")
+			.replace(/^_+|_+$/g, "") || "student";
+	const names = students.map(student => ({
+		...student,
+		key: normalize(!student.name || student.name === `Student ${student.id}` ? String(student.id) : student.name),
+	}));
+	const counts = new Map<string, number>();
+	for (const student of names) {
+		counts.set(student.key, (counts.get(student.key) ?? 0) + 1);
+	}
+	return new Map(
+		names.map(student => [student.id, `${student.key}${counts.get(student.key)! > 1 ? `_${student.id}` : ""}`]),
+	);
+}
 
 const SUMMARY_STATE_DEFINITIONS: Record<
 	keyof TimetableSummary,
@@ -50,8 +73,8 @@ const SUMMARY_STATE_DEFINITIONS: Record<
 		def: 0,
 		unit: "min",
 	},
-	schoolStart: { type: "string", role: "text", name: translatedName("schoolStart"), def: "" },
-	schoolEnd: { type: "string", role: "text", name: translatedName("schoolEnd"), def: "" },
+	schoolStart: { type: "string", role: "time", name: translatedName("schoolStart"), def: "" },
+	schoolEnd: { type: "string", role: "time", name: translatedName("schoolEnd"), def: "" },
 	subjects: { type: "string", role: "text", name: translatedName("subjects"), def: "" },
 	subjectCount: { type: "number", role: "value", name: translatedName("subjectCount"), def: 0 },
 	firstSubject: { type: "string", role: "text", name: translatedName("firstSubject"), def: "" },
@@ -63,7 +86,6 @@ const SUMMARY_STATE_DEFINITIONS: Record<
 
 const LESSON_STATE_NAMES: Record<string, ioBroker.Translated> = {
 	date: translatedName("date"),
-	dateTimestamp: translatedName("dateTimestamp"),
 	startTime: translatedName("startTime"),
 	endTime: translatedName("endTime"),
 	subject: translatedName("subject"),
@@ -137,22 +159,28 @@ function numericDate(value: string): number {
 	return year && month && day ? new Date(year, month - 1, day).getTime() : 0;
 }
 
+/** Main ioBroker adapter. */
 class WebuntisNext extends utils.Adapter {
 	private static readonly generatedLessonNameKey = "webuntis2GeneratedName";
 	private readonly webUntis: WebUntisService;
 	private timetableTimer?: ioBroker.Timeout;
 	private currentNextTimer?: ioBroker.Timeout;
 	private todayLessons: TimetableLesson[] = [];
+	private childTodayLessons = new Map<number, { name: string; channelId: string; lessons: TimetableLesson[] }>();
 	private hasTimetableSnapshot = false;
 	private unloaded = false;
 	private readonly migratedNames = new Set<string>();
+	private inboxMutationQueue: Promise<void> = Promise.resolve();
+	private refreshMutationQueue: Promise<void> = Promise.resolve();
 	private lastMessageWarningAt = 0;
+	private lastExamsWarningAt = 0;
 
 	private async ensureTranslatedObject(
 		id: string,
 		object: ioBroker.SettableObject,
-		legacyName?: string,
+		legacyName?: string | string[],
 		dynamicName = false,
+		clearDescription = false,
 	): Promise<void> {
 		this.ensureActive();
 		await this.setObjectNotExistsAsync(id, object);
@@ -169,8 +197,17 @@ class WebuntisNext extends utils.Adapter {
 		}
 		const currentName = existing.common.name;
 		const generatedName = existing.native?.[WebuntisNext.generatedLessonNameKey];
+		const desiredNative = object.native as Record<string, unknown> | undefined;
+		const messageIdentityChanged =
+			dynamicName &&
+			desiredNative &&
+			"messageId" in desiredNative &&
+			hasObjectValueChanged(existing.native?.messageId, desiredNative.messageId);
 		const shouldMigrateName =
-			needsNameMigration(currentName, legacyName) ||
+			(Array.isArray(legacyName)
+				? legacyName.some(name => needsNameMigration(currentName, name))
+				: needsNameMigration(currentName, legacyName)) ||
+			messageIdentityChanged ||
 			(dynamicName && shouldMigrateDynamicName(currentName, generatedName));
 		const desiredCommon = (object.common || {}) as Record<string, unknown>;
 		const common: Record<string, unknown> = {};
@@ -179,8 +216,13 @@ class WebuntisNext extends utils.Adapter {
 				common[key] = desiredCommon[key];
 			}
 		}
+		if (clearDescription && existing.common.desc !== undefined) {
+			common.desc = null;
+		}
 		if ("unit" in desiredCommon && hasObjectValueChanged(existing.common.unit, desiredCommon.unit)) {
 			common.unit = desiredCommon.unit;
+		} else if (desiredCommon.role === "date" && existing.common.unit !== undefined) {
+			common.unit = null;
 		}
 		if (shouldMigrateName && hasObjectValueChanged(existing.common.name, object.common?.name)) {
 			common.name = object.common?.name;
@@ -193,7 +235,7 @@ class WebuntisNext extends utils.Adapter {
 			dynamicName &&
 			native &&
 			shouldMigrateName &&
-			(typeof generatedName !== "string" || generatedName === currentName) &&
+			(messageIdentityChanged || typeof generatedName !== "string" || generatedName === currentName) &&
 			hasObjectValueChanged(
 				existing.native?.[WebuntisNext.generatedLessonNameKey],
 				native[WebuntisNext.generatedLessonNameKey],
@@ -203,12 +245,36 @@ class WebuntisNext extends utils.Adapter {
 		}
 	}
 
+	private enqueueInboxMutation<T>(operation: () => Promise<T>): Promise<T> {
+		const result = this.inboxMutationQueue.then(operation);
+		this.inboxMutationQueue = result.then(
+			() => undefined,
+			() => undefined,
+		);
+		return result;
+	}
+
+	private enqueueRefreshMutation<T>(operation: () => Promise<T>): Promise<T> {
+		const result = this.refreshMutationQueue.then(operation);
+		this.refreshMutationQueue = result.then(
+			() => undefined,
+			() => undefined,
+		);
+		return result;
+	}
+
+	/** Throw when asynchronous work resumes after adapter shutdown. */
 	private ensureActive(): void {
 		if (this.unloaded) {
 			throw new WebUntisError("ABORTED", "Adapter is shutting down");
 		}
 	}
 
+	/**
+	 * Create the WebUntis adapter.
+	 *
+	 * @param options Adapter constructor options.
+	 */
 	public constructor(options: Partial<utils.AdapterOptions> = {}) {
 		super({ ...options, name: "webuntis2" });
 		this.webUntis = new WebUntisService(
@@ -220,7 +286,151 @@ class WebuntisNext extends utils.Adapter {
 		);
 		this.on("ready", this.onReady.bind(this));
 		this.on("message", this.onMessage.bind(this));
+		this.on("stateChange", this.onStateChange.bind(this));
 		this.on("unload", this.onUnload.bind(this));
+	}
+
+	private async onStateChange(id: string, state: ioBroker.State | null | undefined): Promise<void> {
+		if (!state || state.val !== true || this.unloaded) {
+			return;
+		}
+		if (id === "info.refresh" || id === `${this.namespace}.info.refresh`) {
+			try {
+				await this.refreshAll();
+			} finally {
+				if (!this.unloaded) {
+					await this.setStateAsync("info.refresh", false, true);
+				}
+			}
+			return;
+		}
+		if (state.ack) {
+			return;
+		}
+		const localId = id.startsWith(`${this.namespace}.`) ? id.slice(this.namespace.length + 1) : id;
+		const match = /^inbox\.messages\.unread\.([a-zA-Z0-9_-]+)\.markRead$/.exec(localId);
+		if (!match) {
+			return;
+		}
+		return this.enqueueInboxMutation(() => this.markInboxMessageRead(match[1]));
+	}
+
+	private async markInboxMessageRead(messageId: string): Promise<void> {
+		const sourcePath = `inbox.messages.unread.${messageId}`;
+		const sourceId = await this.getStateAsync(`${sourcePath}.id`);
+		const fields: Array<[string, string, "string" | "number" | "boolean"]> = [
+			["id", "Message ID", typeof sourceId?.val === "number" ? "number" : "string"],
+			["dateTime", "Date and time", "string"],
+			["sender", "Sender", "string"],
+			["subject", "Subject", "string"],
+			["content", "Content", "string"],
+			["contentIsPreview", "Content is preview", "boolean"],
+			["hasAttachments", "Has attachments", "boolean"],
+			["readInWebUntis", "Read in WebUntis", "boolean"],
+			["readLocally", "Read locally", "boolean"],
+		];
+		const channelRows = await this.getObjectListAsync({
+			startkey: `${this.namespace}.inbox.messages.read.`,
+			endkey: `${this.namespace}.inbox.messages.read.\uffff`,
+		});
+		const existingSlots = new Set<string>();
+		for (const row of channelRows.rows || []) {
+			const match = /^inbox\.messages\.read\.([^.]+)\./.exec(row.id.replace(`${this.namespace}.`, ""));
+			if (match) {
+				existingSlots.add(match[1]);
+			}
+		}
+		const readMessages: Array<Record<string, ioBroker.StateValue>> = [];
+		for (const slot of existingSlots) {
+			const entry: Record<string, ioBroker.StateValue> = {};
+			for (const [field] of fields) {
+				const current = await this.getStateAsync(`inbox.messages.read.${slot}.${field}`);
+				if (current?.val !== undefined && current.val !== null) {
+					entry[field] = current.val;
+				}
+			}
+			if (entry.id !== undefined && entry.id !== sourceId?.val) {
+				readMessages.push(entry);
+			}
+		}
+		const sourceMessage: Record<string, ioBroker.StateValue> = {};
+		for (const [field] of fields) {
+			const current = await this.getStateAsync(`${sourcePath}.${field}`);
+			if (current?.val === undefined || current.val === null) {
+				continue;
+			}
+			sourceMessage[field] = current.val;
+		}
+		sourceMessage.id = sourceId?.val ?? messageId;
+		sourceMessage.read = true;
+		sourceMessage.readLocally = true;
+		readMessages.push(sourceMessage);
+		readMessages.sort((left, right) => String(left.dateTime ?? "").localeCompare(String(right.dateTime ?? "")));
+		for (const slot of existingSlots) {
+			await this.delObjectAsync(`inbox.messages.read.${slot}`, { recursive: true });
+		}
+		for (let index = 0; index < readMessages.length; index++) {
+			const entry = readMessages[index];
+			const slot = String(index + 1).padStart(2, "0");
+			const targetPath = `inbox.messages.read.${slot}`;
+			const entryId = entry.id ?? messageId;
+			const entrySubject = typeof entry.subject === "string" ? entry.subject : `Message ${entryId}`;
+			await this.ensureTranslatedObject(
+				targetPath,
+				{
+					type: "channel",
+					common: { name: entrySubject },
+					native: { messageId: entryId, [WebuntisNext.generatedLessonNameKey]: entrySubject },
+				},
+				"Read message",
+				true,
+			);
+			for (const [field, name, type] of fields) {
+				const value = entry[field];
+				if (value === undefined || value === null) {
+					continue;
+				}
+				const role =
+					field === "dateTime"
+						? "date"
+						: type === "boolean"
+							? "indicator"
+							: type === "number"
+								? "value"
+								: "text";
+				await this.writeSimpleState(
+					`${targetPath}.${field}`,
+					value,
+					name,
+					type,
+					role,
+					type === "boolean" ? false : type === "number" ? 0 : "",
+				);
+			}
+			await this.writeSimpleState(`${targetPath}.read`, true, "Read", "boolean", "indicator", false);
+			await this.writeSimpleState(
+				`${targetPath}.readInWebUntis`,
+				entry.readInWebUntis === true,
+				"Read in WebUntis",
+				"boolean",
+				"indicator",
+				false,
+			);
+		}
+		await setStateChangedOrInitialize(this, "inbox.messages.read.count", readMessages.length);
+		await this.setStateAsync(`${sourcePath}.markRead`, false, true);
+		await this.delObjectAsync(sourcePath, { recursive: true });
+		const unreadState = await this.getStateAsync("inbox.messages.unread.unread");
+		if (typeof unreadState?.val === "string") {
+			try {
+				const unreadMessages = JSON.parse(unreadState.val) as WebUntisInboxMessage[];
+				const remaining = unreadMessages.filter(message => String(message.id) !== String(sourceId?.val));
+				await setStateChangedOrInitialize(this, "inbox.messages.unread.unread", JSON.stringify(remaining));
+				await setStateChangedOrInitialize(this, "inbox.messages.unread.unreadCount", remaining.length);
+			} catch {
+				this.log.warn("Could not update the inbox unread summary after marking a message as read");
+			}
+		}
 	}
 
 	private logHttpDiagnostic(diagnostic: WebUntisHttpDiagnostic): void {
@@ -237,6 +447,26 @@ class WebuntisNext extends utils.Adapter {
 			"Information",
 		);
 		await this.ensureTranslatedObject(
+			"info.refresh",
+			{
+				type: "state",
+				common: {
+					name: translatedName("refresh"),
+					type: "boolean",
+					role: "button",
+					read: false,
+					write: true,
+					def: false,
+				},
+				native: {},
+			},
+			["Refresh now", "refresh"],
+			false,
+			true,
+		);
+		await this.subscribeStatesAsync("info.refresh");
+		await this.subscribeInboxMessageActions();
+		await this.ensureTranslatedObject(
 			"info.connection",
 			{
 				type: "state",
@@ -250,6 +480,22 @@ class WebuntisNext extends utils.Adapter {
 				native: {},
 			},
 			"Device or service connected",
+		);
+		await this.ensureTranslatedObject(
+			"info.accountType",
+			{
+				type: "state",
+				common: {
+					name: { en: "WebUntis account type", de: "WebUntis-Kontotyp" },
+					type: "string",
+					role: "text",
+					read: true,
+					write: false,
+					def: "Unknown",
+				},
+				native: {},
+			},
+			"WebUntis account type",
 		);
 		await this.ensureTranslatedObject(
 			"info.lastUpdate",
@@ -296,15 +542,36 @@ class WebuntisNext extends utils.Adapter {
 			},
 			"Next timetable update",
 		);
+		await this.ensureStudentsRoot();
 		await this.ensureInboxRoot();
-		await this.cleanupObsoleteStructure();
+		await this.ensureHolidaysRoot();
 		await this.setState("info.connection", false, true);
 		if (!this.hasConnectionConfig()) {
 			return;
 		}
-		await this.updateTimetable();
+		await this.refreshAll();
 		this.scheduleTimetableUpdate();
 		this.scheduleCurrentNextUpdate();
+	}
+
+	private async subscribeInboxMessageActions(): Promise<void> {
+		await this.subscribeStatesAsync("inbox.messages.unread.*.markRead");
+	}
+
+	private async refreshAll(): Promise<void> {
+		return this.enqueueRefreshMutation(() => this.refreshAllLocked());
+	}
+
+	private async refreshAllLocked(): Promise<void> {
+		if (this.unloaded) {
+			return;
+		}
+		await this.ensureStudentsRoot();
+		await this.ensureInboxRoot();
+		await this.ensureHolidaysRoot();
+		await this.cleanupObsoleteStructure();
+		await this.updateTimetableLocked();
+		await this.updateCurrentNextStatesLocked();
 	}
 
 	private scheduleTimetableUpdate(): void {
@@ -342,27 +609,110 @@ class WebuntisNext extends utils.Adapter {
 	}
 
 	private async updateTimetable(): Promise<void> {
+		return this.enqueueRefreshMutation(() => this.updateTimetableLocked());
+	}
+
+	private async updateTimetableLocked(): Promise<void> {
 		if (this.unloaded) {
 			return;
 		}
 		await this.setState("info.lastUpdate", new Date().toISOString(), true);
 		try {
 			await cleanupLegacyNamespace(this, "messages");
-			await this.ensureTimetableRoot();
+			await this.ensureStudentsRoot();
 			await this.ensureHolidaysRoot();
 			const now = new Date();
 			const data = await this.webUntis.loadTimetable(this.config, now);
 			if (this.unloaded) {
 				return;
 			}
-			this.todayLessons = data.today;
+			const accountType = data.personType === 5 ? "Student" : data.personType === 12 ? "Parent" : "Other";
+			await setStateChangedOrInitialize(this, "info.accountType", accountType);
+			const students = data.children?.length
+				? data.children
+				: data.studentId
+					? [{ id: data.studentId, name: `Student ${data.studentId}`, timetable: data }]
+					: [];
+			const childChannelIds = studentChannelIds(students);
+			this.todayLessons = students[0]?.timetable.today ?? data.today;
 			this.hasTimetableSnapshot = true;
 			let updated = 0;
 			let removed = 0;
-			for (const group of TIMETABLE_GROUPS) {
-				const result = await this.writeTimetableGroup(group, data[group], now);
-				updated += result.updated;
-				removed += result.removed;
+			if (students.length) {
+				this.childTodayLessons = new Map(
+					students.map(student => [
+						student.id,
+						{
+							name: student.name,
+							channelId: childChannelIds.get(student.id)!,
+							lessons: student.timetable.today,
+						},
+					]),
+				);
+				for (const child of students) {
+					this.ensureActive();
+					const childRoot = `students.${childChannelIds.get(child.id)}`;
+					await this.ensureTranslatedObject(
+						childRoot,
+						{
+							type: "channel",
+							common: { name: child.name || `Student ${child.id}` },
+							native: { studentId: child.id },
+						},
+						child.name || `Student ${child.id}`,
+					);
+					const timetableRoot = `${childRoot}.timetable`;
+					await this.ensureTranslatedObject(
+						timetableRoot,
+						{ type: "channel", common: { name: translatedName("timetable") }, native: {} },
+						"Timetable",
+					);
+					for (const group of TIMETABLE_GROUPS) {
+						const result = await this.writeTimetableGroup(
+							group,
+							child.timetable[group],
+							now,
+							timetableRoot,
+						);
+						updated += result.updated;
+						removed += result.removed;
+					}
+				}
+			} else {
+				this.childTodayLessons.clear();
+			}
+			const existingChildren = await this.getObjectListAsync({
+				startkey: `${this.namespace}.students.`,
+				endkey: `${this.namespace}.students.\uffff`,
+			});
+			const expectedChildren = new Set(childChannelIds.values());
+			const childRoots = new Set(
+				(existingChildren.rows || []).map(
+					object => object.id.replace(`${this.namespace}.students.`, "").split(".")[0],
+				),
+			);
+			for (const childId of childRoots) {
+				if (expectedChildren.has(childId)) {
+					continue;
+				}
+				const studentRoot = await this.getObjectAsync(`students.${childId}`);
+				const native = studentRoot?.native as { studentId?: unknown } | undefined;
+				if (Number.isSafeInteger(native?.studentId) || childId.startsWith("student_")) {
+					this.ensureActive();
+					await this.delObjectAsync(`students.${childId}`, { recursive: true });
+				}
+			}
+			if (!students.length) {
+				await this.ensureTranslatedObject(
+					"timetable",
+					{ type: "channel", common: { name: translatedName("timetable") }, native: {} },
+					"Timetable",
+				);
+				for (const group of TIMETABLE_GROUPS) {
+					const result = await this.writeTimetableGroup(group, data[group], now);
+					updated += result.updated;
+					removed += result.removed;
+				}
 			}
 			if (data.holidays) {
 				await this.writeHolidaySummary(data.holidays);
@@ -382,6 +732,33 @@ class WebuntisNext extends utils.Adapter {
 					this.lastMessageWarningAt = Date.now();
 				}
 			}
+			try {
+				const exams = await this.loadUpcomingExamsWithRetry(now);
+				if (this.unloaded) {
+					return;
+				}
+				await this.writeUpcomingExams(
+					exams.map(exam =>
+						data.studentId && exam.studentId === undefined
+							? { ...exam, studentId: data.studentId, studentName: `Student ${data.studentId}` }
+							: exam,
+					),
+					students.map(student => ({ id: student.id, name: student.name })),
+					now,
+				);
+				this.lastExamsWarningAt = 0;
+			} catch (error) {
+				const warningIntervalMs = 30 * 60 * 1000;
+				if (Date.now() - this.lastExamsWarningAt >= warningIntervalMs) {
+					const code = error instanceof WebUntisError ? error.code : "UNEXPECTED_RESPONSE";
+					const detail = error instanceof Error ? ` (${error.message})` : "";
+					this.log.warn(
+						`WebUntis upcoming exams refresh failed: ${code}${detail}; previous exam data was kept`,
+					);
+					this.lastExamsWarningAt = Date.now();
+				}
+			}
+			await this.cleanupLegacyDataRoots(students.length > 0);
 			await this.setState("info.lastSuccessfulUpdate", now.toISOString(), true);
 			await this.setState("info.nextUpdate", new Date(now.getTime() + TIMETABLE_INTERVAL_MS).toISOString(), true);
 			await this.setState("info.connection", true, true);
@@ -398,6 +775,54 @@ class WebuntisNext extends utils.Adapter {
 		}
 	}
 
+	private async loadUpcomingExamsWithRetry(now: Date): Promise<UpcomingExam[]> {
+		for (let attempt = 1; attempt <= EXAMS_MAX_ATTEMPTS; attempt++) {
+			this.ensureActive();
+			try {
+				return await this.webUntis.loadUpcomingExams(this.config, now);
+			} catch (error) {
+				const transient =
+					error instanceof WebUntisError && (error.code === "SERVER_UNREACHABLE" || error.code === "TIMEOUT");
+				if (!transient || attempt === EXAMS_MAX_ATTEMPTS) {
+					throw error;
+				}
+				this.log.debug(`WebUntis exams request attempt ${attempt}/${EXAMS_MAX_ATTEMPTS} failed; retrying`);
+				await new Promise(resolve => setTimeout(resolve, attempt * 250));
+			}
+		}
+		throw new Error("WebUntis exams retry loop ended unexpectedly");
+	}
+
+	private async ensureStudentsRoot(): Promise<void> {
+		await this.ensureTranslatedObject(
+			"students",
+			{ type: "channel", common: { name: { en: "Students", de: "Schüler" } }, native: {} },
+			"Students",
+		);
+	}
+
+	private async cleanupLegacyDataRoots(removeTimetable = true): Promise<void> {
+		for (const id of [...(removeTimetable ? ["timetable"] : []), "exams", "children", "info.inbox"]) {
+			if (await this.getObjectAsync(id)) {
+				await this.delObjectAsync(id, { recursive: true });
+			}
+		}
+		const existingStudents = await this.getObjectListAsync({
+			startkey: `${this.namespace}.students.`,
+			endkey: `${this.namespace}.students.\uffff`,
+		});
+		for (const object of existingStudents.rows || []) {
+			const studentId = object.id.replace(`${this.namespace}.students.`, "").split(".")[0];
+			if (/^\d+$/.test(studentId)) {
+				const studentRoot = await this.getObjectAsync(`students.${studentId}`);
+				const native = studentRoot?.native as { studentId?: unknown } | undefined;
+				if (!Number.isSafeInteger(native?.studentId)) {
+					await this.delObjectAsync(`students.${studentId}`, { recursive: true });
+				}
+			}
+		}
+	}
+
 	private async ensureInboxRoot(): Promise<void> {
 		await this.ensureTranslatedObject(
 			"inbox",
@@ -405,7 +830,17 @@ class WebuntisNext extends utils.Adapter {
 			"Messages",
 		);
 		await this.ensureTranslatedObject(
-			"inbox.unreadCount",
+			"inbox.messages",
+			{ type: "channel", common: { name: translatedName("inbox") }, native: {} },
+			"Messages",
+		);
+		await this.ensureTranslatedObject(
+			"inbox.messages.unread",
+			{ type: "channel", common: { name: { en: "Unread", de: "Ungelesen" } }, native: {} },
+			"Unread",
+		);
+		await this.ensureTranslatedObject(
+			"inbox.messages.unread.unreadCount",
 			{
 				type: "state",
 				common: {
@@ -421,7 +856,7 @@ class WebuntisNext extends utils.Adapter {
 			"Unread message count",
 		);
 		await this.ensureTranslatedObject(
-			"inbox.unread",
+			"inbox.messages.unread.unread",
 			{
 				type: "state",
 				common: {
@@ -436,30 +871,378 @@ class WebuntisNext extends utils.Adapter {
 			},
 			"Unread messages",
 		);
-		await this.initializeInboxState("inbox.unreadCount", 0);
-		await this.initializeInboxState("inbox.unread", "[]");
+		await this.ensureTranslatedObject(
+			"inbox.messages.read",
+			{ type: "channel", common: { name: { en: "Read", de: "Gelesen" } }, native: {} },
+			"Read",
+		);
+		await this.ensureTranslatedObject(
+			"inbox.messages.read.count",
+			{
+				type: "state",
+				common: {
+					name: { en: "Read message count", de: "Anzahl gelesener Nachrichten" },
+					type: "number",
+					role: "value",
+					read: true,
+					write: false,
+					def: 0,
+				},
+				native: {},
+			},
+			"Read message count",
+		);
+		const legacyCount = await this.getStateAsync("info.inbox.unreadCount");
+		const legacyMessages = await this.getStateAsync("info.inbox.unread");
+		const oldCount = await this.getStateAsync("inbox.unreadCount");
+		const oldMessages = await this.getStateAsync("inbox.unread");
+		await this.initializeRootState("inbox.messages.unread.unreadCount", oldCount?.val ?? legacyCount?.val ?? 0);
+		await this.initializeRootState("inbox.messages.unread.unread", oldMessages?.val ?? legacyMessages?.val ?? "[]");
+		await this.delObjectAsync("inbox.unreadCount");
+		await this.delObjectAsync("inbox.unread");
 	}
 
-	private async initializeInboxState(id: string, defaultValue: ioBroker.StateValue): Promise<void> {
+	private async initializeRootState(id: string, defaultValue: ioBroker.StateValue): Promise<void> {
 		const current = await this.getStateAsync(id);
 		await setStateChangedOrInitialize(this, id, current?.val ?? defaultValue);
 	}
 
-	private async writeUnreadMessages(messages: WebUntisInboxMessage[]): Promise<void> {
-		await setStateChangedOrInitialize(this, "inbox.unreadCount", messages.length);
-		await setStateChangedOrInitialize(this, "inbox.unread", JSON.stringify(messages));
+	private writeUnreadMessages(messages: WebUntisInboxMessage[]): Promise<void> {
+		return this.enqueueInboxMutation(() => this.writeUnreadMessagesLocked(messages));
 	}
 
-	private async ensureTimetableRoot(): Promise<void> {
-		await this.ensureTranslatedObject(
-			"timetable",
-			{
-				type: "channel",
-				common: { name: translatedName("timetable") },
-				native: {},
-			},
-			"Timetable",
+	private async writeUnreadMessagesLocked(messages: WebUntisInboxMessage[]): Promise<void> {
+		const sortedMessages = [...messages].sort((left, right) => left.dateTime.localeCompare(right.dateTime));
+		const unreadMessages: WebUntisInboxMessage[] = [];
+		const locallyReadIds = new Set<string>();
+		const existingRead = await this.getObjectListAsync({
+			startkey: `${this.namespace}.inbox.messages.read.`,
+			endkey: `${this.namespace}.inbox.messages.read.\uffff`,
+		});
+		for (const row of existingRead.rows || []) {
+			const relativePath = row.id.replace(`${this.namespace}.`, "");
+			if (!/^inbox\.messages\.read\.[^.]+\.id$/.test(relativePath)) {
+				continue;
+			}
+			const messageId = await this.getStateAsync(relativePath);
+			const readLocally = await this.getStateAsync(relativePath.replace(/\.id$/, ".readLocally"));
+			if (messageId?.val !== undefined && readLocally?.val === true) {
+				locallyReadIds.add(String(messageId.val));
+			}
+		}
+		for (const message of sortedMessages) {
+			const locallyRead = locallyReadIds.has(String(message.id));
+			if (!message.readInWebUntis && !locallyRead) {
+				unreadMessages.push(message);
+			}
+		}
+		await setStateChangedOrInitialize(this, "inbox.messages.unread.unreadCount", unreadMessages.length);
+		await setStateChangedOrInitialize(this, "inbox.messages.unread.unread", JSON.stringify(unreadMessages));
+		const messageRoot = "inbox.messages";
+		const expected = new Set<string>();
+		const slots: Record<"read" | "unread", number> = { read: 0, unread: 0 };
+		for (const message of sortedMessages) {
+			this.ensureActive();
+			const locallyRead = locallyReadIds.has(String(message.id));
+			const group = locallyRead || message.readInWebUntis ? "read" : "unread";
+			const slot = String(++slots[group]).padStart(2, "0");
+			const messagePath = `${messageRoot}.${group}.${slot}`;
+			expected.add(`${group}.${slot}`);
+			await this.ensureTranslatedObject(
+				messagePath,
+				{
+					type: "channel",
+					common: { name: message.subject || `Message ${message.id}` },
+					native: {
+						messageId: message.id,
+						[WebuntisNext.generatedLessonNameKey]: message.subject || `Message ${message.id}`,
+					},
+				},
+				message.subject || `Message ${message.id}`,
+				true,
+			);
+			if (!message.readInWebUntis && !locallyRead) {
+				await this.ensureTranslatedObject(
+					`${messagePath}.markRead`,
+					{
+						type: "state",
+						common: {
+							name: { en: "Mark as read", de: "Als gelesen markieren" },
+							type: "boolean",
+							role: "button",
+							read: false,
+							write: true,
+							def: false,
+						},
+						native: {},
+					},
+					"Mark as read",
+				);
+			}
+			await this.writeSimpleState(
+				`${messagePath}.read`,
+				locallyRead || message.readInWebUntis,
+				"Read",
+				"boolean",
+				"indicator",
+				false,
+			);
+			await this.writeSimpleState(
+				`${messagePath}.readInWebUntis`,
+				message.readInWebUntis,
+				"Read in WebUntis",
+				"boolean",
+				"indicator",
+				false,
+			);
+			await this.writeSimpleState(
+				`${messagePath}.readLocally`,
+				locallyRead,
+				"Read locally",
+				"boolean",
+				"indicator",
+				false,
+			);
+			const fields: Array<[string, string, "string" | "number" | "boolean", string | number | boolean]> = [
+				["id", "Message ID", typeof message.id === "number" ? "number" : "string", message.id],
+				["dateTime", "Date and time", "string", message.dateTime],
+				["sender", "Sender", "string", message.sender],
+				["subject", "Subject", "string", message.subject],
+				["content", "Content", "string", message.content],
+				["contentIsPreview", "Content is preview", "boolean", message.contentIsPreview],
+				["hasAttachments", "Has attachments", "boolean", message.hasAttachments],
+			];
+			for (const [field, name, type, value] of fields) {
+				if (field === "id" && typeof message.id === "number") {
+					await this.writeSimpleState(`${messagePath}.${field}`, message.id, name, "number", "value", 0);
+					continue;
+				}
+				const role =
+					field === "dateTime"
+						? "date"
+						: type === "boolean"
+							? "indicator"
+							: type === "number"
+								? "value"
+								: "text";
+				const defaultValue = type === "boolean" ? false : type === "number" ? 0 : "";
+				await this.writeSimpleState(`${messagePath}.${field}`, value, name, type, role, defaultValue);
+			}
+		}
+		await setStateChangedOrInitialize(this, "inbox.messages.read.count", slots.read);
+		const existing = await this.getObjectListAsync({
+			startkey: `${this.namespace}.${messageRoot}.`,
+			endkey: `${this.namespace}.${messageRoot}.\uffff`,
+		});
+		const stale = new Set<string>();
+		for (const object of existing.rows || []) {
+			const relativeId = object.id.replace(`${this.namespace}.${messageRoot}.`, "");
+			const parts = relativeId.split(".");
+			if (
+				(parts[0] === "read" && parts[1] === "count") ||
+				(parts[0] === "unread" && (parts[1] === "unreadCount" || parts[1] === "unread"))
+			) {
+				continue;
+			}
+			const messagePath = `${parts[0]}.${parts[1]}`;
+			if ((parts[0] === "read" || parts[0] === "unread") && parts[1] && !expected.has(messagePath)) {
+				stale.add(messagePath);
+			}
+		}
+		for (const messagePath of stale) {
+			this.ensureActive();
+			await this.delObjectAsync(`${messageRoot}.${messagePath}`, { recursive: true });
+		}
+	}
+
+	private async writeUpcomingExams(
+		exams: UpcomingExam[],
+		linkedChildren: Array<{ id: number; name: string }> = [],
+		now: Date = new Date(),
+	): Promise<void> {
+		const students = new Map<number, UpcomingExam[]>();
+		const studentNames = new Map(linkedChildren.map(student => [student.id, student.name]));
+		for (const child of linkedChildren) {
+			students.set(child.id, []);
+		}
+		for (const exam of exams) {
+			if (exam.studentId === undefined) {
+				continue;
+			}
+			const studentExams = students.get(exam.studentId) ?? [];
+			studentExams.push(exam);
+			students.set(exam.studentId, studentExams);
+			if (exam.studentName) {
+				studentNames.set(exam.studentId, exam.studentName);
+			}
+		}
+		const channelIds = studentChannelIds(
+			[...students.keys()].map(id => ({ id, name: studentNames.get(id) || `Student ${id}` })),
 		);
+		for (const [studentId, studentExams] of students) {
+			this.ensureActive();
+			const studentName =
+				studentExams.find(exam => exam.studentName)?.studentName ||
+				studentNames.get(studentId) ||
+				`Student ${studentId}`;
+			const studentRoot = `students.${channelIds.get(studentId)}`;
+			await this.ensureTranslatedObject(
+				studentRoot,
+				{
+					type: "channel",
+					common: { name: studentName },
+					native: { studentId, studentName },
+				},
+				studentName,
+			);
+			const examsRoot = `${studentRoot}.exams`;
+			await this.ensureTranslatedObject(
+				examsRoot,
+				{ type: "channel", common: { name: translatedName("exams") }, native: {} },
+				"Exams",
+			);
+			const childStates: Array<[string, string, ioBroker.StateCommon, ioBroker.StateValue]> = [
+				[
+					"count",
+					"Upcoming exam count",
+					{
+						name: translatedName("upcomingExamCount"),
+						type: "number",
+						role: "value",
+						read: true,
+						write: false,
+						def: 0,
+					},
+					studentExams.length,
+				],
+				[
+					"upcoming",
+					"Upcoming exams",
+					{
+						name: translatedName("upcomingExams"),
+						type: "string",
+						role: "json",
+						read: true,
+						write: false,
+						def: "[]",
+					},
+					JSON.stringify(studentExams),
+				],
+				[
+					"upcomingText",
+					"Upcoming exams text",
+					{
+						name: translatedName("upcomingExamsText"),
+						type: "string",
+						role: "text",
+						read: true,
+						write: false,
+						def: "",
+					},
+					studentExams.map(exam => exam.displayText).join("\n"),
+				],
+			];
+			for (const [name, label, common, value] of childStates) {
+				const id = `${examsRoot}.${name}`;
+				await this.ensureTranslatedObject(id, { type: "state", common, native: {} }, label);
+				await setStateChangedOrInitialize(this, id, value);
+			}
+			const entriesRoot = `${examsRoot}.entries`;
+			await this.ensureTranslatedObject(
+				entriesRoot,
+				{ type: "channel", common: { name: translatedName("upcomingExams") }, native: {} },
+				"Upcoming exams",
+			);
+			const expected = new Set(studentExams.map((_exam, index) => String(index + 1).padStart(2, "0")));
+			for (const [index, exam] of studentExams.entries()) {
+				this.ensureActive();
+				const slot = String(index + 1).padStart(2, "0");
+				const base = `${entriesRoot}.${slot}`;
+				const label = exam.displayText || translatedName("examFallback").en;
+				await this.ensureTranslatedObject(
+					base,
+					{
+						type: "channel",
+						common: { name: label },
+						native: { [WebuntisNext.generatedLessonNameKey]: label },
+					},
+					`Exam ${exam.id}`,
+					true,
+				);
+				const [examYear, examMonth, examDay] = exam.date.split("-").map(Number);
+				const values: Record<string, string | number> = {
+					id: exam.id,
+					subject: exam.subject,
+					date: numericDate(exam.date),
+					daysUntil:
+						Math.floor(Date.UTC(examYear, examMonth - 1, examDay) / 86_400_000) -
+						Math.floor(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate()) / 86_400_000),
+					startTime: exam.startTime,
+					endTime: exam.endTime,
+					name: exam.name,
+					text: exam.text,
+					displayText: exam.displayText,
+				};
+				const names: Record<string, ioBroker.Translated> = {
+					id: translatedStateName("Exam ID"),
+					subject: translatedStateName("Subject"),
+					date: translatedStateName("Date"),
+					daysUntil: translatedName("daysUntil"),
+					startTime: translatedStateName("Exam start time"),
+					endTime: translatedStateName("Exam end time"),
+					name: translatedStateName("Exam name"),
+					text: translatedStateName("Exam text"),
+					displayText: translatedStateName("Display text"),
+				};
+				for (const [field, value] of Object.entries(values)) {
+					const type = field === "id" || field === "daysUntil" || field === "date" ? "number" : "string";
+					await this.ensureTranslatedObject(
+						`${base}.${field}`,
+						{
+							type: "state",
+							common: {
+								name: names[field],
+								type,
+								role:
+									field === "date"
+										? "date"
+										: field === "startTime" || field === "endTime"
+											? "time"
+											: field === "daysUntil"
+												? "value.interval"
+												: type === "number"
+													? "value"
+													: "text",
+								...(field === "daysUntil" ? { unit: "d" } : {}),
+								read: true,
+								write: false,
+								def: type === "number" ? 0 : "",
+							},
+							native: {},
+						},
+						field === "daysUntil" ? [String(names[field].en), "daysUntil"] : String(names[field].en),
+						false,
+						field === "daysUntil",
+					);
+					await setStateChangedOrInitialize(this, `${base}.${field}`, value);
+				}
+			}
+			const existing = await this.getObjectListAsync({
+				startkey: `${this.namespace}.${entriesRoot}.`,
+				endkey: `${this.namespace}.${entriesRoot}.\uffff`,
+			});
+			const stale = new Set<string>();
+			for (const object of existing.rows || []) {
+				const slot = object.id.replace(`${this.namespace}.${entriesRoot}.`, "").split(".")[0];
+				if (slot && !expected.has(slot)) {
+					stale.add(slot);
+				}
+			}
+			for (const slot of stale) {
+				this.ensureActive();
+				await this.delObjectAsync(`${entriesRoot}.${slot}`, { recursive: true });
+			}
+		}
 	}
 
 	private async ensureHolidaysRoot(): Promise<void> {
@@ -512,64 +1295,37 @@ class WebuntisNext extends utils.Adapter {
 		);
 		await this.writeSimpleState(
 			"holidays.current.startDate",
-			dateOnly(summary.current.startDate),
-			"Start date",
-			"string",
-			"date",
-			"",
-		);
-		await this.writeSimpleState(
-			"holidays.current.startDateTimestamp",
 			numericDate(summary.current.startDate),
-			"Start date (Unix timestamp ms)",
+			"Start date",
 			"number",
-			"value",
+			"date",
 			0,
-			"ms",
 		);
 		await this.writeSimpleState(
 			"holidays.current.endDate",
-			dateOnly(summary.current.endDate),
-			"End date",
-			"string",
-			"date",
-			"",
-		);
-		await this.writeSimpleState(
-			"holidays.current.endDateTimestamp",
 			numericDate(summary.current.endDate),
-			"End date (Unix timestamp ms)",
+			"End date",
 			"number",
-			"value",
+			"date",
 			0,
-			"ms",
 		);
 		await this.writeSimpleState("holidays.next.name", summary.next.name, "Name", "string", "text", "");
 		await this.writeSimpleState("holidays.next.longName", summary.next.longName, "Long name", "string", "text", "");
 		await this.writeSimpleState(
 			"holidays.next.startDate",
-			dateOnly(summary.next.startDate),
-			"Start date",
-			"string",
-			"date",
-			"",
-		);
-		await this.writeSimpleState(
-			"holidays.next.startDateTimestamp",
 			numericDate(summary.next.startDate),
-			"Start date (Unix timestamp ms)",
+			"Start date",
 			"number",
-			"value",
+			"date",
 			0,
-			"ms",
 		);
 		await this.writeSimpleState(
 			"holidays.next.endDate",
-			dateOnly(summary.next.endDate),
+			numericDate(summary.next.endDate),
 			"End date",
-			"string",
+			"number",
 			"date",
-			"",
+			0,
 		);
 		await this.writeSimpleState(
 			"holidays.next.daysUntil",
@@ -579,15 +1335,6 @@ class WebuntisNext extends utils.Adapter {
 			"value.interval",
 			0,
 			"d",
-		);
-		await this.writeSimpleState(
-			"holidays.next.endDateTimestamp",
-			numericDate(summary.next.endDate),
-			"End date (Unix timestamp ms)",
-			"number",
-			"value",
-			0,
-			"ms",
 		);
 	}
 
@@ -600,7 +1347,7 @@ class WebuntisNext extends utils.Adapter {
 				continue;
 			}
 			await this.ensureTranslatedObject(
-				`timetable.${path}.${name}`,
+				`${path}.${name}`,
 				{
 					type: "state",
 					common: {
@@ -616,10 +1363,10 @@ class WebuntisNext extends utils.Adapter {
 				},
 				definition.name.en,
 			);
-			await setStateChangedOrInitialize(this, `timetable.${path}.${name}`, summary[name]);
+			await setStateChangedOrInitialize(this, `${path}.${name}`, summary[name]);
 		}
 		await this.writeSimpleState(
-			`timetable.${path}.lessonComparison`,
+			`${path}.lessonComparison`,
 			JSON.stringify(buildLessonComparison(lessons)),
 			"Lesson comparison (JSON)",
 			"string",
@@ -628,14 +1375,18 @@ class WebuntisNext extends utils.Adapter {
 		);
 	}
 
-	private async writeCurrentNextSummary(lessons: TimetableLesson[], now: Date): Promise<void> {
+	private async writeCurrentNextSummary(
+		lessons: TimetableLesson[],
+		now: Date,
+		path = "timetable.today",
+	): Promise<void> {
 		const summary = deriveCurrentNextLesson(lessons, now);
 		for (const [name, definition] of Object.entries(CURRENT_NEXT_STATE_DEFINITIONS) as [
 			keyof CurrentNextLessonSummary,
 			(typeof CURRENT_NEXT_STATE_DEFINITIONS)[keyof CurrentNextLessonSummary],
 		][]) {
 			await this.ensureTranslatedObject(
-				`timetable.today.${name}`,
+				`${path}.${name}`,
 				{
 					type: "state",
 					common: {
@@ -651,15 +1402,28 @@ class WebuntisNext extends utils.Adapter {
 				},
 				definition.name.en,
 			);
-			await setStateChangedOrInitialize(this, `timetable.today.${name}`, summary[name]);
+			await setStateChangedOrInitialize(this, `${path}.${name}`, summary[name]);
 		}
 	}
 
 	private async updateCurrentNextStates(): Promise<void> {
+		return this.enqueueRefreshMutation(() => this.updateCurrentNextStatesLocked());
+	}
+
+	private async updateCurrentNextStatesLocked(): Promise<void> {
 		if (this.unloaded || !this.hasTimetableSnapshot) {
 			return;
 		}
-		await this.writeCurrentNextSummary(this.todayLessons, new Date());
+		for (const child of this.childTodayLessons.values()) {
+			await this.writeCurrentNextSummary(
+				child.lessons,
+				new Date(),
+				`students.${child.channelId}.timetable.today`,
+			);
+		}
+		if (this.childTodayLessons.size === 0) {
+			await this.writeCurrentNextSummary(this.todayLessons, new Date(), "timetable.today");
+		}
 	}
 
 	private async cleanupObsoleteStructure(): Promise<void> {
@@ -676,15 +1440,27 @@ class WebuntisNext extends utils.Adapter {
 				await this.delObjectAsync(id, { recursive: true });
 			}
 		}
+		for (const root of ["holidays", "students"]) {
+			const existing = await this.getObjectListAsync({
+				startkey: `${this.namespace}.${root}.`,
+				endkey: `${this.namespace}.${root}.\uffff`,
+			});
+			for (const object of existing.rows || []) {
+				if (/\.(?:dateTimestamp|startDateTimestamp|endDateTimestamp)$/.test(object.id)) {
+					await this.delObjectAsync(object.id.slice(this.namespace.length + 1));
+				}
+			}
+		}
 	}
 
 	private async writeTimetableGroup(
 		group: TimetableGroup,
 		lessons: TimetableLesson[],
 		now: Date,
+		root = "timetable",
 	): Promise<{ updated: number; removed: number }> {
 		await this.ensureTranslatedObject(
-			`timetable.${group}`,
+			`${root}.${group}`,
 			{
 				type: "channel",
 				common: { name: translatedTimetableGroup(group) },
@@ -701,12 +1477,12 @@ class WebuntisNext extends utils.Adapter {
 			});
 			for (let index = 0; index < weekdayNames.length; index++) {
 				const result = await this.writeTimetableDay(
-					`timetable.week.${weekdayNames[index]}`,
+					`${root}.week.${weekdayNames[index]}`,
 					byDay[index],
 					this.timetableDate(nextWeekday(now, index)),
 				);
 				await this.writeDaySummary(
-					`week.${weekdayNames[index]}`,
+					`${root}.week.${weekdayNames[index]}`,
 					summarizeTimetable(byDay[index]),
 					byDay[index],
 				);
@@ -717,10 +1493,10 @@ class WebuntisNext extends utils.Adapter {
 			if (group === "tomorrow") {
 				day.setDate(day.getDate() + 1);
 			}
-			const result = await this.writeTimetableDay(`timetable.${group}`, lessons, this.timetableDate(day));
-			await this.writeDaySummary(group, summarizeTimetable(lessons), lessons);
+			const result = await this.writeTimetableDay(`${root}.${group}`, lessons, this.timetableDate(day));
+			await this.writeDaySummary(`${root}.${group}`, summarizeTimetable(lessons), lessons);
 			if (group === "today") {
-				await this.writeCurrentNextSummary(lessons, now);
+				await this.writeCurrentNextSummary(lessons, now, `${root}.today`);
 			}
 			removed += result.removed;
 		}
@@ -760,16 +1536,7 @@ class WebuntisNext extends utils.Adapter {
 			},
 			dayName,
 		);
-		await this.writeSimpleState(`${path}.date`, dateOnly(date), "Date", "string", "text", "");
-		await this.writeSimpleState(
-			`${path}.dateTimestamp`,
-			numericDate(date),
-			"Date (Unix timestamp ms)",
-			"number",
-			"value",
-			0,
-			"ms",
-		);
+		await this.writeSimpleState(`${path}.date`, numericDate(date), "Date", "number", "date", 0);
 		await this.writeSimpleState(`${path}.lessonCount`, lessons.length, "Lesson count", "number", "value", 0);
 		await this.ensureTranslatedObject(
 			`${path}.lessons`,
@@ -855,10 +1622,9 @@ class WebuntisNext extends utils.Adapter {
 			string,
 			{ value: string | number | boolean; type: "string" | "number" | "boolean"; role: string; unit?: string }
 		> = {
-			date: { value: dateOnly(lesson.date), type: "string", role: "text" },
-			dateTimestamp: { value: numericDate(lesson.date), type: "number", role: "value", unit: "ms" },
-			startTime: { value: lesson.startTime, type: "string", role: "text" },
-			endTime: { value: lesson.endTime, type: "string", role: "text" },
+			date: { value: numericDate(lesson.date), type: "number", role: "date" },
+			startTime: { value: lesson.startTime, type: "string", role: "time" },
+			endTime: { value: lesson.endTime, type: "string", role: "time" },
 			subject: { value: lesson.subject, type: "string", role: "text" },
 			subjectLong: { value: lesson.subjectLong, type: "string", role: "text" },
 			teacher: { value: lesson.teacher, type: "string", role: "text" },
@@ -1011,7 +1777,9 @@ class WebuntisNext extends utils.Adapter {
 }
 
 if (require.main !== module) {
-	module.exports = (options: Partial<utils.AdapterOptions> | undefined) => new WebuntisNext(options);
+	module.exports = Object.assign((options: Partial<utils.AdapterOptions> | undefined) => new WebuntisNext(options), {
+		WebuntisNext,
+	});
 } else {
 	(() => new WebuntisNext())();
 }

@@ -1,0 +1,345 @@
+import { createHash } from "node:crypto";
+import { WebUntisError } from "./WebUntisErrors";
+
+/** A normalized WebUntis exam. */
+export interface UpcomingExam {
+	/** Stable WebUntis exam identifier. */
+	id: number;
+	/** Subject name. */
+	subject: string;
+	/** Local calendar date in YYYY-MM-DD format. */
+	date: string;
+	/** Local start time in HH:mm format. */
+	startTime: string;
+	/** Local end time in HH:mm format. */
+	endTime: string;
+	/** WebUntis exam name. */
+	name: string;
+	/** Additional WebUntis exam text. */
+	text: string;
+	/** Human-readable exam summary. */
+	displayText: string;
+	/** Student identifier when exams were loaded from a parent account. */
+	studentId?: number;
+	/** Student display name when available. */
+	studentName?: string;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+	return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function isCalendarDate(year: number, month: number, day: number): boolean {
+	const date = new Date(year, month - 1, day);
+	return date.getFullYear() === year && date.getMonth() === month - 1 && date.getDate() === day;
+}
+
+function parseDate(value: unknown): { date: string; sortKey: number } | null {
+	if (typeof value !== "number" || !Number.isInteger(value) || value < 10000101 || value > 99991231) {
+		return null;
+	}
+	const year = Math.floor(value / 10000);
+	const month = Math.floor((value % 10000) / 100);
+	const day = value % 100;
+	if (!isCalendarDate(year, month, day)) {
+		return null;
+	}
+	return { date: `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`, sortKey: value };
+}
+
+function parseTime(value: unknown): string | null {
+	if (typeof value === "number" && Number.isInteger(value) && value >= 0 && value <= 2359) {
+		const hour = Math.floor(value / 100);
+		const minute = value % 100;
+		return hour <= 23 && minute <= 59
+			? `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`
+			: null;
+	}
+	if (typeof value === "string" && /^(?:[01]\d|2[0-3]):[0-5]\d$/.test(value)) {
+		return value;
+	}
+	return null;
+}
+
+function optionalText(value: unknown): string {
+	return typeof value === "string" || typeof value === "number" ? String(value).trim() : "";
+}
+
+function displayDate(date: string): string {
+	const [year, month, day] = date.split("-");
+	return `${day}.${month}.${year}`;
+}
+
+function parseLocalDateTime(value: unknown): { date: number; time: number } | null {
+	if (typeof value !== "string") {
+		return null;
+	}
+	// Modern WebUntis timestamps are local school wall time. Reject timezone
+	// suffixes instead of risking a date/time shift during conversion.
+	const match = /^(\d{4})-(\d{2})-(\d{2})T([01]\d|2[0-3]):([0-5]\d)(?::[0-5]\d(?:\.\d+)?)?$/.exec(value);
+	if (!match) {
+		return null;
+	}
+	const year = Number(match[1]);
+	const month = Number(match[2]);
+	const day = Number(match[3]);
+	if (!isCalendarDate(year, month, day)) {
+		return null;
+	}
+	return {
+		date: year * 10000 + month * 100 + day,
+		time: Number(match[4]) * 100 + Number(match[5]),
+	};
+}
+
+function modernExamEntries(raw: unknown): unknown[] {
+	if (Array.isArray(raw)) {
+		return raw;
+	}
+	if (!isRecord(raw)) {
+		throw new WebUntisError("INVALID_RESPONSE", "Invalid WebUntis guardian exams response");
+	}
+	const source = isRecord(raw.data) ? raw.data : raw;
+	const groups = [source.examsDone, source.examsUpcoming, source.examsFuture];
+	if (groups.some(group => group !== undefined)) {
+		if (!groups.every(Array.isArray)) {
+			throw new WebUntisError("INVALID_RESPONSE", "Invalid WebUntis guardian exams response");
+		}
+		return groups.flatMap(group => group as unknown[]);
+	}
+	if (Array.isArray(source.exams)) {
+		return source.exams;
+	}
+	if (raw.data !== undefined && Array.isArray(raw.data)) {
+		return raw.data;
+	}
+	throw new WebUntisError("INVALID_RESPONSE", "Invalid WebUntis guardian exams response");
+}
+
+/**
+ * Convert the known modern exam representations to the legacy shape
+ * consumed by normalizeUpcomingExams. Only explicitly known envelope shapes
+ * are accepted so an unexpected successful response cannot clear stored data.
+ *
+ * @param raw The modern guardian exams response.
+ */
+export function normalizeModernGuardianExams(raw: unknown): unknown[] {
+	return modernExamEntries(raw).flatMap(candidate => {
+		if (!isRecord(candidate)) {
+			throw new WebUntisError("INVALID_RESPONSE", "Invalid WebUntis guardian exam entry");
+		}
+		if (candidate.exam !== undefined && !isRecord(candidate.exam)) {
+			throw new WebUntisError("INVALID_RESPONSE", "Invalid WebUntis guardian exam entry");
+		}
+		const exam = isRecord(candidate.exam) ? candidate.exam : candidate;
+		if (exam.deleted === true) {
+			return [];
+		}
+		const id = exam.examId;
+		const start = parseLocalDateTime(exam.examStart);
+		const end = parseLocalDateTime(exam.examEnd);
+		const rawSubject = exam.subject;
+		const subject =
+			typeof rawSubject === "string"
+				? rawSubject.trim()
+				: isRecord(rawSubject) && typeof rawSubject.displayName === "string"
+					? rawSubject.displayName.trim()
+					: "";
+		if (
+			(exam.examName !== undefined && typeof exam.examName !== "string") ||
+			(exam.examText !== undefined && typeof exam.examText !== "string")
+		) {
+			throw new WebUntisError("INVALID_RESPONSE", "Invalid WebUntis guardian exam entry");
+		}
+		if (
+			typeof id !== "number" ||
+			!Number.isSafeInteger(id) ||
+			id <= 0 ||
+			!start ||
+			!end ||
+			start.date !== end.date ||
+			end.time <= start.time ||
+			!subject
+		) {
+			throw new WebUntisError("INVALID_RESPONSE", "Invalid WebUntis guardian exam entry");
+		}
+		return [
+			{
+				id,
+				subject,
+				examDate: start.date,
+				startTime: start.time,
+				endTime: end.time,
+				name: optionalText(exam.examName),
+				text: optionalText(exam.examText),
+			},
+		];
+	});
+}
+
+/**
+ * Extract exams from the REST timetable used by guardian accounts.
+ *
+ * @param raw The REST timetable response.
+ * @param studentId The WebUntis student identifier.
+ * @param studentName The linked student's display name.
+ */
+export function normalizeGuardianTimetableExams(raw: unknown, studentId: number, studentName = ""): unknown[] {
+	const timetable = isRecord(raw) && isRecord(raw.data) ? raw.data : raw;
+	if (!isRecord(timetable) || !Array.isArray(timetable.days)) {
+		throw new WebUntisError("INVALID_RESPONSE", "Invalid WebUntis guardian timetable response");
+	}
+	const exams: unknown[] = [];
+	for (const day of timetable.days) {
+		if (!isRecord(day) || !Array.isArray(day.gridEntries)) {
+			throw new WebUntisError("INVALID_RESPONSE", "Invalid WebUntis guardian timetable response");
+		}
+		for (const entry of day.gridEntries) {
+			if (!isRecord(entry) || typeof entry.type !== "string" || !entry.type.toUpperCase().includes("EXAM")) {
+				continue;
+			}
+			const duration = entry.duration;
+			if (!isRecord(duration)) {
+				throw new WebUntisError("INVALID_RESPONSE", "Invalid WebUntis guardian exam entry");
+			}
+			const start = parseLocalDateTime(duration.start);
+			const end = parseLocalDateTime(duration.end);
+			const subjects: string[] = [];
+			const positionValues = Object.entries(entry)
+				.filter(([key]) => /^position\d+$/i.test(key))
+				.map(([, value]) => value);
+			if (Array.isArray(entry.positions)) {
+				positionValues.push(...entry.positions);
+			} else if (isRecord(entry.positions)) {
+				positionValues.push(...Object.values(entry.positions));
+			}
+			for (const positions of positionValues) {
+				const items = Array.isArray(positions) ? positions : isRecord(positions) ? [positions] : [];
+				for (const rawPosition of items) {
+					if (!isRecord(rawPosition)) {
+						continue;
+					}
+					const current = rawPosition.current;
+					const position = isRecord(current) ? current : rawPosition;
+					const type = position.type ?? rawPosition.type;
+					if (typeof type !== "string" || type.toUpperCase() !== "SUBJECT") {
+						continue;
+					}
+					const subjectValue = isRecord(current)
+						? (current.longName ??
+							current.displayName ??
+							current.shortName ??
+							current.name ??
+							current.value)
+						: (rawPosition.current ?? rawPosition.value ?? rawPosition.name);
+					const values = Array.isArray(subjectValue) ? subjectValue : [subjectValue];
+					for (const value of values) {
+						let subject: unknown;
+						if (typeof value === "string") {
+							subject = value;
+						} else if (isRecord(value)) {
+							subject =
+								value.displayName ?? value.longName ?? value.shortName ?? value.name ?? value.value;
+						}
+						if (typeof subject === "string" && subject.trim()) {
+							subjects.push(subject.trim());
+						}
+					}
+				}
+			}
+			const subject = [...new Set(subjects)].join(", ");
+			if (!start || !end || start.date !== end.date || end.time <= start.time || !subject) {
+				throw new WebUntisError("INVALID_RESPONSE", "Invalid WebUntis guardian exam entry");
+			}
+			const name = optionalText(entry.name);
+			const description = [entry.lessonInfo, entry.lessonText, ...(Array.isArray(entry.texts) ? entry.texts : [])]
+				.map(value => (isRecord(value) ? value.text : value))
+				.map(optionalText)
+				.filter(Boolean)
+				.filter((value, index, values) => values.indexOf(value) === index)
+				.join(" · ");
+			const text = [subject, description].filter(Boolean).join(" · ");
+			const identity = [studentId, start.date, start.time, end.time, subject, name, text].join("|");
+			const id = createHash("sha1").update(identity).digest().readUInt32BE(0) || 1;
+			exams.push({
+				id,
+				subject,
+				examDate: start.date,
+				startTime: start.time,
+				endTime: end.time,
+				name,
+				text,
+				studentId,
+				studentName,
+			});
+		}
+	}
+	return exams;
+}
+
+/**
+ * Convert and validate the WebUntis exams payload.
+ *
+ * @param raw The WebUntis exams response or its exam array.
+ * @param now The current local date used to select upcoming exams.
+ */
+export function normalizeUpcomingExams(raw: unknown, now: Date): UpcomingExam[] {
+	const exams = Array.isArray(raw)
+		? raw
+		: isRecord(raw) && isRecord(raw.data) && Array.isArray(raw.data.exams)
+			? raw.data.exams
+			: null;
+	if (!exams) {
+		throw new WebUntisError("INVALID_RESPONSE", "Invalid WebUntis exams response");
+	}
+	const start = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+	const end = new Date(start.getFullYear(), start.getMonth(), start.getDate() + 90);
+	const startKey = start.getFullYear() * 10000 + (start.getMonth() + 1) * 100 + start.getDate();
+	const endKey = end.getFullYear() * 10000 + (end.getMonth() + 1) * 100 + end.getDate();
+	const byId = new Map<number, { exam: UpcomingExam; dateKey: number; startMinute: number }>();
+	for (const rawExam of exams) {
+		if (!isRecord(rawExam)) {
+			throw new WebUntisError("INVALID_RESPONSE", "Invalid WebUntis exam entry");
+		}
+		const id = rawExam.id;
+		const parsedDate = parseDate(rawExam.examDate);
+		const startTime = parseTime(rawExam.startTime);
+		const endTime = parseTime(rawExam.endTime);
+		if (typeof id !== "number" || !Number.isSafeInteger(id) || id < 0 || !parsedDate || !startTime || !endTime) {
+			throw new WebUntisError("INVALID_RESPONSE", "Invalid WebUntis exam entry");
+		}
+		if (parsedDate.sortKey < startKey || parsedDate.sortKey > endKey) {
+			continue;
+		}
+		const subject = optionalText(rawExam.subject);
+		const name = optionalText(rawExam.name) || optionalText(rawExam.examName);
+		const text = optionalText(rawExam.text);
+		const studentId = typeof rawExam.studentId === "number" ? rawExam.studentId : undefined;
+		const studentName = optionalText(rawExam.studentName);
+		const details = [displayDate(parsedDate.date), `${startTime}–${endTime}`, subject, text || name].filter(
+			Boolean,
+		);
+		const exam: UpcomingExam = {
+			id,
+			subject,
+			date: parsedDate.date,
+			startTime,
+			endTime,
+			name,
+			text,
+			displayText: details.join(" · "),
+			...(studentId === undefined ? {} : { studentId }),
+			...(studentName ? { studentName } : {}),
+		};
+		if (!byId.has(id)) {
+			byId.set(id, {
+				exam,
+				dateKey: parsedDate.sortKey,
+				startMinute: Number(startTime.slice(0, 2)) * 60 + Number(startTime.slice(3)),
+			});
+		}
+	}
+	return [...byId.values()]
+		.sort((a, b) => a.dateKey - b.dateKey || a.startMinute - b.startMinute || a.exam.id - b.exam.id)
+		.map(entry => entry.exam);
+}

@@ -3,6 +3,7 @@ import React from "react";
 import { type Theme, type StyleRules, withStyles } from "@material-ui/core/styles";
 
 import GenericApp from "@iobroker/adapter-react/GenericApp";
+import I18n from "@iobroker/adapter-react/i18n";
 import Settings from "./components/settings";
 import type { GenericAppProps, GenericAppSettings } from "@iobroker/adapter-react/types";
 import { mergeSchoolSelection } from "../../src/lib/webuntis/SchoolDiscovery";
@@ -20,7 +21,6 @@ class App extends GenericApp {
 				en: require("./i18n/en.json"),
 				de: require("./i18n/de.json"),
 				ru: require("./i18n/ru.json"),
-				uk: require("./i18n/uk.json"),
 				pt: require("./i18n/pt.json"),
 				nl: require("./i18n/nl.json"),
 				fr: require("./i18n/fr.json"),
@@ -34,6 +34,11 @@ class App extends GenericApp {
 		// the settings argument. Pass an empty settings object so the Admin UI can
 		// initialize its socket connection instead of failing with a blank page.
 		super(extendedProps, {});
+		(
+			I18n as typeof I18n & {
+				extendTranslations: (translations: Record<string, string>, language: string) => void;
+			}
+		).extendTranslations(require("./i18n/uk.json"), "uk");
 	}
 
 	private selectSchool(school: SchoolSearchResult): void {

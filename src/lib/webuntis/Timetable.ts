@@ -179,7 +179,7 @@ export function lessonChannelName(lesson: TimetableLesson): string {
 		.map(value => value.trim())
 		.filter(Boolean)
 		.join(" · ");
-	return longName.length <= 100 ? longName : shortName;
+	return longName || shortName;
 }
 
 function text(value: unknown): string {

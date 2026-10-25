@@ -21,6 +21,34 @@ describe("object translations", () => {
 		}
 		expect(name.en).to.equal("Lesson count");
 		expect(translatedName("hasSchool").de).to.equal("Hat Schule");
+		for (const key of ["exams", "upcomingExamCount", "upcomingExams", "upcomingExamsText"] as const) {
+			const translated = translatedName(key);
+			for (const language of SUPPORTED_LANGUAGES) {
+				expect(translated[language]).to.be.a("string");
+			}
+		}
+		expect(translatedName("upcomingExamCount").de).to.equal("Anzahl bevorstehender Prüfungen");
+		expect(translatedStateName("Exam ID").de).to.equal("Prüfungs-ID");
+		expect(translatedStateName("Exam start time").de).to.equal("Prüfungsbeginn");
+		for (const label of [
+			"Content",
+			"Content is preview",
+			"Date and time",
+			"Has attachments",
+			"Message ID",
+			"Read",
+			"Read in WebUntis",
+			"Read locally",
+			"Sender",
+			"Subject",
+		]) {
+			const translated = translatedStateName(label);
+			for (const language of SUPPORTED_LANGUAGES) {
+				expect(translated[language], `${label} (${language})`).to.be.a("string").and.not.empty;
+			}
+		}
+		expect(translatedStateName("Content").de).to.equal("Inhalt");
+		expect(translatedName("refresh").de).to.equal("Jetzt aktualisieren");
 	});
 
 	it("translates dynamic timetable and weekday names", () => {
@@ -28,8 +56,6 @@ describe("object translations", () => {
 		expect(translatedWeekday("monday")["zh-cn"]).to.equal("星期一");
 		expect(translatedLessonFallback("03").fr).to.equal("Cours 03");
 		expect(translatedStateName("Teacher").de).to.equal("Lehrkraft");
-		expect(translatedStateName("Start date (Unix timestamp ms)").de).to.equal("Startdatum (Unix-Zeitstempel ms)");
-		expect(translatedStateName("End date (Unix timestamp ms)").de).to.equal("Enddatum (Unix-Zeitstempel ms)");
 		expect(translatedStateName("Lesson comparison (JSON)").de).to.equal("Stundenplanvergleich (JSON)");
 	});
 

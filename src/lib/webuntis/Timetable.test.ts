@@ -3,13 +3,13 @@ import {
 	buildLessonComparison,
 	dateNumber,
 	lessonChannelName,
+	nextWeekday,
 	normalizeLesson,
 	normalizeLessons,
 	resolveTimetableReferences,
 	splitTimetable,
 	summarizeTimetable,
 	weekRange,
-	nextWeekday,
 } from "./Timetable";
 
 describe("WebUntis timetable normalization", () => {
@@ -177,6 +177,23 @@ describe("WebUntis timetable normalization", () => {
 		expect(lessonChannelName({ ...lesson, subject: "", subjectLong: "", teacher: "", room: "" })).to.equal(
 			"07:50–08:35",
 		);
+	});
+
+	it("keeps full lesson details when the channel description exceeds 100 characters", () => {
+		const longTeacher =
+			"Teacher with a deliberately long full name that exceeds the former channel description limit";
+		const longRoom = "Building C, floor 4, specialized laboratory room 412";
+		const lesson = normalizeLesson({
+			startTime: 750,
+			endTime: 835,
+			su: [{ name: "Ma", longname: "Mathematics" }],
+			te: [{ name: "T", longname: longTeacher }],
+			ro: [{ name: "R", longname: longRoom }],
+		});
+		const name = lessonChannelName(lesson);
+
+		expect(name).to.include(longTeacher);
+		expect(name).to.include(longRoom);
 	});
 
 	it("resolves timetable resource ids using master data", () => {

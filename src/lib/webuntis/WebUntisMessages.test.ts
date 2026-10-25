@@ -6,8 +6,8 @@ import { WebUntisClient } from "./WebUntisClient";
 const config = { server: "https://example.webuntis.com", schoolName: "sample" };
 const session = { sessionId: "sid", personType: 5, personId: 10, klasseId: 2 };
 
-describe("WebUntis unread messages", () => {
-	it("returns unread messages, prefers full details, and falls back to previews", async () => {
+describe("WebUntis messages", () => {
+	it("returns read status, prefers unread full details, and falls back to previews", async () => {
 		const requests: { url: string; headers: Record<string, string> }[] = [];
 		const client = new WebUntisClient(config, async (input, init) => {
 			const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
@@ -60,7 +60,18 @@ describe("WebUntis unread messages", () => {
 
 		expect(result).to.deep.equal([
 			{
+				id: 1,
+				readInWebUntis: true,
+				dateTime: "",
+				sender: "",
+				subject: "",
+				content: "read preview",
+				contentIsPreview: true,
+				hasAttachments: false,
+			},
+			{
 				id: 2,
+				readInWebUntis: false,
 				dateTime: "2026-10-15T10:00:00",
 				sender: "Teacher",
 				subject: "Full message",
@@ -70,6 +81,7 @@ describe("WebUntis unread messages", () => {
 			},
 			{
 				id: 3,
+				readInWebUntis: false,
 				dateTime: "",
 				sender: "Office",
 				subject: "Limited message",

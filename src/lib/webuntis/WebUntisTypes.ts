@@ -138,6 +138,13 @@ export interface WebUntisHttpDiagnostic {
 	resultKeys?: string[];
 	resultType?: "array" | "object" | "primitive" | "missing";
 	resultLength?: number;
+	responseShape?: string;
+	authContext?: "cookie" | "bearer";
+	childScope?: "self" | "unresolved" | "unique" | "ambiguous" | "not-applicable";
+	linkedStudentCount?: number;
+	tenantIdPresent?: boolean;
+	schoolYearIdPresent?: boolean;
+	contextLoaded?: boolean;
 }
 
 /**
@@ -186,6 +193,7 @@ export interface WebUntisPeriod {
 
 export interface WebUntisInboxMessage {
 	id: number | string;
+	readInWebUntis: boolean;
 	dateTime: string;
 	sender: string;
 	subject: string;
