@@ -136,6 +136,19 @@ const OBJECT_NAMES = {
     uk: "\u0406\u043D\u0444\u043E\u0440\u043C\u0430\u0446\u0456\u044F",
     "zh-cn": "\u4FE1\u606F"
   },
+  refresh: {
+    en: "Refresh now",
+    de: "Jetzt aktualisieren",
+    es: "Actualizar ahora",
+    fr: "Actualiser maintenant",
+    it: "Aggiorna ora",
+    nl: "Nu vernieuwen",
+    pl: "Od\u015Bwie\u017C teraz",
+    pt: "Atualizar agora",
+    ru: "\u041E\u0431\u043D\u043E\u0432\u0438\u0442\u044C \u0441\u0435\u0439\u0447\u0430\u0441",
+    uk: "\u041E\u043D\u043E\u0432\u0438\u0442\u0438 \u0437\u0430\u0440\u0430\u0437",
+    "zh-cn": "\u7ACB\u5373\u5237\u65B0"
+  },
   deviceOrServiceConnected: {
     en: "Device or service connected",
     de: "Ger\xE4t oder Dienst verbunden",

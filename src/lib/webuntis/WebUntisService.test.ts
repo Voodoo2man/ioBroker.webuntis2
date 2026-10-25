@@ -33,6 +33,54 @@ function fetchFor(calls: string[], failingMasterdata = false): typeof fetch {
 }
 
 describe("WebUntis service session and master data caching", () => {
+	it("loads separate timetables for every child in a parent account", async () => {
+		const timetableElements: Array<{ id: number; type: number }> = [];
+		const service = new WebUntisService(undefined, undefined, undefined, async (input, init) => {
+			if (typeof input === "string" || input instanceof URL) {
+				const url = new URL(String(input));
+				if (url.pathname.endsWith("/api/token/new")) return new Response("parent-token");
+				if (url.pathname.endsWith("/api/rest/view/v1/app/data")) {
+					return json({
+						data: {
+							user: {
+								students: [
+									{ id: 41, displayName: "Kind A" },
+									{ id: 42, displayName: "Kind B" },
+								],
+							},
+						},
+					});
+				}
+			}
+			const body = JSON.parse(String(init?.body || "{}")) as {
+				method?: string;
+				params?: { options?: { element?: { id: number; type: number } } };
+			};
+			if (body.method === "authenticate") {
+				return json({ result: { sessionId: "session", personType: 12, personId: 9001, klasseId: 0 } });
+			}
+			if (body.method === "getHolidays") return json({ result: [] });
+			if (body.method === "getTimetable") {
+				timetableElements.push(body.params?.options?.element || { id: -1, type: -1 });
+				return json({ result: [] });
+			}
+			if (["getSubjects", "getTeachers", "getRooms", "getKlassen"].includes(body.method || "")) {
+				return json({ result: [] });
+			}
+			throw new Error(`Unexpected WebUntis request ${body.method}`);
+		});
+		const result = await service.loadTimetable(config, new Date("2026-09-09T08:00:00"));
+		expect(timetableElements).to.have.deep.members([
+			{ id: 41, type: 5 },
+			{ id: 42, type: 5 },
+		]);
+		expect(result.children?.map(child => [child.id, child.name])).to.deep.equal([
+			[41, "Kind A"],
+			[42, "Kind B"],
+		]);
+		expect(result.today).to.deep.equal([]);
+	});
+
 	it("authenticates and loads master data only once within the cache TTL", async () => {
 		const calls: string[] = [];
 		const info: string[] = [];
@@ -216,7 +264,9 @@ describe("WebUntis service session and master data caching", () => {
 			const url = new URL(typeof input === "string" ? input : (input as URL).href);
 			if (url.pathname.endsWith("/api/exams")) {
 				examCount++;
-				return examCount === 1 ? json({ errorMessage: "forbidden" }, 403) : json({ data: { exams: [] } });
+				return examCount === 1
+					? json({ errorMessage: "forbidden" }, 403)
+					: json({ data: { exams: [{ id: 2, examDate: 20260911, startTime: 900, endTime: 945 }] } });
 			}
 			if (url.pathname.endsWith("/api/token/new")) {
 				tokenCount++;
@@ -230,7 +280,7 @@ describe("WebUntis service session and master data caching", () => {
 			return json({ result: [] });
 		});
 		const exams = await service.loadUpcomingExams(config, new Date(2026, 8, 11));
-		expect(exams).to.deep.equal([]);
+		expect(exams.map(exam => exam.id)).to.deep.equal([2]);
 		expect(authCount).to.equal(2);
 		expect(examCount).to.equal(2);
 		expect(tokenCount).to.equal(1);

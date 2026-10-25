@@ -1,7 +1,7 @@
 /* eslint-disable jsdoc/no-blank-blocks, jsdoc/require-param */
 
 import type { HolidayEntry } from "./Holidays";
-import { normalizeModernGuardianExams } from "./Exams";
+import { normalizeGuardianTimetableExams } from "./Exams";
 import { WebUntisError } from "./WebUntisErrors";
 import type {
 	TimetableQuery,
@@ -25,8 +25,87 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 	return typeof value === "object" && value !== null;
 }
 
+function guardianTimetableResponseShape(value: unknown): string {
+	const shape: Record<string, unknown> = {
+		rootType: Array.isArray(value) ? "array" : value === null ? "null" : typeof value,
+	};
+	if (!isRecord(value)) {
+		return JSON.stringify(shape);
+	}
+	shape.rootKeys = Object.keys(value).sort();
+	const timetable = isRecord(value.data) ? value.data : value;
+	shape.dataType = Array.isArray(value.data) ? "array" : value.data === undefined ? "missing" : typeof value.data;
+	if (isRecord(timetable)) {
+		shape.dataKeys = Object.keys(timetable).sort();
+	}
+	if (Array.isArray(timetable.days)) {
+		shape.dayCount = timetable.days.length;
+		const entryTypes = new Map<string, number>();
+		const examShapes: Array<Record<string, unknown>> = [];
+		for (const day of timetable.days) {
+			if (!isRecord(day) || !Array.isArray(day.gridEntries)) {
+				continue;
+			}
+			for (const entry of day.gridEntries) {
+				if (!isRecord(entry)) {
+					continue;
+				}
+				const entryType = typeof entry.type === "string" ? entry.type : typeof entry.type;
+				entryTypes.set(entryType, (entryTypes.get(entryType) ?? 0) + 1);
+				if (
+					typeof entry.type !== "string" ||
+					!entry.type.toUpperCase().includes("EXAM") ||
+					examShapes.length >= 5
+				) {
+					continue;
+				}
+				const duration = entry.duration;
+				const positions = Object.entries(entry).filter(([key]) => /^position\d+$/i.test(key));
+				examShapes.push({
+					keys: Object.keys(entry).sort(),
+					duration: isRecord(duration)
+						? Object.fromEntries(Object.entries(duration).map(([key, field]) => [key, typeof field]))
+						: typeof duration,
+					positions: positions.map(([key, position]) => ({
+						key,
+						shape: (Array.isArray(position) ? position : [position]).map(item => {
+							if (!isRecord(item)) {
+								return { type: typeof item };
+							}
+							const current = item.current;
+							const original = item.original;
+							return {
+								keys: Object.keys(item).sort(),
+								current: isRecord(current)
+									? {
+											keys: Object.keys(current).sort(),
+											fieldTypes: Object.fromEntries(
+												Object.entries(current).map(([field, value]) => [field, typeof value]),
+											),
+										}
+									: typeof current,
+								original: isRecord(original)
+									? {
+											keys: Object.keys(original).sort(),
+											fieldTypes: Object.fromEntries(
+												Object.entries(original).map(([field, value]) => [field, typeof value]),
+											),
+										}
+									: typeof original,
+							};
+						}),
+					})),
+				});
+			}
+		}
+		shape.entryTypes = Object.fromEntries([...entryTypes.entries()].sort(([a], [b]) => a.localeCompare(b)));
+		shape.examShapes = examShapes;
+	}
+	return JSON.stringify(shape);
+}
+
 interface ParentExamContext {
-	studentIds: number[];
+	students: Array<{ id: number; name: string }>;
 	tenantId?: string;
 	schoolYearId?: number;
 }
@@ -65,18 +144,21 @@ function parseParentExamContext(raw: unknown): ParentExamContext {
 	if (!isRecord(user) || !Array.isArray(user.students)) {
 		throw new WebUntisError("INVALID_RESPONSE", "Invalid WebUntis parent exam context response");
 	}
-	const studentIds: number[] = [];
+	const students: Array<{ id: number; name: string }> = [];
 	for (const student of user.students) {
 		const id = isRecord(student) ? positiveSafeId(student.id) : undefined;
 		if (id === undefined) {
 			throw new WebUntisError("INVALID_RESPONSE", "Invalid WebUntis parent exam context response");
 		}
-		studentIds.push(id);
+		const name = isRecord(student)
+			? valueText(student.displayName ?? student.name ?? student.longName ?? student.shortName).trim()
+			: "";
+		students.push({ id, name });
 	}
 	const tenant = isRecord(data.tenant) ? data.tenant : undefined;
 	const schoolYear = isRecord(data.currentSchoolYear) ? data.currentSchoolYear : undefined;
 	return {
-		studentIds: [...new Set(studentIds)],
+		students: [...new Map(students.map(student => [student.id, student])).values()],
 		tenantId: safeHeaderId(tenant?.id),
 		schoolYearId: positiveSafeId(schoolYear?.id),
 	};
@@ -460,34 +542,36 @@ export class WebUntisClient {
 		if (!isRecord(inbox) || !Array.isArray(inbox.incomingMessages)) {
 			throw new WebUntisError("INVALID_RESPONSE", "Invalid WebUntis messages response");
 		}
-		const unread = inbox.incomingMessages.filter(
+		const messages = inbox.incomingMessages.filter(
 			(message): message is Record<string, unknown> =>
 				isRecord(message) &&
-				message.isMessageRead === false &&
+				typeof message.isMessageRead === "boolean" &&
 				(typeof message.id === "number" || typeof message.id === "string"),
 		);
 		const result: WebUntisInboxMessage[] = [];
-		for (let index = 0; index < unread.length; index += 4) {
+		for (let index = 0; index < messages.length; index += 4) {
 			const batch = await Promise.all(
-				unread.slice(index, index + 4).map(async message => {
+				messages.slice(index, index + 4).map(async message => {
 					const preview = valueText(message.contentPreview);
 					let content = preview;
 					let contentIsPreview = true;
-					try {
-						const detail = await this.restRequest(
-							`/api/rest/view/v1/messages/${encodeURIComponent(String(message.id))}`,
-							session,
-							token,
-							"getMessage",
-						);
-						const fullContent = extractMessageContent(detail);
-						if (fullContent) {
-							content = fullContent;
-							contentIsPreview = false;
-						}
-					} catch (error) {
-						if (error instanceof WebUntisError && error.code === "SESSION_EXPIRED") {
-							throw error;
+					if (message.isMessageRead === false) {
+						try {
+							const detail = await this.restRequest(
+								`/api/rest/view/v1/messages/${encodeURIComponent(String(message.id))}`,
+								session,
+								token,
+								"getMessage",
+							);
+							const fullContent = extractMessageContent(detail);
+							if (fullContent) {
+								content = fullContent;
+								contentIsPreview = false;
+							}
+						} catch (error) {
+							if (error instanceof WebUntisError && error.code === "SESSION_EXPIRED") {
+								throw error;
+							}
 						}
 					}
 					const sender = isRecord(message.sender)
@@ -495,6 +579,7 @@ export class WebUntisClient {
 						: valueText(message.sender);
 					return {
 						id: message.id as number | string,
+						readInWebUntis: message.isMessageRead === true,
 						dateTime: valueText(message.sentDateTime ?? message.dateTime),
 						sender,
 						subject: valueText(message.subject),
@@ -586,31 +671,43 @@ export class WebUntisClient {
 				authContext = "bearer";
 				tenantId = tenantIdFromCookie(this.sessionCookie) ?? tenantId;
 				let studentId: number | undefined;
-				if (session.personType > 5) {
+				if (session.personType === 12) {
 					const context = await this.getParentExamContext(session, token, tenantId);
 					contextLoaded = true;
-					linkedStudentCount = context.studentIds.length;
+					linkedStudentCount = context.students.length;
 					tenantId = context.tenantId ?? tenantId;
 					schoolYearId = context.schoolYearId;
-					if (linkedStudentCount === 1) {
-						childScope = "unique";
-						studentId = context.studentIds[0];
-					} else {
-						childScope = linkedStudentCount > 1 ? "ambiguous" : "unresolved";
-						const scope = linkedStudentCount > 1 ? "ambiguous" : "unresolved";
+					if (linkedStudentCount === 0) {
+						childScope = "unresolved";
 						throw new WebUntisError(
 							"API_REQUEST",
-							`WebUntis parent exam scope ${scope} after app-data lookup (auth=bearer, personType=${session.personType}, childScope=${scope}, linkedStudents=${linkedStudentCount})`,
+							`WebUntis parent exam scope unresolved after app-data lookup (auth=bearer, personType=${session.personType}, childScope=unresolved, linkedStudents=0)`,
 						);
 					}
+					childScope = linkedStudentCount === 1 ? "unique" : "ambiguous";
+					return this.loadLinkedStudentExams(
+						session,
+						context.students,
+						token,
+						startDate,
+						endDate,
+						tenantId,
+						schoolYearId,
+					);
 				}
 				result = await request({ token, studentId });
-				if (session.personType > 5 && childScope === "unique" && result.response.status === 403) {
-					return await this.getGuardianExams(
+				if (result.response.status === 403 && session.personType >= 5) {
+					const scopedStudentId = session.personType === 5 ? session.personId : studentId;
+					if (!scopedStudentId) {
+						throw new WebUntisError("API_REQUEST", "Student scope is unavailable for timetable exams");
+					}
+					return await this.getGuardianTimetableExams(
 						session,
 						token,
 						startDate,
 						endDate,
+						scopedStudentId,
+						"",
 						tenantId,
 						schoolYearId,
 						linkedStudentCount,
@@ -641,6 +738,42 @@ export class WebUntisClient {
 			if (!isRecord(payload) || !isRecord(payload.data) || !Array.isArray(payload.data.exams)) {
 				throw new WebUntisError("INVALID_RESPONSE", "Invalid WebUntis exams response");
 			}
+			if (session.personType === 12) {
+				const token = await this.getRestToken(session, "exams");
+				const context = await this.getParentExamContext(session, token, tenantIdFromCookie(this.sessionCookie));
+				if (context.students.length === 0) {
+					throw new WebUntisError("API_REQUEST", "WebUntis parent exam scope has no linked students");
+				}
+				return this.loadLinkedStudentExams(
+					session,
+					context.students,
+					token,
+					startDate,
+					endDate,
+					context.tenantId ?? tenantIdFromCookie(this.sessionCookie),
+					context.schoolYearId,
+				);
+			}
+			if (
+				payload.data.exams.length === 0 &&
+				session.personType === 5 &&
+				Number.isSafeInteger(session.personId) &&
+				session.personId > 0
+			) {
+				const token = await this.getRestToken(session, "exams");
+				const timetableExams = await this.getGuardianTimetableExams(
+					session,
+					token,
+					startDate,
+					endDate,
+					session.personId,
+					"",
+					tenantIdFromCookie(this.sessionCookie),
+					undefined,
+					undefined,
+				);
+				return [...payload.data.exams, ...timetableExams];
+			}
 			return payload.data.exams;
 		} catch (error) {
 			if (error instanceof WebUntisError) {
@@ -658,11 +791,105 @@ export class WebUntisClient {
 		}
 	}
 
-	private async getGuardianExams(
+	/**
+	 *
+	 */
+	public async getLinkedStudents(session: WebUntisSession): Promise<Array<{ id: number; name: string }>> {
+		const token = await this.getRestToken(session, "exams");
+		const context = await this.getParentExamContext(session, token, tenantIdFromCookie(this.sessionCookie));
+		if (context.students.length === 0) {
+			throw new WebUntisError("API_REQUEST", "WebUntis parent account has no linked students");
+		}
+		return context.students;
+	}
+
+	private async loadLinkedStudentExams(
+		session: WebUntisSession,
+		students: Array<{ id: number; name: string }>,
+		token: string,
+		startDate: number,
+		endDate: number,
+		tenantId: string | undefined,
+		schoolYearId: number | undefined,
+	): Promise<unknown[]> {
+		const childExams = await Promise.all(
+			students.map(student =>
+				this.getGuardianTimetableExams(
+					session,
+					token,
+					startDate,
+					endDate,
+					student.id,
+					student.name,
+					tenantId,
+					schoolYearId,
+					students.length,
+				),
+			),
+		);
+		return childExams.flat();
+	}
+
+	private async getGuardianTimetablePayload(
 		session: WebUntisSession,
 		token: string,
 		startDate: number,
 		endDate: number,
+		studentId: number,
+		tenantId: string | undefined,
+		schoolYearId: number | undefined,
+		linkedStudentCount: number,
+	): Promise<unknown> {
+		const formatDate = (value: number): string =>
+			`${String(Math.floor(value / 10000)).padStart(4, "0")}-${String(Math.floor((value % 10000) / 100)).padStart(2, "0")}-${String(value % 100).padStart(2, "0")}`;
+		const url = new URL(this.restUrl("/api/rest/view/v1/timetable/entries"));
+		url.search = new URLSearchParams({
+			start: formatDate(startDate),
+			end: formatDate(endDate),
+			format: "4",
+			resourceType: "STUDENT",
+			resources: String(studentId),
+			periodTypes: "",
+			timetableType: "MY_TIMETABLE",
+		}).toString();
+		const response = await this.fetchImpl(url, {
+			method: "GET",
+			signal: this.getRequestSignal(),
+			headers: {
+				accept: "application/json",
+				Authorization: `Bearer ${token}`,
+				cookie: this.restCookie(session),
+				...(tenantId ? { "Tenant-Id": tenantId } : {}),
+				...(schoolYearId ? { "X-Webuntis-Api-School-Year-Id": String(schoolYearId) } : {}),
+			},
+		});
+		this.sessionCookie = mergeCookieHeader(this.sessionCookie, response.headers).value;
+		const body = await response.text();
+		let payload: unknown;
+		try {
+			payload = JSON.parse(body);
+		} catch {
+			payload = undefined;
+		}
+		if (response.status === 401 || response.redirected || (isRecord(payload) && isLoginPagePayload(payload))) {
+			throw new WebUntisError("SESSION_EXPIRED", "WebUntis session expired while loading child timetable");
+		}
+		if (!response.ok) {
+			throw new WebUntisError(
+				"API_REQUEST",
+				`WebUntis child timetable request failed (HTTP ${response.status}, linkedStudents=${linkedStudentCount})`,
+			);
+		}
+		return payload;
+	}
+
+	private async getGuardianTimetableExams(
+		session: WebUntisSession,
+		token: string,
+		startDate: number,
+		endDate: number,
+		studentId: number,
+		studentName: string,
 		tenantId: string | undefined,
 		schoolYearId: number | undefined,
 		linkedStudentCount: number | undefined,
@@ -673,9 +900,14 @@ export class WebUntisClient {
 			const day = value % 100;
 			return `${String(year).padStart(4, "0")}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
 		};
-		const url = new URL(this.restUrl("/api/rest/view/v1/exams/for-guardian"));
+		const url = new URL(this.restUrl("/api/rest/view/v1/timetable/entries"));
 		url.searchParams.set("start", dateString(startDate));
 		url.searchParams.set("end", dateString(endDate));
+		url.searchParams.set("format", "4");
+		url.searchParams.set("resourceType", "STUDENT");
+		url.searchParams.set("resources", String(studentId));
+		url.searchParams.set("periodTypes", "");
+		url.searchParams.set("timetableType", "MY_TIMETABLE");
 		const response = await this.fetchImpl(url, {
 			method: "GET",
 			signal: this.getRequestSignal(),
@@ -698,7 +930,7 @@ export class WebUntisClient {
 		}
 		const contentType = response.headers.get("content-type") || "";
 		this.onDiagnostic?.({
-			method: "getGuardianExams",
+			method: "getGuardianTimetableExams",
 			authContext: "bearer",
 			personType: session.personType,
 			childScope: "unique",
@@ -716,19 +948,29 @@ export class WebUntisClient {
 			cookieChanged: cookie.changed,
 			sessionCookieChanged: cookie.sessionCookieChanged,
 		});
-		const context = `after modern guardian route (auth=bearer, personType=${session.personType}, childScope=unique, linkedStudents=${linkedStudentCount ?? 0})`;
+		const context = `(auth=bearer, personType=${session.personType}, childScope=unique, linkedStudents=${linkedStudentCount ?? 0})`;
 		if (response.status === 401 || response.redirected || (isRecord(payload) && isLoginPagePayload(payload))) {
 			throw new WebUntisError("SESSION_EXPIRED", `WebUntis session expired while loading exams ${context}`);
 		}
 		if (!response.ok) {
 			throw new WebUntisError(
 				"API_REQUEST",
-				`WebUntis guardian exams request failed (HTTP ${response.status}) ${context}`,
+				`WebUntis guardian exams request failed (HTTP ${response.status}) after modern guardian route ${context}`,
 			);
 		}
 		try {
-			return normalizeModernGuardianExams(payload);
+			return normalizeGuardianTimetableExams(payload, studentId, studentName);
 		} catch {
+			this.onDiagnostic?.({
+				method: "getGuardianTimetableExamsResponseShape",
+				status: response.status,
+				contentType,
+				url: redactUrl(response.url || url.href),
+				redirected: response.redirected,
+				length: body.length,
+				type: getResponseType(body, contentType),
+				responseShape: payload === undefined ? "invalid-json" : guardianTimetableResponseShape(payload),
+			});
 			throw new WebUntisError(
 				"INVALID_RESPONSE",
 				`Invalid WebUntis guardian exams response after modern guardian route ${context}`,
@@ -919,11 +1161,11 @@ export class WebUntisClient {
 			);
 		}
 		const childScope =
-			context.studentIds.length === 1 ? "unique" : context.studentIds.length > 1 ? "ambiguous" : "unresolved";
+			context.students.length === 1 ? "unique" : context.students.length > 1 ? "ambiguous" : "unresolved";
 		this.onDiagnostic?.({
 			...diagnosticBase,
 			childScope,
-			linkedStudentCount: context.studentIds.length,
+			linkedStudentCount: context.students.length,
 			tenantIdPresent: Boolean(context.tenantId ?? tenantId),
 			schoolYearIdPresent: Boolean(context.schoolYearId),
 			contextLoaded: true,

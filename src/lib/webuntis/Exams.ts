@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { WebUntisError } from "./WebUntisErrors";
 
 /** A normalized WebUntis exam. */
@@ -18,6 +19,10 @@ export interface UpcomingExam {
 	text: string;
 	/** Human-readable exam summary. */
 	displayText: string;
+	/** Student identifier when exams were loaded from a parent account. */
+	studentId?: number;
+	/** Student display name when available. */
+	studentName?: string;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -173,6 +178,106 @@ export function normalizeModernGuardianExams(raw: unknown): unknown[] {
 }
 
 /**
+ * Extract exams from the REST timetable used by guardian accounts.
+ *
+ * @param raw The REST timetable response.
+ * @param studentId The WebUntis student identifier.
+ * @param studentName The linked student's display name.
+ */
+export function normalizeGuardianTimetableExams(raw: unknown, studentId: number, studentName = ""): unknown[] {
+	const timetable = isRecord(raw) && isRecord(raw.data) ? raw.data : raw;
+	if (!isRecord(timetable) || !Array.isArray(timetable.days)) {
+		throw new WebUntisError("INVALID_RESPONSE", "Invalid WebUntis guardian timetable response");
+	}
+	const exams: unknown[] = [];
+	for (const day of timetable.days) {
+		if (!isRecord(day) || !Array.isArray(day.gridEntries)) {
+			throw new WebUntisError("INVALID_RESPONSE", "Invalid WebUntis guardian timetable response");
+		}
+		for (const entry of day.gridEntries) {
+			if (!isRecord(entry) || typeof entry.type !== "string" || !entry.type.toUpperCase().includes("EXAM")) {
+				continue;
+			}
+			const duration = entry.duration;
+			if (!isRecord(duration)) {
+				throw new WebUntisError("INVALID_RESPONSE", "Invalid WebUntis guardian exam entry");
+			}
+			const start = parseLocalDateTime(duration.start);
+			const end = parseLocalDateTime(duration.end);
+			const subjects: string[] = [];
+			const positionValues = Object.entries(entry)
+				.filter(([key]) => /^position\d+$/i.test(key))
+				.map(([, value]) => value);
+			if (Array.isArray(entry.positions)) {
+				positionValues.push(...entry.positions);
+			} else if (isRecord(entry.positions)) {
+				positionValues.push(...Object.values(entry.positions));
+			}
+			for (const positions of positionValues) {
+				const items = Array.isArray(positions) ? positions : isRecord(positions) ? [positions] : [];
+				for (const rawPosition of items) {
+					if (!isRecord(rawPosition)) {
+						continue;
+					}
+					const current = rawPosition.current;
+					const position = isRecord(current) ? current : rawPosition;
+					const type = position.type ?? rawPosition.type;
+					if (typeof type !== "string" || type.toUpperCase() !== "SUBJECT") {
+						continue;
+					}
+					const subjectValue = isRecord(current)
+						? (current.longName ??
+							current.displayName ??
+							current.shortName ??
+							current.name ??
+							current.value)
+						: (rawPosition.current ?? rawPosition.value ?? rawPosition.name);
+					const values = Array.isArray(subjectValue) ? subjectValue : [subjectValue];
+					for (const value of values) {
+						let subject: unknown;
+						if (typeof value === "string") {
+							subject = value;
+						} else if (isRecord(value)) {
+							subject =
+								value.displayName ?? value.longName ?? value.shortName ?? value.name ?? value.value;
+						}
+						if (typeof subject === "string" && subject.trim()) {
+							subjects.push(subject.trim());
+						}
+					}
+				}
+			}
+			const subject = [...new Set(subjects)].join(", ");
+			if (!start || !end || start.date !== end.date || end.time <= start.time || !subject) {
+				throw new WebUntisError("INVALID_RESPONSE", "Invalid WebUntis guardian exam entry");
+			}
+			const name = optionalText(entry.name);
+			const description = [entry.lessonInfo, entry.lessonText, ...(Array.isArray(entry.texts) ? entry.texts : [])]
+				.map(value => (isRecord(value) ? value.text : value))
+				.map(optionalText)
+				.filter(Boolean)
+				.filter((value, index, values) => values.indexOf(value) === index)
+				.join(" · ");
+			const text = [subject, description].filter(Boolean).join(" · ");
+			const identity = [studentId, start.date, start.time, end.time, subject, name, text].join("|");
+			const id = createHash("sha1").update(identity).digest().readUInt32BE(0) || 1;
+			exams.push({
+				id,
+				subject,
+				examDate: start.date,
+				startTime: start.time,
+				endTime: end.time,
+				name,
+				text,
+				studentId,
+				studentName,
+			});
+		}
+	}
+	return exams;
+}
+
+/**
  * Convert and validate the WebUntis exams payload.
  *
  * @param raw The WebUntis exams response or its exam array.
@@ -207,8 +312,10 @@ export function normalizeUpcomingExams(raw: unknown, now: Date): UpcomingExam[] 
 			continue;
 		}
 		const subject = optionalText(rawExam.subject);
-		const name = optionalText(rawExam.name);
+		const name = optionalText(rawExam.name) || optionalText(rawExam.examName);
 		const text = optionalText(rawExam.text);
+		const studentId = typeof rawExam.studentId === "number" ? rawExam.studentId : undefined;
+		const studentName = optionalText(rawExam.studentName);
 		const details = [displayDate(parsedDate.date), `${startTime}–${endTime}`, subject, text || name].filter(
 			Boolean,
 		);
@@ -221,6 +328,8 @@ export function normalizeUpcomingExams(raw: unknown, now: Date): UpcomingExam[] 
 			name,
 			text,
 			displayText: details.join(" · "),
+			...(studentId === undefined ? {} : { studentId }),
+			...(studentName ? { studentName } : {}),
 		};
 		if (!byId.has(id)) {
 			byId.set(id, {

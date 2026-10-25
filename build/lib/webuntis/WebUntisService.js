@@ -131,12 +131,46 @@ class WebUntisService {
     }
     const holidays = holidayEntries ? (0, import_Holidays.summarizeHolidays)(holidayEntries, now) : null;
     const range = (0, import_Timetable.weekRange)(now);
+    if (session.personType === 12) {
+      const children = await client.getLinkedStudents(session);
+      if (children.length > 0) {
+        const masterData = await this.getMasterData(client, session, this.configKey(config), now);
+        const childTimetables = await Promise.all(
+          children.map(async (child) => {
+            const periods2 = await client.getTimetable(session, {
+              ...range,
+              element: { id: child.id, type: 5 },
+              onlyBaseTimetable: false,
+              showBooking: true,
+              showInfo: true,
+              showSubstText: true,
+              showLsText: true,
+              showLsNumber: true,
+              showStudentgroup: true
+            });
+            return {
+              ...child,
+              timetable: (0, import_Timetable.splitTimetable)(
+                (0, import_Timetable.normalizeLessons)((0, import_Timetable.resolveTimetableReferences)(periods2, masterData)),
+                now
+              )
+            };
+          })
+        );
+        return {
+          ...childTimetables[0].timetable,
+          holidays,
+          personType: session.personType,
+          children: childTimetables
+        };
+      }
+    }
     const classId = session.personType >= 1 && session.personType <= 5 ? null : await client.getClassId(session);
     const supportedPerson = session.personType >= 1 && session.personType <= 5 ? null : await client.getSupportedPerson(session);
     const element = session.personType >= 1 && session.personType <= 5 ? { id: session.personId, type: session.personType } : supportedPerson ? supportedPerson : (classId != null ? classId : session.klasseId) > 0 ? { id: classId != null ? classId : session.klasseId, type: 1 } : null;
     if (!element) {
       const periods2 = await client.getPublicTimetable(session, now);
-      return { ...(0, import_Timetable.splitTimetable)((0, import_Timetable.normalizeLessons)(periods2), now), holidays };
+      return { ...(0, import_Timetable.splitTimetable)((0, import_Timetable.normalizeLessons)(periods2), now), holidays, personType: session.personType };
     }
     const periods = await client.getTimetable(session, {
       ...range,
@@ -160,7 +194,9 @@ class WebUntisService {
         (0, import_Timetable.normalizeLessons)((0, import_Timetable.resolveTimetableReferences)(periods, { subjects, teachers, rooms, klassen })),
         now
       ),
-      holidays
+      holidays,
+      personType: session.personType,
+      ...session.personType === 5 ? { studentId: session.personId } : {}
     };
   }
   configKey(config) {

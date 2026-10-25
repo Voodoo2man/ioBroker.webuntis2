@@ -179,6 +179,23 @@ describe("WebUntis timetable normalization", () => {
 		);
 	});
 
+	it("keeps full lesson details when the channel description exceeds 100 characters", () => {
+		const longTeacher =
+			"Teacher with a deliberately long full name that exceeds the former channel description limit";
+		const longRoom = "Building C, floor 4, specialized laboratory room 412";
+		const lesson = normalizeLesson({
+			startTime: 750,
+			endTime: 835,
+			su: [{ name: "Ma", longname: "Mathematics" }],
+			te: [{ name: "T", longname: longTeacher }],
+			ro: [{ name: "R", longname: longRoom }],
+		});
+		const name = lessonChannelName(lesson);
+
+		expect(name).to.include(longTeacher);
+		expect(name).to.include(longRoom);
+	});
+
 	it("resolves timetable resource ids using master data", () => {
 		const [period] = resolveTimetableReferences(
 			[{ id: 1, kl: [{ id: 10 }], te: [{ id: 20 }], su: [{ id: 30 }], ro: [{ id: 40 }] }],

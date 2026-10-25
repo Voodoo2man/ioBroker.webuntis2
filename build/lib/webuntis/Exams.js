@@ -18,10 +18,12 @@ var __copyProps = (to, from, except, desc) => {
 var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 var Exams_exports = {};
 __export(Exams_exports, {
+  normalizeGuardianTimetableExams: () => normalizeGuardianTimetableExams,
   normalizeModernGuardianExams: () => normalizeModernGuardianExams,
   normalizeUpcomingExams: () => normalizeUpcomingExams
 });
 module.exports = __toCommonJS(Exams_exports);
+var import_node_crypto = require("node:crypto");
 var import_WebUntisErrors = require("./WebUntisErrors");
 function isRecord(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -138,6 +140,85 @@ function normalizeModernGuardianExams(raw) {
     ];
   });
 }
+function normalizeGuardianTimetableExams(raw, studentId, studentName = "") {
+  var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k;
+  const timetable = isRecord(raw) && isRecord(raw.data) ? raw.data : raw;
+  if (!isRecord(timetable) || !Array.isArray(timetable.days)) {
+    throw new import_WebUntisErrors.WebUntisError("INVALID_RESPONSE", "Invalid WebUntis guardian timetable response");
+  }
+  const exams = [];
+  for (const day of timetable.days) {
+    if (!isRecord(day) || !Array.isArray(day.gridEntries)) {
+      throw new import_WebUntisErrors.WebUntisError("INVALID_RESPONSE", "Invalid WebUntis guardian timetable response");
+    }
+    for (const entry of day.gridEntries) {
+      if (!isRecord(entry) || typeof entry.type !== "string" || !entry.type.toUpperCase().includes("EXAM")) {
+        continue;
+      }
+      const duration = entry.duration;
+      if (!isRecord(duration)) {
+        throw new import_WebUntisErrors.WebUntisError("INVALID_RESPONSE", "Invalid WebUntis guardian exam entry");
+      }
+      const start = parseLocalDateTime(duration.start);
+      const end = parseLocalDateTime(duration.end);
+      const subjects = [];
+      const positionValues = Object.entries(entry).filter(([key]) => /^position\d+$/i.test(key)).map(([, value]) => value);
+      if (Array.isArray(entry.positions)) {
+        positionValues.push(...entry.positions);
+      } else if (isRecord(entry.positions)) {
+        positionValues.push(...Object.values(entry.positions));
+      }
+      for (const positions of positionValues) {
+        const items = Array.isArray(positions) ? positions : isRecord(positions) ? [positions] : [];
+        for (const rawPosition of items) {
+          if (!isRecord(rawPosition)) {
+            continue;
+          }
+          const current = rawPosition.current;
+          const position = isRecord(current) ? current : rawPosition;
+          const type = (_a = position.type) != null ? _a : rawPosition.type;
+          if (typeof type !== "string" || type.toUpperCase() !== "SUBJECT") {
+            continue;
+          }
+          const subjectValue = isRecord(current) ? (_e = (_d = (_c = (_b = current.longName) != null ? _b : current.displayName) != null ? _c : current.shortName) != null ? _d : current.name) != null ? _e : current.value : (_g = (_f = rawPosition.current) != null ? _f : rawPosition.value) != null ? _g : rawPosition.name;
+          const values = Array.isArray(subjectValue) ? subjectValue : [subjectValue];
+          for (const value of values) {
+            let subject2;
+            if (typeof value === "string") {
+              subject2 = value;
+            } else if (isRecord(value)) {
+              subject2 = (_k = (_j = (_i = (_h = value.displayName) != null ? _h : value.longName) != null ? _i : value.shortName) != null ? _j : value.name) != null ? _k : value.value;
+            }
+            if (typeof subject2 === "string" && subject2.trim()) {
+              subjects.push(subject2.trim());
+            }
+          }
+        }
+      }
+      const subject = [...new Set(subjects)].join(", ");
+      if (!start || !end || start.date !== end.date || end.time <= start.time || !subject) {
+        throw new import_WebUntisErrors.WebUntisError("INVALID_RESPONSE", "Invalid WebUntis guardian exam entry");
+      }
+      const name = optionalText(entry.name);
+      const description = [entry.lessonInfo, entry.lessonText, ...Array.isArray(entry.texts) ? entry.texts : []].map((value) => isRecord(value) ? value.text : value).map(optionalText).filter(Boolean).filter((value, index, values) => values.indexOf(value) === index).join(" \xB7 ");
+      const text = [subject, description].filter(Boolean).join(" \xB7 ");
+      const identity = [studentId, start.date, start.time, end.time, subject, name, text].join("|");
+      const id = (0, import_node_crypto.createHash)("sha1").update(identity).digest().readUInt32BE(0) || 1;
+      exams.push({
+        id,
+        subject,
+        examDate: start.date,
+        startTime: start.time,
+        endTime: end.time,
+        name,
+        text,
+        studentId,
+        studentName
+      });
+    }
+  }
+  return exams;
+}
 function normalizeUpcomingExams(raw, now) {
   const exams = Array.isArray(raw) ? raw : isRecord(raw) && isRecord(raw.data) && Array.isArray(raw.data.exams) ? raw.data.exams : null;
   if (!exams) {
@@ -163,8 +244,10 @@ function normalizeUpcomingExams(raw, now) {
       continue;
     }
     const subject = optionalText(rawExam.subject);
-    const name = optionalText(rawExam.name);
+    const name = optionalText(rawExam.name) || optionalText(rawExam.examName);
     const text = optionalText(rawExam.text);
+    const studentId = typeof rawExam.studentId === "number" ? rawExam.studentId : void 0;
+    const studentName = optionalText(rawExam.studentName);
     const details = [displayDate(parsedDate.date), `${startTime}\u2013${endTime}`, subject, text || name].filter(
       Boolean
     );
@@ -176,7 +259,9 @@ function normalizeUpcomingExams(raw, now) {
       endTime,
       name,
       text,
-      displayText: details.join(" \xB7 ")
+      displayText: details.join(" \xB7 "),
+      ...studentId === void 0 ? {} : { studentId },
+      ...studentName ? { studentName } : {}
     };
     if (!byId.has(id)) {
       byId.set(id, {
@@ -190,6 +275,7 @@ function normalizeUpcomingExams(raw, now) {
 }
 // Annotate the CommonJS export names for ESM import in node:
 0 && (module.exports = {
+  normalizeGuardianTimetableExams,
   normalizeModernGuardianExams,
   normalizeUpcomingExams
 });

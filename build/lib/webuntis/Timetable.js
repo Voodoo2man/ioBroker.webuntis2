@@ -43,7 +43,7 @@ function lessonChannelName(lesson) {
     lesson.teacher ? lesson.teacherLong || lesson.teacher : "",
     lesson.room ? lesson.roomLong || lesson.room : ""
   ].map((value) => value.trim()).filter(Boolean).join(" \xB7 ");
-  return longName.length <= 100 ? longName : shortName;
+  return longName || shortName;
 }
 function text(value) {
   return typeof value === "string" || typeof value === "number" ? String(value) : "";
