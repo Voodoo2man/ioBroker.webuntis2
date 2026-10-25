@@ -588,7 +588,7 @@ describe("upcoming exams", () => {
 					return json({ errorMessage: "forbidden" }, 403);
 				}
 				if (url.pathname.endsWith("/api/rest/view/v1/timetable/entries")) {
-					return json({
+					const timetableResponse = json({
 						days: [
 							{
 								gridEntries: [
@@ -602,6 +602,8 @@ describe("upcoming exams", () => {
 							},
 						],
 					});
+					Object.defineProperty(timetableResponse, "url", { value: url.href });
+					return timetableResponse;
 				}
 				throw new Error(`Unexpected endpoint ${url.pathname}`);
 			},
@@ -627,6 +629,7 @@ describe("upcoming exams", () => {
 		expect(timetableCall?.schoolYearId).to.equal("2027");
 		expect(timetableCall?.cookie).to.include("ROUTE=token");
 		expect(JSON.stringify(diagnostics)).not.to.include("9001");
+		expect(JSON.stringify(diagnostics)).not.to.include("resources=42");
 		expect(JSON.stringify(diagnostics)).not.to.include("Private Student Name");
 		expect(JSON.stringify(diagnostics)).not.to.include("parent-secret-token");
 		expect(JSON.stringify(diagnostics)).not.to.include("cookie-tenant");

@@ -228,7 +228,8 @@ class WebuntisNext extends utils.Adapter {
     if (state.ack) {
       return;
     }
-    const match = /^inbox\.messages\.unread\.([a-zA-Z0-9_-]+)\.markRead$/.exec(id);
+    const localId = id.startsWith(`${this.namespace}.`) ? id.slice(this.namespace.length + 1) : id;
+    const match = /^inbox\.messages\.unread\.([a-zA-Z0-9_-]+)\.markRead$/.exec(localId);
     if (!match) {
       return;
     }
@@ -372,6 +373,7 @@ class WebuntisNext extends utils.Adapter {
       "Refresh now"
     );
     await this.subscribeStatesAsync("info.refresh");
+    await this.subscribeInboxMessageActions();
     await this.ensureTranslatedObject(
       "info.connection",
       {
@@ -459,6 +461,9 @@ class WebuntisNext extends utils.Adapter {
     this.scheduleTimetableUpdate();
     this.scheduleCurrentNextUpdate();
   }
+  async subscribeInboxMessageActions() {
+    await this.subscribeStatesAsync("inbox.messages.unread.*.markRead");
+  }
   async refreshAll() {
     if (this.unloaded) {
       return;
@@ -511,12 +516,12 @@ class WebuntisNext extends utils.Adapter {
       const accountType = data.personType === 5 ? "Student" : data.personType === 12 ? "Parent" : "Other";
       await (0, import_StateWriter.setStateChangedOrInitialize)(this, "info.accountType", accountType);
       const students = ((_a = data.children) == null ? void 0 : _a.length) ? data.children : data.studentId ? [{ id: data.studentId, name: `Student ${data.studentId}`, timetable: data }] : [];
+      const childChannelIds = studentChannelIds(students);
       this.todayLessons = (_c = (_b = students[0]) == null ? void 0 : _b.timetable.today) != null ? _c : data.today;
       this.hasTimetableSnapshot = true;
       let updated = 0;
       let removed = 0;
       if (students.length) {
-        const childChannelIds = studentChannelIds(students);
         this.childTodayLessons = new Map(
           students.map((student) => [
             student.id,
@@ -556,34 +561,40 @@ class WebuntisNext extends utils.Adapter {
             removed += result.removed;
           }
         }
-        const existingChildren = await this.getObjectListAsync({
-          startkey: `${this.namespace}.students.student_`,
-          endkey: `${this.namespace}.students.student_\uFFFF`
-        });
-        const expectedChildren = new Set(childChannelIds.values());
-        const staleChildren = /* @__PURE__ */ new Set();
-        for (const object of existingChildren.rows || []) {
-          const childId = object.id.replace(`${this.namespace}.students.`, "").split(".")[0];
-          if (childId.startsWith("student_") && !expectedChildren.has(childId)) {
-            staleChildren.add(childId);
-          }
-        }
-        for (const childId of staleChildren) {
-          this.ensureActive();
-          await this.delObjectAsync(`students.${childId}`, { recursive: true });
-        }
       } else {
         this.childTodayLessons.clear();
-        const existingChildren = await this.getObjectListAsync({
-          startkey: `${this.namespace}.students.student_`,
-          endkey: `${this.namespace}.students.student_\uFFFF`
-        });
-        const staleChildren = new Set(
-          (existingChildren.rows || []).map((object) => object.id.replace(`${this.namespace}.students.`, "").split(".")[0]).filter((childId) => childId.startsWith("student_"))
-        );
-        for (const childId of staleChildren) {
+      }
+      const existingChildren = await this.getObjectListAsync({
+        startkey: `${this.namespace}.students.`,
+        endkey: `${this.namespace}.students.\uFFFF`
+      });
+      const expectedChildren = new Set(childChannelIds.values());
+      const childRoots = new Set(
+        (existingChildren.rows || []).map(
+          (object) => object.id.replace(`${this.namespace}.students.`, "").split(".")[0]
+        )
+      );
+      for (const childId of childRoots) {
+        if (expectedChildren.has(childId)) {
+          continue;
+        }
+        const studentRoot = await this.getObjectAsync(`students.${childId}`);
+        const native = studentRoot == null ? void 0 : studentRoot.native;
+        if (Number.isSafeInteger(native == null ? void 0 : native.studentId) || childId.startsWith("student_")) {
           this.ensureActive();
           await this.delObjectAsync(`students.${childId}`, { recursive: true });
+        }
+      }
+      if (!students.length) {
+        await this.ensureTranslatedObject(
+          "timetable",
+          { type: "channel", common: { name: (0, import_ObjectTranslations.translatedName)("timetable") }, native: {} },
+          "Timetable"
+        );
+        for (const group of TIMETABLE_GROUPS) {
+          const result = await this.writeTimetableGroup(group, data[group], now);
+          updated += result.updated;
+          removed += result.removed;
         }
       }
       if (data.holidays) {
@@ -628,7 +639,7 @@ class WebuntisNext extends utils.Adapter {
           this.lastExamsWarningAt = Date.now();
         }
       }
-      await this.cleanupLegacyDataRoots();
+      await this.cleanupLegacyDataRoots(students.length > 0);
       await this.setState("info.lastSuccessfulUpdate", now.toISOString(), true);
       await this.setState("info.nextUpdate", new Date(now.getTime() + TIMETABLE_INTERVAL_MS).toISOString(), true);
       await this.setState("info.connection", true, true);
@@ -667,8 +678,8 @@ class WebuntisNext extends utils.Adapter {
       "Students"
     );
   }
-  async cleanupLegacyDataRoots() {
-    for (const id of ["timetable", "exams", "children", "info.inbox"]) {
+  async cleanupLegacyDataRoots(removeTimetable = true) {
+    for (const id of [...removeTimetable ? ["timetable"] : [], "exams", "children", "info.inbox"]) {
       if (await this.getObjectAsync(id)) {
         await this.delObjectAsync(id, { recursive: true });
       }

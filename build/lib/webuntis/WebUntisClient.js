@@ -258,7 +258,7 @@ function getResponseType(body, contentType) {
   }
 }
 function redactUrl(url) {
-  return url.replace(/;jsessionid=[^?;]+/gi, ";jsessionid=<redacted>").replace(/([?&]studentId=)[^&]*/gi, "$1<redacted>");
+  return url.replace(/;jsessionid=[^?;]+/gi, ";jsessionid=<redacted>").replace(/([?&](?:studentId|resources)=)[^&]*/gi, "$1<redacted>");
 }
 function getCookieHeader(headers) {
   var _a, _b;

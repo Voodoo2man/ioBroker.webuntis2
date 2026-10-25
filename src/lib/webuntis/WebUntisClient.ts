@@ -296,7 +296,7 @@ function getResponseType(body: string, contentType: string): WebUntisHttpDiagnos
 function redactUrl(url: string): string {
 	return url
 		.replace(/;jsessionid=[^?;]+/gi, ";jsessionid=<redacted>")
-		.replace(/([?&]studentId=)[^&]*/gi, "$1<redacted>");
+		.replace(/([?&](?:studentId|resources)=)[^&]*/gi, "$1<redacted>");
 }
 
 function getCookieHeader(headers: Headers): string | undefined {
