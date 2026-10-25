@@ -2,6 +2,7 @@
 	"common": {
 		"name": "webuntis2",
 		"version": "0.1.10",
+		"nogit": true,
 		"news": {
 			"0.1.10": {
 				"en": "Improved configuration feedback, holiday names, and connection status; reduced routine login log messages; verified Node.js 26 compatibility; and migrated Dependabot auto-merging to the `pull_request` event.",
