@@ -181,6 +181,7 @@ and include only relevant, non-sensitive log messages when asking for help.
 - (Voodoo2man) Added a manual full refresh button
 - (Voodoo2man) Improved timetable details
 - (Voodoo2man) Removed duplicate date states.
+- (Voodoo2man) Restored minute-level current and next lesson updates for accounts without linked students.
 
 ### 0.1.10 (2026-10-18)
 

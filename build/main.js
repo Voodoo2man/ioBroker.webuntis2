@@ -1239,6 +1239,9 @@ class WebuntisNext extends utils.Adapter {
         `students.${child.channelId}.timetable.today`
       );
     }
+    if (this.childTodayLessons.size === 0) {
+      await this.writeCurrentNextSummary(this.todayLessons, /* @__PURE__ */ new Date(), "timetable.today");
+    }
   }
   async cleanupObsoleteStructure() {
     for (const id of [

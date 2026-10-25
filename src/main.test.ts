@@ -233,6 +233,24 @@ describe("upcoming exams adapter states", () => {
 		expect(steps).to.deep.equal(["students", "inbox", "holidays", "cleanup", "timetable", "current-next"]);
 	});
 
+	it("refreshes current and next lesson states for accounts without students", async () => {
+		const harness = makeAdapterHarness(async () => []);
+		const todayLessons = [{ id: "teacher-lesson" }] as never[];
+		const summaries: Array<{ lessons: never[]; path: string }> = [];
+		Object.assign(harness.adapter, {
+			hasTimetableSnapshot: true,
+			todayLessons,
+			childTodayLessons: new Map(),
+			writeCurrentNextSummary: async (lessons: never[], _now: Date, path: string) => {
+				summaries.push({ lessons, path });
+			},
+		});
+
+		await harness.methods.updateCurrentNextStates();
+
+		expect(summaries).to.deep.equal([{ lessons: todayLessons, path: "timetable.today" }]);
+	});
+
 	it("removes legacy units from calendar date objects", async () => {
 		const AdapterClass = loadAdapterClassForTest();
 		const existing = {

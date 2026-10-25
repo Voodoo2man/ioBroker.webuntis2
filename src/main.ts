@@ -1361,6 +1361,9 @@ class WebuntisNext extends utils.Adapter {
 				`students.${child.channelId}.timetable.today`,
 			);
 		}
+		if (this.childTodayLessons.size === 0) {
+			await this.writeCurrentNextSummary(this.todayLessons, new Date(), "timetable.today");
+		}
 	}
 
 	private async cleanupObsoleteStructure(): Promise<void> {
