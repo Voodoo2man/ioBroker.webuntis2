@@ -174,6 +174,7 @@ and include only relevant, non-sensitive log messages when asking for help.
 
 ### WORK IN PROGRESS
 
+- (Voodoo2man) Added the Ukrainian Admin translation.
 - (Voodoo2man) Added multi Student support and structure.
 - (Voodoo2man) Added upcoming exams
 - (Voodoo2man) Added read and unread inbox messages
