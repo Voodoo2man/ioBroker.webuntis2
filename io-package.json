@@ -1,277 +1,303 @@
 {
-	"common": {
-		"name": "webuntis2",
-		"version": "0.1.10",
-		"nogit": true,
-		"news": {
-			"0.1.10": {
-				"en": "Improved configuration feedback, holiday names, and connection status; reduced routine login log messages; verified Node.js 26 compatibility; and migrated Dependabot auto-merging to the `pull_request` event.",
-				"de": "Verbessertes Feedback zur Konfiguration, Feiertagsnamen und Verbindungsstatus; weniger Login-Logs; Kompatibilität mit Node.js 26 geprüft; Dependabot Auto-Merging auf `pull_request` umgestellt.",
-				"ru": "Улучшены отзывы о конфигурации, праздничные названия и статус подключения; уменьшено количество регулярных сообщений в журнале входа; проверена совместимость с Node.js 26; автоматическое слияние Dependabot перенесено в событие `pull_request`.",
-				"pt": "Melhorou a configuração, nomes de feriados e status da conexão; reduziu mensagens de login rotineiras; confirmou a compatibilidade com Node.js 26; e migrou a fusão automática do Dependabot para o evento `pull_request`.",
-				"nl": "Verbeterde configuratiefeedback, vakantienamen en verbindingsstatus; minder routinematige inloglogberichten; geverifieerde compatibiliteit met Node.js 26; en gemigreerde automatische samenvoeging van Dependabot naar de gebeurtenis `pull_request`.",
-				"fr": "Feedback de configuration, noms de vacances et état de connexion améliorés ; réduction des messages de routine ; compatibilité Node.js 26 vérifiée ; migration de la fusion automatique de Dependabot vers l'événement « pull_request ».",
-				"it": "Feedback sulla configurazione, nomi delle ferie e stato della connessione migliorati, riduzione dei log di routine, compatibilità verificata con Node.js 26 e migrazione automatica di Dependabot all'evento pull_request.",
-				"es": "Se mejoraron los comentarios de configuración, los nombres festivos y el estado de la conexión; se redujeron los mensajes de registro de inicio de sesión rutinarios; se verificó la compatibilidad con Node.js 26 y se migró el Dependabot automáticamente al evento `pull_request`.",
-				"pl": "Poprawiono informacje zwrotne o konfiguracji, nazwy świąt i status połączenia; zmniejszenie rutynowych wiadomości dziennika logowania; zweryfikowana zgodność z Node.js 26; i migracja automatycznego scalania Dependabot do zdarzenia `pull_request`.",
-				"uk": "Покращено зворотний зв'язок конфігурації, назви свят та статус з'єднання; зменшено рутинні повідомлення журналу входу; перевірено сумісність з Node.js 26; та перенесено автоматичне злиття Dependabot до події `pull_request`.",
-				"zh-cn": "改进了配置反馈、假日名称和连接状态；减少了例行登录日志消息；验证了 Node.js 26 的兼容性；并将 Dependabot 自动合并迁移到了 `pull_request`事件。"
-			},
-			"0.1.9": {
-				"en": "Improved timetable data and reliability with comparisons, long names and automatic re-authentication for expired sessions; added an inbox for unread WebUntis messages",
-				"de": "Stundenplandaten und Zuverlässigkeit mit Gegenüberstellungen, Langnamen und automatischer Neuanmeldung bei abgelaufenen Sitzungen verbessert; Postfach für ungelesene WebUntis-Mitteilungen hinzugefügt",
-				"ru": "Улучшены данные расписания и его надёжность: добавлены сравнения, полные имена и автоматическая повторная аутентификация после истечения срока действия сеанса; добавлен почтовый ящик непрочитанных сообщений WebUntis",
-				"pt": "Melhorados os dados e a fiabilidade do horário com comparações, nomes completos e reautenticação automática após a expiração da sessão; adicionada uma caixa de entrada para mensagens WebUntis não lidas",
-				"nl": "Roostergegevens en betrouwbaarheid verbeterd met vergelijkingen, volledige namen en automatisch opnieuw aanmelden na het verlopen van een sessie; een inbox voor ongelezen WebUntis-berichten toegevoegd",
-				"fr": "Amélioration des données et de la fiabilité de l’emploi du temps avec les comparaisons, les noms complets et la reconnexion automatique après expiration de la session ; ajout d’une boîte de réception des messages WebUntis non lus",
-				"it": "Migliorati i dati e l’affidabilità dell’orario con confronti, nomi completi e nuova autenticazione automatica dopo la scadenza della sessione; aggiunta una casella per i messaggi WebUntis non letti",
-				"es": "Mejorados los datos y la fiabilidad del horario con comparaciones, nombres completos y reautenticación automática al caducar la sesión; añadido un buzón para los mensajes no leídos de WebUntis",
-				"pl": "Ulepszono dane i niezawodność planu lekcji dzięki porównaniom, pełnym nazwom i automatycznemu ponownemu logowaniu po wygaśnięciu sesji; dodano skrzynkę nieprzeczytanych wiadomości WebUntis",
-				"uk": "Покращено дані та надійність розкладу: додано порівняння, повні назви й автоматичну повторну автентифікацію після завершення сеансу; додано скриньку непрочитаних повідомлень WebUntis",
-				"zh-cn": "改进了课程表数据和可靠性，增加了对比、完整名称和会话过期后的自动重新认证；新增 WebUntis 未读消息收件箱"
-			},
-			"0.1.8": {
-				"en": "Update dynamic lesson names, migrate existing object metadata and repair legacy i18n names",
-				"de": "Dynamische Unterrichtsnamen aktualisiert, bestehende Objektmetadaten migriert und alte i18n-Namen korrigiert",
-				"ru": "Обновлены динамические названия уроков, перенесены метаданные существующих объектов и исправлены старые имена i18n",
-				"pt": "Nomes dinâmicos das aulas atualizados, metadados dos objetos existentes migrados e nomes i18n antigos corrigidos",
-				"nl": "Dynamische lesnamen bijgewerkt, bestaande objectmetadata gemigreerd en oude i18n-namen hersteld",
-				"fr": "Mise à jour des noms de cours dynamiques, migration des métadonnées existantes et correction des anciens noms i18n",
-				"it": "Aggiornati i nomi dinamici delle lezioni, migrati i metadati esistenti e corretti i vecchi nomi i18n",
-				"es": "Actualizados los nombres dinámicos de las clases, migrados los metadatos existentes y corregidos los nombres i18n antiguos",
-				"pl": "Zaktualizowano dynamiczne nazwy lekcji, zmigrowano metadane istniejących obiektów i naprawiono stare nazwy i18n",
-				"uk": "Оновлено динамічні назви уроків, перенесено метадані наявних об’єктів і виправлено старі назви i18n",
-				"zh-cn": "更新动态课程名称、迁移现有对象元数据并修复旧版 i18n 名称"
-			},
-			"0.1.7": {
-				"en": "Improved ioBroker compliance, object translations, shutdown handling and state updates",
-				"de": "ioBroker-Konformität, Objektübersetzungen, Beenden des Adapters und Statusaktualisierungen verbessert",
-				"ru": "Улучшены совместимость с ioBroker, переводы объектов, завершение работы и обновление состояний",
-				"pt": "Melhoradas a compatibilidade com o ioBroker, as traduções dos objetos, o encerramento e as atualizações dos estados",
-				"nl": "ioBroker-compatibiliteit, objectvertalingen, afsluiten en statusupdates verbeterd",
-				"fr": "Amélioration de la compatibilité ioBroker, des traductions d’objets, de l’arrêt et des mises à jour d’états",
-				"it": "Migliorate la compatibilità con ioBroker, le traduzioni degli oggetti, l'arresto e gli aggiornamenti degli stati",
-				"es": "Mejoradas la compatibilidad con ioBroker, las traducciones de objetos, el apagado y las actualizaciones de estados",
-				"pl": "Ulepszono zgodność z ioBroker, tłumaczenia obiektów, zamykanie adaptera i aktualizacje stanów",
-				"uk": "Покращено сумісність з ioBroker, переклади об’єктів, завершення роботи та оновлення станів",
-				"zh-cn": "改进了 ioBroker 兼容性、对象翻译、关闭处理和状态更新"
-			},
-			"0.1.6": {
-				"en": "Improved Admin setup, school search feedback and mobile layout",
-				"de": "Admin-Einrichtung, Rückmeldungen bei der Schulsuche und mobile Darstellung verbessert",
-				"ru": "Улучшены настройка в Admin, обратная связь при поиске школ и мобильная компоновка",
-				"pt": "Melhoradas a configuração no Admin, as mensagens da pesquisa de escolas e a disposição móvel",
-				"nl": "Admin-configuratie, feedback bij het zoeken naar scholen en mobiele weergave verbeterd",
-				"fr": "Amélioration de la configuration Admin, des retours de recherche d’écoles et de l’affichage mobile",
-				"it": "Migliorate la configurazione Admin, le indicazioni della ricerca delle scuole e la visualizzazione mobile",
-				"es": "Mejoradas la configuración en Admin, las respuestas de búsqueda de escuelas y la vista móvil",
-				"pl": "Ulepszono konfigurację w Admin, komunikaty wyszukiwania szkół i układ mobilny",
-				"uk": "Покращено налаштування в Admin, відгук під час пошуку шкіл і мобільне компонування",
-				"zh-cn": "改进了 Admin 配置、学校搜索反馈和移动端布局"
-			},
-			"0.1.5": {
-				"en": "Fixed the empty adapter configuration page in ioBroker Admin",
-				"de": "Leere Adapter-Konfigurationsseite in ioBroker Admin behoben",
-				"ru": "Исправлена пустая страница конфигурации адаптера в ioBroker Admin",
-				"pt": "Corrigida a página de configuração vazia do adaptador no ioBroker Admin",
-				"nl": "Lege adapterconfiguratiepagina in ioBroker Admin opgelost",
-				"fr": "Correction de la page de configuration vide dans ioBroker Admin",
-				"it": "Corretta la pagina di configurazione vuota dell'adattatore in ioBroker Admin",
-				"es": "Corregida la página de configuración vacía del adaptador en ioBroker Admin",
-				"pl": "Naprawiono pustą stronę konfiguracji adaptera w ioBroker Admin",
-				"uk": "Виправлено порожню сторінку конфігурації адаптера в ioBroker Admin",
-				"zh-cn": "修复了 ioBroker Admin 中适配器配置页面为空的问题"
-			}
-		},
-		"titleLang": {
-			"en": "WebUntis2",
-			"de": "WebUntis2",
-			"ru": "ВебУнтис2",
-			"pt": "WebUntis2",
-			"nl": "WebUntis2",
-			"fr": "WebUntis2",
-			"it": "WebUntis2",
-			"es": "WebUntis2",
-			"pl": "WebUntis2",
-			"uk": "WebUntis2",
-			"zh-cn": "WebUntis2"
-		},
-		"desc": {
-			"en": "Connect ioBroker to WebUntis for timetables, school information and related data",
-			"de": "Verbinden Sie ioBroker mit WebUntis für Stundenpläne, Schulinformationen und zugehörige Daten",
-			"ru": "Подключите ioBroker к WebUntis для получения расписаний, школьной информации и сопутствующих данных.",
-			"pt": "Conecte o ioBroker ao WebUntis para obter horários, informações escolares e dados relacionados",
-			"nl": "Koppel ioBroker aan WebUntis voor lesroosters, schoolinformatie en gerelateerde gegevens",
-			"fr": "Connectez ioBroker à WebUntis pour les horaires, les informations scolaires et les données associées",
-			"it": "Collega ioBroker a WebUntis per orari, informazioni sulla scuola e dati correlati",
-			"es": "Conecte ioBroker a WebUntis para obtener horarios, información escolar y datos relacionados",
-			"pl": "Połącz ioBroker z WebUntis, aby uzyskać rozkłady jazdy, informacje o szkołach i powiązane dane",
-			"uk": "Підключіть ioBroker до WebUntis для отримання розкладів, шкільної інформації та пов’язаних даних",
-			"zh-cn": "将 ioBroker 连接到 WebUntis 以获取时间表、学校信息和相关数据"
-		},
-		"authors": ["Voodoo2man <Voodoo2man@outlook.de>"],
-		"keywords": ["webuntis", "untis", "timetable", "school", "education", "schedule"],
-		"licenseInformation": {
-			"type": "free",
-			"license": "MIT"
-		},
-		"platform": "Javascript/Node.js",
-		"icon": "webuntis2.png",
-		"enabled": true,
-		"extIcon": "https://raw.githubusercontent.com/Voodoo2man/ioBroker.webuntis2/main/admin/webuntis2.png",
-		"readme": "https://github.com/Voodoo2man/ioBroker.webuntis2/blob/main/README.md",
-		"loglevel": "info",
-		"tier": 3,
-		"mode": "daemon",
-		"type": "date-and-time",
-		"compact": true,
-		"messagebox": true,
-		"connectionType": "cloud",
-		"dataSource": "poll",
-		"adminUI": {
-			"config": "html"
-		},
-		"eraseOnUpload": true,
-		"dependencies": [
-			{
-				"js-controller": ">=7.2.2"
-			}
-		],
-		"globalDependencies": [
-			{
-				"admin": ">=8.2.0"
-			}
-		]
-	},
-	"native": {
-		"server": "",
-		"schoolName": "",
-		"schoolDisplayName": "",
-		"schoolAddress": "",
-		"schoolId": null,
-		"username": "",
-		"password": ""
-	},
-	"encryptedNative": ["password"],
-	"protectedNative": ["password"],
-	"objects": [],
-	"instanceObjects": [
-		{
-			"_id": "info",
-			"type": "channel",
-			"common": {
-				"name": {
-					"en": "Information",
-					"de": "Informationen",
-					"es": "Información",
-					"fr": "Informations",
-					"it": "Informazioni",
-					"nl": "Informatie",
-					"pl": "Informacje",
-					"pt": "Informações",
-					"ru": "Информация",
-					"uk": "Інформація",
-					"zh-cn": "信息"
-				}
-			},
-			"native": {}
-		},
-		{
-			"_id": "info.connection",
-			"type": "state",
-			"common": {
-				"role": "indicator.connected",
-				"name": {
-					"en": "Device or service connected",
-					"de": "Gerät oder Dienst verbunden",
-					"es": "Dispositivo o servicio conectado",
-					"fr": "Appareil ou service connecté",
-					"it": "Dispositivo o servizio connesso",
-					"nl": "Apparaat of service verbonden",
-					"pl": "Urządzenie lub usługa połączona",
-					"pt": "Dispositivo ou serviço conectado",
-					"ru": "Устройство или сервис подключены",
-					"uk": "Пристрій або сервіс підключено",
-					"zh-cn": "设备或服务已连接"
-				},
-				"type": "boolean",
-				"read": true,
-				"write": false,
-				"def": false
-			},
-			"native": {}
-		},
-		{
-			"_id": "info.lastUpdate",
-			"type": "state",
-			"common": {
-				"name": {
-					"en": "Last timetable update attempt",
-					"de": "Letzter Versuch einer Stundenplanaktualisierung",
-					"es": "Último intento de actualizar el horario",
-					"fr": "Dernière tentative de mise à jour de l'emploi du temps",
-					"it": "Ultimo tentativo di aggiornamento dell'orario",
-					"nl": "Laatste poging om het rooster bij te werken",
-					"pl": "Ostatnia próba aktualizacji planu lekcji",
-					"pt": "Última tentativa de atualização do horário",
-					"ru": "Последняя попытка обновить расписание",
-					"uk": "Остання спроба оновлення розкладу",
-					"zh-cn": "上次更新课程表的尝试"
-				},
-				"type": "string",
-				"role": "date",
-				"read": true,
-				"write": false
-			},
-			"native": {}
-		},
-		{
-			"_id": "info.lastSuccessfulUpdate",
-			"type": "state",
-			"common": {
-				"name": {
-					"en": "Last successful timetable update",
-					"de": "Letzte erfolgreiche Stundenplanaktualisierung",
-					"es": "Última actualización exitosa del horario",
-					"fr": "Dernière mise à jour réussie de l'emploi du temps",
-					"it": "Ultimo aggiornamento riuscito dell'orario",
-					"nl": "Laatste geslaagde roosterupdate",
-					"pl": "Ostatnia udana aktualizacja planu lekcji",
-					"pt": "Última atualização bem-sucedida do horário",
-					"ru": "Последнее успешное обновление расписания",
-					"uk": "Останнє успішне оновлення розкладу",
-					"zh-cn": "上次成功更新课程表"
-				},
-				"type": "string",
-				"role": "date",
-				"read": true,
-				"write": false
-			},
-			"native": {}
-		},
-		{
-			"_id": "info.nextUpdate",
-			"type": "state",
-			"common": {
-				"name": {
-					"en": "Next timetable update",
-					"de": "Nächste Stundenplanaktualisierung",
-					"es": "Próxima actualización del horario",
-					"fr": "Prochaine mise à jour de l'emploi du temps",
-					"it": "Prossimo aggiornamento dell'orario",
-					"nl": "Volgende roosterupdate",
-					"pl": "Następna aktualizacja planu lekcji",
-					"pt": "Próxima atualização do horário",
-					"ru": "Следующее обновление расписания",
-					"uk": "Наступне оновлення розкладу",
-					"zh-cn": "下次更新课程表"
-				},
-				"type": "string",
-				"role": "date",
-				"read": true,
-				"write": false
-			},
-			"native": {}
-		}
-	]
+  "common": {
+    "name": "webuntis2",
+    "version": "0.2.0",
+    "nogit": true,
+    "news": {
+      "0.2.0": {
+        "en": "Raised the minimum Node.js, js-controller, and Admin requirements.\nAdded the Ukrainian Admin translation.\nAdded multi Student support and structure.\nAdded upcoming exams\nAdded read and unread inbox messages\nAdded a manual full refresh button\nImproved timetable details\nRemoved duplicate date states.",
+        "de": "Mindestwerte für Node.js, JS-Controller und Admin erhöht.\nAdmin-Übersetzung auf Ukrainisch hinzugefügt.\nMehrstudentische Betreuung und Struktur.\nKommende Prüfungen hinzugefügt\nGelesene und ungelesene Inbox hinzugefügt\nManueller Vollabgleich hinzugefügt\nBessere Fahrplandetails\nDoppelte Datumsangaben entfernt.",
+        "ru": "Повышены минимальные требования к Node.js, js-контроллеру и администратору.\nДобавлен украинский перевод Admin.\nДобавлена поддержка и структура для нескольких студентов.\nДобавлены предстоящие экзамены\nДобавлены прочитанные и непрочитанные входящие сообщения\nДобавлена кнопка полного обновления вручную\nУлучшенная информация о расписании\nУдалены повторяющиеся состояния дат.",
+        "pt": "Aumentou os requisitos mínimos de Node.js, js-controller e Admin.\nAdicionou a tradução ucraniana Admin.\nAdição de apoio e estrutura a vários alunos.\nNovos exames\nAdição de mensagens lidas e não lidas\nAdicionou um botão manual\nMelhores detalhes do horário\nDatas duplicadas removidas.",
+        "nl": "De minimale vereisten voor Node.js, js-controller en admin zijn verhoogd.\nDe Oekraïense Admin-vertaling toegevoegd.\nOndersteuning en structuur voor meerdere studenten toegevoegd.\nAankomende examens toegevoegd\nLezen en ongelezen berichten in de inbox toegevoegd\nEen knop voor handmatig volledig verversen toegevoegd\nVerbeterde informatie over de dienstregeling\nDubbele datumstatussen verwijderd.",
+        "fr": "Les exigences minimales pour Node.js, JS-Controller et Admin ont été augmentées.\nAjout de la traduction Ukrainian Admin.\nSupport et structure multi-étudiants ajoutés.\nExamens à venir ajoutés\nAjout de messages lus et non lus\nAjout d'un bouton de rafraîchissement manuel\nAmélioration des horaires\nSuppression des doublons de date.",
+        "it": "Aumentati i requisiti minimi di Node.js, js-controller e admin.\nAggiunta la traduzione ucraina Admin.\nSupporto e struttura per più studenti.\nAggiunti i prossimi esami\nAggiunti messaggi letti e non letti\nAggiunto un refresh manuale\nDettagli orari migliorati\nData duplicata rimossa.",
+        "es": "Aumentó los requisitos mínimos de Node.js, js-controller y Admin.\nAñadió la traducción administrativa ucraniana.\nAñadió apoyo y estructura multiestudiantiles.\nAñadió próximos exámenes\nAñadió mensajes leídos y no leídos\nSe ha añadido un botón de actualización manual\nDetalles de horarios mejorados\nSe quitaron los estados de fecha duplicados.",
+        "pl": "Podniesiono minimalne wymagania Node.js, js-controller i administratora.\nDodano tłumaczenie ukraińskiego administratora.\nDodano wsparcie i strukturę wielu studentów.\nDodano nadchodzące egzaminy\nDodano przeczytane i nieprzeczytane wiadomości skrzynki odbiorczej\nDodano ręczny przycisk pełnego odświeżania\nUlepszone szczegóły harmonogramu\nUsunięto zduplikowane stany dat.",
+        "uk": "Піднято мінімальні вимоги до Node.js, js-контролера та адміністратора.\nДодано український переклад Адміністратора.\nДодана підтримка та структура кількох студентів.\nДодані майбутні іспити\nДодані прочитані та непрочитані повідомлення в папці «Вхідні»\nДодана кнопка повного оновлення вручну\nПокращені деталі розкладу\nВилучено дублікати станів дат.",
+        "zh-cn": "提高了 Node.js、js-controller 和 Admin 的最低要求。\n添加了乌克兰管理员翻译。\n增加了多学生支持和结构。\n增加了即将举行的考试\n添加了已读和未读的收件箱消息\n添加了手动完全刷新按钮\n改进了时刻表详情\n删除了重复的日期状态。"
+      },
+      "0.1.10": {
+        "en": "Improved configuration feedback, holiday names, and connection status; reduced routine login log messages; verified Node.js 26 compatibility; and migrated Dependabot auto-merging to the `pull_request` event.",
+        "de": "Verbessertes Feedback zur Konfiguration, Feiertagsnamen und Verbindungsstatus; weniger Login-Logs; Kompatibilität mit Node.js 26 geprüft; Dependabot Auto-Merging auf `pull_request` umgestellt.",
+        "ru": "Улучшены отзывы о конфигурации, праздничные названия и статус подключения; уменьшено количество регулярных сообщений в журнале входа; проверена совместимость с Node.js 26; автоматическое слияние Dependabot перенесено в событие `pull_request`.",
+        "pt": "Melhorou a configuração, nomes de feriados e status da conexão; reduziu mensagens de login rotineiras; confirmou a compatibilidade com Node.js 26; e migrou a fusão automática do Dependabot para o evento `pull_request`.",
+        "nl": "Verbeterde configuratiefeedback, vakantienamen en verbindingsstatus; minder routinematige inloglogberichten; geverifieerde compatibiliteit met Node.js 26; en gemigreerde automatische samenvoeging van Dependabot naar de gebeurtenis `pull_request`.",
+        "fr": "Feedback de configuration, noms de vacances et état de connexion améliorés ; réduction des messages de routine ; compatibilité Node.js 26 vérifiée ; migration de la fusion automatique de Dependabot vers l'événement « pull_request ».",
+        "it": "Feedback sulla configurazione, nomi delle ferie e stato della connessione migliorati, riduzione dei log di routine, compatibilità verificata con Node.js 26 e migrazione automatica di Dependabot all'evento pull_request.",
+        "es": "Se mejoraron los comentarios de configuración, los nombres festivos y el estado de la conexión; se redujeron los mensajes de registro de inicio de sesión rutinarios; se verificó la compatibilidad con Node.js 26 y se migró el Dependabot automáticamente al evento `pull_request`.",
+        "pl": "Poprawiono informacje zwrotne o konfiguracji, nazwy świąt i status połączenia; zmniejszenie rutynowych wiadomości dziennika logowania; zweryfikowana zgodność z Node.js 26; i migracja automatycznego scalania Dependabot do zdarzenia `pull_request`.",
+        "uk": "Покращено зворотний зв'язок конфігурації, назви свят та статус з'єднання; зменшено рутинні повідомлення журналу входу; перевірено сумісність з Node.js 26; та перенесено автоматичне злиття Dependabot до події `pull_request`.",
+        "zh-cn": "改进了配置反馈、假日名称和连接状态；减少了例行登录日志消息；验证了 Node.js 26 的兼容性；并将 Dependabot 自动合并迁移到了 `pull_request`事件。"
+      },
+      "0.1.9": {
+        "en": "Improved timetable data and reliability with comparisons, long names and automatic re-authentication for expired sessions; added an inbox for unread WebUntis messages",
+        "de": "Stundenplandaten und Zuverlässigkeit mit Gegenüberstellungen, Langnamen und automatischer Neuanmeldung bei abgelaufenen Sitzungen verbessert; Postfach für ungelesene WebUntis-Mitteilungen hinzugefügt",
+        "ru": "Улучшены данные расписания и его надёжность: добавлены сравнения, полные имена и автоматическая повторная аутентификация после истечения срока действия сеанса; добавлен почтовый ящик непрочитанных сообщений WebUntis",
+        "pt": "Melhorados os dados e a fiabilidade do horário com comparações, nomes completos e reautenticação automática após a expiração da sessão; adicionada uma caixa de entrada para mensagens WebUntis não lidas",
+        "nl": "Roostergegevens en betrouwbaarheid verbeterd met vergelijkingen, volledige namen en automatisch opnieuw aanmelden na het verlopen van een sessie; een inbox voor ongelezen WebUntis-berichten toegevoegd",
+        "fr": "Amélioration des données et de la fiabilité de l’emploi du temps avec les comparaisons, les noms complets et la reconnexion automatique après expiration de la session ; ajout d’une boîte de réception des messages WebUntis non lus",
+        "it": "Migliorati i dati e l’affidabilità dell’orario con confronti, nomi completi e nuova autenticazione automatica dopo la scadenza della sessione; aggiunta una casella per i messaggi WebUntis non letti",
+        "es": "Mejorados los datos y la fiabilidad del horario con comparaciones, nombres completos y reautenticación automática al caducar la sesión; añadido un buzón para los mensajes no leídos de WebUntis",
+        "pl": "Ulepszono dane i niezawodność planu lekcji dzięki porównaniom, pełnym nazwom i automatycznemu ponownemu logowaniu po wygaśnięciu sesji; dodano skrzynkę nieprzeczytanych wiadomości WebUntis",
+        "uk": "Покращено дані та надійність розкладу: додано порівняння, повні назви й автоматичну повторну автентифікацію після завершення сеансу; додано скриньку непрочитаних повідомлень WebUntis",
+        "zh-cn": "改进了课程表数据和可靠性，增加了对比、完整名称和会话过期后的自动重新认证；新增 WebUntis 未读消息收件箱"
+      },
+      "0.1.8": {
+        "en": "Update dynamic lesson names, migrate existing object metadata and repair legacy i18n names",
+        "de": "Dynamische Unterrichtsnamen aktualisiert, bestehende Objektmetadaten migriert und alte i18n-Namen korrigiert",
+        "ru": "Обновлены динамические названия уроков, перенесены метаданные существующих объектов и исправлены старые имена i18n",
+        "pt": "Nomes dinâmicos das aulas atualizados, metadados dos objetos existentes migrados e nomes i18n antigos corrigidos",
+        "nl": "Dynamische lesnamen bijgewerkt, bestaande objectmetadata gemigreerd en oude i18n-namen hersteld",
+        "fr": "Mise à jour des noms de cours dynamiques, migration des métadonnées existantes et correction des anciens noms i18n",
+        "it": "Aggiornati i nomi dinamici delle lezioni, migrati i metadati esistenti e corretti i vecchi nomi i18n",
+        "es": "Actualizados los nombres dinámicos de las clases, migrados los metadatos existentes y corregidos los nombres i18n antiguos",
+        "pl": "Zaktualizowano dynamiczne nazwy lekcji, zmigrowano metadane istniejących obiektów i naprawiono stare nazwy i18n",
+        "uk": "Оновлено динамічні назви уроків, перенесено метадані наявних об’єктів і виправлено старі назви i18n",
+        "zh-cn": "更新动态课程名称、迁移现有对象元数据并修复旧版 i18n 名称"
+      },
+      "0.1.7": {
+        "en": "Improved ioBroker compliance, object translations, shutdown handling and state updates",
+        "de": "ioBroker-Konformität, Objektübersetzungen, Beenden des Adapters und Statusaktualisierungen verbessert",
+        "ru": "Улучшены совместимость с ioBroker, переводы объектов, завершение работы и обновление состояний",
+        "pt": "Melhoradas a compatibilidade com o ioBroker, as traduções dos objetos, o encerramento e as atualizações dos estados",
+        "nl": "ioBroker-compatibiliteit, objectvertalingen, afsluiten en statusupdates verbeterd",
+        "fr": "Amélioration de la compatibilité ioBroker, des traductions d’objets, de l’arrêt et des mises à jour d’états",
+        "it": "Migliorate la compatibilità con ioBroker, le traduzioni degli oggetti, l'arresto e gli aggiornamenti degli stati",
+        "es": "Mejoradas la compatibilidad con ioBroker, las traducciones de objetos, el apagado y las actualizaciones de estados",
+        "pl": "Ulepszono zgodność z ioBroker, tłumaczenia obiektów, zamykanie adaptera i aktualizacje stanów",
+        "uk": "Покращено сумісність з ioBroker, переклади об’єктів, завершення роботи та оновлення станів",
+        "zh-cn": "改进了 ioBroker 兼容性、对象翻译、关闭处理和状态更新"
+      },
+      "0.1.6": {
+        "en": "Improved Admin setup, school search feedback and mobile layout",
+        "de": "Admin-Einrichtung, Rückmeldungen bei der Schulsuche und mobile Darstellung verbessert",
+        "ru": "Улучшены настройка в Admin, обратная связь при поиске школ и мобильная компоновка",
+        "pt": "Melhoradas a configuração no Admin, as mensagens da pesquisa de escolas e a disposição móvel",
+        "nl": "Admin-configuratie, feedback bij het zoeken naar scholen en mobiele weergave verbeterd",
+        "fr": "Amélioration de la configuration Admin, des retours de recherche d’écoles et de l’affichage mobile",
+        "it": "Migliorate la configurazione Admin, le indicazioni della ricerca delle scuole e la visualizzazione mobile",
+        "es": "Mejoradas la configuración en Admin, las respuestas de búsqueda de escuelas y la vista móvil",
+        "pl": "Ulepszono konfigurację w Admin, komunikaty wyszukiwania szkół i układ mobilny",
+        "uk": "Покращено налаштування в Admin, відгук під час пошуку шкіл і мобільне компонування",
+        "zh-cn": "改进了 Admin 配置、学校搜索反馈和移动端布局"
+      },
+      "0.1.5": {
+        "en": "Fixed the empty adapter configuration page in ioBroker Admin",
+        "de": "Leere Adapter-Konfigurationsseite in ioBroker Admin behoben",
+        "ru": "Исправлена пустая страница конфигурации адаптера в ioBroker Admin",
+        "pt": "Corrigida a página de configuração vazia do adaptador no ioBroker Admin",
+        "nl": "Lege adapterconfiguratiepagina in ioBroker Admin opgelost",
+        "fr": "Correction de la page de configuration vide dans ioBroker Admin",
+        "it": "Corretta la pagina di configurazione vuota dell'adattatore in ioBroker Admin",
+        "es": "Corregida la página de configuración vacía del adaptador en ioBroker Admin",
+        "pl": "Naprawiono pustą stronę konfiguracji adaptera w ioBroker Admin",
+        "uk": "Виправлено порожню сторінку конфігурації адаптера в ioBroker Admin",
+        "zh-cn": "修复了 ioBroker Admin 中适配器配置页面为空的问题"
+      }
+    },
+    "titleLang": {
+      "en": "WebUntis2",
+      "de": "WebUntis2",
+      "ru": "ВебУнтис2",
+      "pt": "WebUntis2",
+      "nl": "WebUntis2",
+      "fr": "WebUntis2",
+      "it": "WebUntis2",
+      "es": "WebUntis2",
+      "pl": "WebUntis2",
+      "uk": "WebUntis2",
+      "zh-cn": "WebUntis2"
+    },
+    "desc": {
+      "en": "Connect ioBroker to WebUntis for timetables, school information and related data",
+      "de": "Verbinden Sie ioBroker mit WebUntis für Stundenpläne, Schulinformationen und zugehörige Daten",
+      "ru": "Подключите ioBroker к WebUntis для получения расписаний, школьной информации и сопутствующих данных.",
+      "pt": "Conecte o ioBroker ao WebUntis para obter horários, informações escolares e dados relacionados",
+      "nl": "Koppel ioBroker aan WebUntis voor lesroosters, schoolinformatie en gerelateerde gegevens",
+      "fr": "Connectez ioBroker à WebUntis pour les horaires, les informations scolaires et les données associées",
+      "it": "Collega ioBroker a WebUntis per orari, informazioni sulla scuola e dati correlati",
+      "es": "Conecte ioBroker a WebUntis para obtener horarios, información escolar y datos relacionados",
+      "pl": "Połącz ioBroker z WebUntis, aby uzyskać rozkłady jazdy, informacje o szkołach i powiązane dane",
+      "uk": "Підключіть ioBroker до WebUntis для отримання розкладів, шкільної інформації та пов’язаних даних",
+      "zh-cn": "将 ioBroker 连接到 WebUntis 以获取时间表、学校信息和相关数据"
+    },
+    "authors": [
+      "Voodoo2man <Voodoo2man@outlook.de>"
+    ],
+    "keywords": [
+      "webuntis",
+      "untis",
+      "timetable",
+      "school",
+      "education",
+      "schedule"
+    ],
+    "licenseInformation": {
+      "type": "free",
+      "license": "MIT"
+    },
+    "platform": "Javascript/Node.js",
+    "icon": "webuntis2.png",
+    "enabled": true,
+    "extIcon": "https://raw.githubusercontent.com/Voodoo2man/ioBroker.webuntis2/main/admin/webuntis2.png",
+    "readme": "https://github.com/Voodoo2man/ioBroker.webuntis2/blob/main/README.md",
+    "loglevel": "info",
+    "tier": 3,
+    "mode": "daemon",
+    "type": "date-and-time",
+    "compact": true,
+    "messagebox": true,
+    "connectionType": "cloud",
+    "dataSource": "poll",
+    "adminUI": {
+      "config": "html"
+    },
+    "eraseOnUpload": true,
+    "dependencies": [
+      {
+        "js-controller": ">=7.2.2"
+      }
+    ],
+    "globalDependencies": [
+      {
+        "admin": ">=8.2.0"
+      }
+    ]
+  },
+  "native": {
+    "server": "",
+    "schoolName": "",
+    "schoolDisplayName": "",
+    "schoolAddress": "",
+    "schoolId": null,
+    "username": "",
+    "password": ""
+  },
+  "encryptedNative": [
+    "password"
+  ],
+  "protectedNative": [
+    "password"
+  ],
+  "objects": [],
+  "instanceObjects": [
+    {
+      "_id": "info",
+      "type": "channel",
+      "common": {
+        "name": {
+          "en": "Information",
+          "de": "Informationen",
+          "es": "Información",
+          "fr": "Informations",
+          "it": "Informazioni",
+          "nl": "Informatie",
+          "pl": "Informacje",
+          "pt": "Informações",
+          "ru": "Информация",
+          "uk": "Інформація",
+          "zh-cn": "信息"
+        }
+      },
+      "native": {}
+    },
+    {
+      "_id": "info.connection",
+      "type": "state",
+      "common": {
+        "role": "indicator.connected",
+        "name": {
+          "en": "Device or service connected",
+          "de": "Gerät oder Dienst verbunden",
+          "es": "Dispositivo o servicio conectado",
+          "fr": "Appareil ou service connecté",
+          "it": "Dispositivo o servizio connesso",
+          "nl": "Apparaat of service verbonden",
+          "pl": "Urządzenie lub usługa połączona",
+          "pt": "Dispositivo ou serviço conectado",
+          "ru": "Устройство или сервис подключены",
+          "uk": "Пристрій або сервіс підключено",
+          "zh-cn": "设备或服务已连接"
+        },
+        "type": "boolean",
+        "read": true,
+        "write": false,
+        "def": false
+      },
+      "native": {}
+    },
+    {
+      "_id": "info.lastUpdate",
+      "type": "state",
+      "common": {
+        "name": {
+          "en": "Last timetable update attempt",
+          "de": "Letzter Versuch einer Stundenplanaktualisierung",
+          "es": "Último intento de actualizar el horario",
+          "fr": "Dernière tentative de mise à jour de l'emploi du temps",
+          "it": "Ultimo tentativo di aggiornamento dell'orario",
+          "nl": "Laatste poging om het rooster bij te werken",
+          "pl": "Ostatnia próba aktualizacji planu lekcji",
+          "pt": "Última tentativa de atualização do horário",
+          "ru": "Последняя попытка обновить расписание",
+          "uk": "Остання спроба оновлення розкладу",
+          "zh-cn": "上次更新课程表的尝试"
+        },
+        "type": "string",
+        "role": "date",
+        "read": true,
+        "write": false
+      },
+      "native": {}
+    },
+    {
+      "_id": "info.lastSuccessfulUpdate",
+      "type": "state",
+      "common": {
+        "name": {
+          "en": "Last successful timetable update",
+          "de": "Letzte erfolgreiche Stundenplanaktualisierung",
+          "es": "Última actualización exitosa del horario",
+          "fr": "Dernière mise à jour réussie de l'emploi du temps",
+          "it": "Ultimo aggiornamento riuscito dell'orario",
+          "nl": "Laatste geslaagde roosterupdate",
+          "pl": "Ostatnia udana aktualizacja planu lekcji",
+          "pt": "Última atualização bem-sucedida do horário",
+          "ru": "Последнее успешное обновление расписания",
+          "uk": "Останнє успішне оновлення розкладу",
+          "zh-cn": "上次成功更新课程表"
+        },
+        "type": "string",
+        "role": "date",
+        "read": true,
+        "write": false
+      },
+      "native": {}
+    },
+    {
+      "_id": "info.nextUpdate",
+      "type": "state",
+      "common": {
+        "name": {
+          "en": "Next timetable update",
+          "de": "Nächste Stundenplanaktualisierung",
+          "es": "Próxima actualización del horario",
+          "fr": "Prochaine mise à jour de l'emploi du temps",
+          "it": "Prossimo aggiornamento dell'orario",
+          "nl": "Volgende roosterupdate",
+          "pl": "Następna aktualizacja planu lekcji",
+          "pt": "Próxima atualização do horário",
+          "ru": "Следующее обновление расписания",
+          "uk": "Наступне оновлення розкладу",
+          "zh-cn": "下次更新课程表"
+        },
+        "type": "string",
+        "role": "date",
+        "read": true,
+        "write": false
+      },
+      "native": {}
+    }
+  ]
 }
