@@ -38,6 +38,7 @@ describe("object translations", () => {
 			"Message ID",
 			"Read",
 			"Read in WebUntis",
+			"Read locally",
 			"Sender",
 			"Subject",
 		]) {

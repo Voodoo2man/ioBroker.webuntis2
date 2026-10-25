@@ -171,6 +171,7 @@ class WebuntisNext extends utils.Adapter {
 	private unloaded = false;
 	private readonly migratedNames = new Set<string>();
 	private inboxMutationQueue: Promise<void> = Promise.resolve();
+	private refreshMutationQueue: Promise<void> = Promise.resolve();
 	private lastMessageWarningAt = 0;
 	private lastExamsWarningAt = 0;
 
@@ -253,6 +254,15 @@ class WebuntisNext extends utils.Adapter {
 		return result;
 	}
 
+	private enqueueRefreshMutation<T>(operation: () => Promise<T>): Promise<T> {
+		const result = this.refreshMutationQueue.then(operation);
+		this.refreshMutationQueue = result.then(
+			() => undefined,
+			() => undefined,
+		);
+		return result;
+	}
+
 	/** Throw when asynchronous work resumes after adapter shutdown. */
 	private ensureActive(): void {
 		if (this.unloaded) {
@@ -317,6 +327,7 @@ class WebuntisNext extends utils.Adapter {
 			["contentIsPreview", "Content is preview", "boolean"],
 			["hasAttachments", "Has attachments", "boolean"],
 			["readInWebUntis", "Read in WebUntis", "boolean"],
+			["readLocally", "Read locally", "boolean"],
 		];
 		const channelRows = await this.getObjectListAsync({
 			startkey: `${this.namespace}.inbox.messages.read.`,
@@ -352,7 +363,7 @@ class WebuntisNext extends utils.Adapter {
 		}
 		sourceMessage.id = sourceId?.val ?? messageId;
 		sourceMessage.read = true;
-		sourceMessage.readInWebUntis = false;
+		sourceMessage.readLocally = true;
 		readMessages.push(sourceMessage);
 		readMessages.sort((left, right) => String(left.dateTime ?? "").localeCompare(String(right.dateTime ?? "")));
 		for (const slot of existingSlots) {
@@ -548,6 +559,10 @@ class WebuntisNext extends utils.Adapter {
 	}
 
 	private async refreshAll(): Promise<void> {
+		return this.enqueueRefreshMutation(() => this.refreshAllLocked());
+	}
+
+	private async refreshAllLocked(): Promise<void> {
 		if (this.unloaded) {
 			return;
 		}
@@ -555,8 +570,8 @@ class WebuntisNext extends utils.Adapter {
 		await this.ensureInboxRoot();
 		await this.ensureHolidaysRoot();
 		await this.cleanupObsoleteStructure();
-		await this.updateTimetable();
-		await this.updateCurrentNextStates();
+		await this.updateTimetableLocked();
+		await this.updateCurrentNextStatesLocked();
 	}
 
 	private scheduleTimetableUpdate(): void {
@@ -594,6 +609,10 @@ class WebuntisNext extends utils.Adapter {
 	}
 
 	private async updateTimetable(): Promise<void> {
+		return this.enqueueRefreshMutation(() => this.updateTimetableLocked());
+	}
+
+	private async updateTimetableLocked(): Promise<void> {
 		if (this.unloaded) {
 			return;
 		}
@@ -906,8 +925,8 @@ class WebuntisNext extends utils.Adapter {
 				continue;
 			}
 			const messageId = await this.getStateAsync(relativePath);
-			const read = await this.getStateAsync(relativePath.replace(/\.id$/, ".read"));
-			if (messageId?.val !== undefined && read?.val === true) {
+			const readLocally = await this.getStateAsync(relativePath.replace(/\.id$/, ".readLocally"));
+			if (messageId?.val !== undefined && readLocally?.val === true) {
 				locallyReadIds.add(String(messageId.val));
 			}
 		}
@@ -972,6 +991,14 @@ class WebuntisNext extends utils.Adapter {
 				`${messagePath}.readInWebUntis`,
 				message.readInWebUntis,
 				"Read in WebUntis",
+				"boolean",
+				"indicator",
+				false,
+			);
+			await this.writeSimpleState(
+				`${messagePath}.readLocally`,
+				locallyRead,
+				"Read locally",
 				"boolean",
 				"indicator",
 				false,
@@ -1380,6 +1407,10 @@ class WebuntisNext extends utils.Adapter {
 	}
 
 	private async updateCurrentNextStates(): Promise<void> {
+		return this.enqueueRefreshMutation(() => this.updateCurrentNextStatesLocked());
+	}
+
+	private async updateCurrentNextStatesLocked(): Promise<void> {
 		if (this.unloaded || !this.hasTimetableSnapshot) {
 			return;
 		}

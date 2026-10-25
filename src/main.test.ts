@@ -44,6 +44,7 @@ type AdapterHarness = {
 	adapter: object;
 	methods: {
 		updateTimetable(): Promise<void>;
+		updateTimetableLocked(): Promise<void>;
 		refreshAll(): Promise<void>;
 		ensureInboxRoot(): Promise<void>;
 		subscribeInboxMessageActions(): Promise<void>;
@@ -104,6 +105,7 @@ function makeAdapterHarness(
 	const overrides: Record<string, unknown> = {
 		unloaded: false,
 		inboxMutationQueue: Promise.resolve(),
+		refreshMutationQueue: Promise.resolve(),
 		lastExamsWarningAt: 0,
 		childTodayLessons: new Map(),
 		namespace: "webuntis2.0",
@@ -172,6 +174,7 @@ function makeAdapterHarness(
 	}
 	const methods = adapter as unknown as {
 		updateTimetable(): Promise<void>;
+		updateTimetableLocked(): Promise<void>;
 		refreshAll(): Promise<void>;
 		ensureInboxRoot(): Promise<void>;
 		subscribeInboxMessageActions(): Promise<void>;
@@ -225,13 +228,49 @@ describe("upcoming exams adapter states", () => {
 			ensureInboxRoot: async () => void steps.push("inbox"),
 			ensureHolidaysRoot: async () => void steps.push("holidays"),
 			cleanupObsoleteStructure: async () => void steps.push("cleanup"),
-			updateTimetable: async () => void steps.push("timetable"),
-			updateCurrentNextStates: async () => void steps.push("current-next"),
+			updateTimetableLocked: async () => void steps.push("timetable"),
+			updateCurrentNextStatesLocked: async () => void steps.push("current-next"),
 		});
 
 		await harness.methods.refreshAll();
 
 		expect(steps).to.deep.equal(["students", "inbox", "holidays", "cleanup", "timetable", "current-next"]);
+	});
+
+	it("serializes full refreshes and scheduled timetable updates", async () => {
+		const harness = makeAdapterHarness(async () => []);
+		let activeUpdates = 0;
+		let maximumActiveUpdates = 0;
+		let markFirstUpdateStarted!: () => void;
+		let releaseFirstUpdate!: () => void;
+		const firstUpdateStarted = new Promise<void>(resolve => (markFirstUpdateStarted = resolve));
+		const firstUpdateGate = new Promise<void>(resolve => (releaseFirstUpdate = resolve));
+		let updateCount = 0;
+		Object.assign(harness.adapter, {
+			ensureStudentsRoot: async () => undefined,
+			ensureInboxRoot: async () => undefined,
+			ensureHolidaysRoot: async () => undefined,
+			cleanupObsoleteStructure: async () => undefined,
+			updateTimetableLocked: async () => {
+				activeUpdates++;
+				maximumActiveUpdates = Math.max(maximumActiveUpdates, activeUpdates);
+				updateCount++;
+				if (updateCount === 1) {
+					markFirstUpdateStarted();
+					await firstUpdateGate;
+				}
+				activeUpdates--;
+			},
+		});
+
+		const fullRefresh = harness.methods.refreshAll();
+		await firstUpdateStarted;
+		const scheduledUpdate = harness.methods.updateTimetable();
+		releaseFirstUpdate();
+		await Promise.all([fullRefresh, scheduledUpdate]);
+
+		expect(updateCount).to.equal(2);
+		expect(maximumActiveUpdates).to.equal(1);
 	});
 
 	it("refreshes current and next lesson states for accounts without students", async () => {
@@ -632,6 +671,33 @@ describe("upcoming exams adapter states", () => {
 		expect(harness.values.get("inbox.messages.read.count")).to.equal(1);
 		expect(harness.values.get("inbox.messages.unread.unreadCount")).to.equal(0);
 		expect(harness.values.get("inbox.messages.unread.unread")).to.equal("[]");
+	});
+
+	it("returns a WebUntis-read message to unread when WebUntis resets its read status", async () => {
+		const harness = makeAdapterHarness(async () => [], [], [], false, true);
+		const message = {
+			id: 790,
+			readInWebUntis: true,
+			dateTime: "2026-10-17T10:00:00",
+			sender: "Office",
+			subject: "Status changed",
+			content: "Read status can change",
+			contentIsPreview: false,
+			hasAttachments: false,
+		};
+
+		await harness.methods.writeUnreadMessages([message] as never[]);
+		expect(harness.values.get("inbox.messages.read.01.readLocally")).to.equal(false);
+
+		await harness.methods.writeUnreadMessages([{ ...message, readInWebUntis: false }] as never[]);
+
+		expect(harness.values.get("inbox.messages.unread.unreadCount")).to.equal(1);
+		expect(JSON.parse(String(harness.values.get("inbox.messages.unread.unread")))).to.deep.equal([
+			{ ...message, readInWebUntis: false },
+		]);
+		expect(harness.values.get("inbox.messages.unread.01.read")).to.equal(false);
+		expect(harness.values.get("inbox.messages.unread.01.readLocally")).to.equal(false);
+		expect(harness.values.get("inbox.messages.read.count")).to.equal(0);
 	});
 
 	it("numbers unread channels by ascending arrival date", async () => {
