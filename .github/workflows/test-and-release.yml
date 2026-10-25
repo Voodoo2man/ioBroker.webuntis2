@@ -29,8 +29,7 @@ jobs:
     steps:
       - uses: ioBroker/testing-action-check@v2 # v2
         with:
-          # @iobroker/testing@6 requires Node.js >=22.19.0.
-          node-version: '22.x'
+          node-version: '24.x'
           # Uncomment the following line if your adapter cannot be installed using 'npm ci'
           # install-command: 'npm install'
           type-checking: true
@@ -44,7 +43,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        node-version: [22.x, 24.x, 26.x]
+        node-version: [24.x, 26.x]
         os: [ubuntu-latest, windows-latest, macos-latest]
 
     steps:

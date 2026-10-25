@@ -139,6 +139,7 @@ successful data.
 
 ## Requirements and notes
 
+- Node.js 24 or newer, js-controller 7.2.2 or newer, and Admin 8.2.0 or newer are required.
 - A WebUntis account with access to the selected school is required.
 - Username-and-password login is supported.
 - QR-code, Microsoft 365, SAML, and OAuth login are not supported.
@@ -164,6 +165,7 @@ and include only relevant, non-sensitive log messages when asking for help.
 
 ### WORK IN PROGRESS
 
+- (Voodoo2man) Raised the minimum Node.js, js-controller, and Admin requirements.
 - (Voodoo2man) Added the Ukrainian Admin translation.
 - (Voodoo2man) Added multi Student support and structure.
 - (Voodoo2man) Added upcoming exams
