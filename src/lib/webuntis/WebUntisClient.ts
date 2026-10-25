@@ -1,6 +1,7 @@
 /* eslint-disable jsdoc/no-blank-blocks, jsdoc/require-param */
 
 import type { HolidayEntry } from "./Holidays";
+import { normalizeModernGuardianExams } from "./Exams";
 import { WebUntisError } from "./WebUntisErrors";
 import type {
 	TimetableQuery,
@@ -604,6 +605,17 @@ export class WebUntisClient {
 					}
 				}
 				result = await request({ token, studentId });
+				if (session.personType > 5 && childScope === "unique" && result.response.status === 403) {
+					return await this.getGuardianExams(
+						session,
+						token,
+						startDate,
+						endDate,
+						tenantId,
+						schoolYearId,
+						linkedStudentCount,
+					);
+				}
 			}
 			const { response, payload } = result;
 			if (response.status === 401 || response.redirected || (isRecord(payload) && isLoginPagePayload(payload))) {
@@ -643,6 +655,84 @@ export class WebUntisClient {
 				);
 			}
 			throw new WebUntisError("SERVER_UNREACHABLE", "WebUntis exams request failed", { cause: error });
+		}
+	}
+
+	private async getGuardianExams(
+		session: WebUntisSession,
+		token: string,
+		startDate: number,
+		endDate: number,
+		tenantId: string | undefined,
+		schoolYearId: number | undefined,
+		linkedStudentCount: number | undefined,
+	): Promise<unknown[]> {
+		const dateString = (value: number): string => {
+			const year = Math.floor(value / 10000);
+			const month = Math.floor((value % 10000) / 100);
+			const day = value % 100;
+			return `${String(year).padStart(4, "0")}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+		};
+		const url = new URL(this.restUrl("/api/rest/view/v1/exams/for-guardian"));
+		url.searchParams.set("start", dateString(startDate));
+		url.searchParams.set("end", dateString(endDate));
+		const response = await this.fetchImpl(url, {
+			method: "GET",
+			signal: this.getRequestSignal(),
+			headers: {
+				accept: "application/json",
+				Authorization: `Bearer ${token}`,
+				cookie: this.restCookie(session),
+				...(tenantId ? { "Tenant-Id": tenantId } : {}),
+				...(schoolYearId ? { "X-Webuntis-Api-School-Year-Id": String(schoolYearId) } : {}),
+			},
+		});
+		const cookie = mergeCookieHeader(this.sessionCookie, response.headers);
+		this.sessionCookie = cookie.value;
+		const body = await response.text();
+		let payload: unknown;
+		try {
+			payload = JSON.parse(body);
+		} catch {
+			payload = undefined;
+		}
+		const contentType = response.headers.get("content-type") || "";
+		this.onDiagnostic?.({
+			method: "getGuardianExams",
+			authContext: "bearer",
+			personType: session.personType,
+			childScope: "unique",
+			linkedStudentCount,
+			contextLoaded: true,
+			tenantIdPresent: Boolean(tenantId),
+			schoolYearIdPresent: Boolean(schoolYearId),
+			status: response.status,
+			contentType,
+			url: redactUrl(response.url || url.href),
+			redirected: response.redirected,
+			length: body.length,
+			type: getResponseType(body, contentType),
+			cookiePresent: Boolean(this.sessionCookie),
+			cookieChanged: cookie.changed,
+			sessionCookieChanged: cookie.sessionCookieChanged,
+		});
+		const context = `after modern guardian route (auth=bearer, personType=${session.personType}, childScope=unique, linkedStudents=${linkedStudentCount ?? 0})`;
+		if (response.status === 401 || response.redirected || (isRecord(payload) && isLoginPagePayload(payload))) {
+			throw new WebUntisError("SESSION_EXPIRED", `WebUntis session expired while loading exams ${context}`);
+		}
+		if (!response.ok) {
+			throw new WebUntisError(
+				"API_REQUEST",
+				`WebUntis guardian exams request failed (HTTP ${response.status}) ${context}`,
+			);
+		}
+		try {
+			return normalizeModernGuardianExams(payload);
+		} catch {
+			throw new WebUntisError(
+				"INVALID_RESPONSE",
+				`Invalid WebUntis guardian exams response after modern guardian route ${context}`,
+			);
 		}
 	}
 

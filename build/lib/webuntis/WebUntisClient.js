@@ -22,6 +22,7 @@ __export(WebUntisClient_exports, {
   localDateString: () => localDateString
 });
 module.exports = __toCommonJS(WebUntisClient_exports);
+var import_Exams = require("./Exams");
 var import_WebUntisErrors = require("./WebUntisErrors");
 const REQUEST_TIMEOUT_MS = 1e4;
 function localDateString(date) {
@@ -533,6 +534,17 @@ class WebUntisClient {
           }
         }
         result = await request({ token, studentId });
+        if (session.personType > 5 && childScope === "unique" && result.response.status === 403) {
+          return await this.getGuardianExams(
+            session,
+            token,
+            startDate,
+            endDate,
+            tenantId,
+            schoolYearId,
+            linkedStudentCount
+          );
+        }
       }
       const { response, payload } = result;
       if (response.status === 401 || response.redirected || isRecord(payload) && isLoginPagePayload(payload)) {
@@ -564,6 +576,76 @@ class WebUntisClient {
         );
       }
       throw new import_WebUntisErrors.WebUntisError("SERVER_UNREACHABLE", "WebUntis exams request failed", { cause: error });
+    }
+  }
+  async getGuardianExams(session, token, startDate, endDate, tenantId, schoolYearId, linkedStudentCount) {
+    var _a;
+    const dateString = (value) => {
+      const year = Math.floor(value / 1e4);
+      const month = Math.floor(value % 1e4 / 100);
+      const day = value % 100;
+      return `${String(year).padStart(4, "0")}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+    };
+    const url = new URL(this.restUrl("/api/rest/view/v1/exams/for-guardian"));
+    url.searchParams.set("start", dateString(startDate));
+    url.searchParams.set("end", dateString(endDate));
+    const response = await this.fetchImpl(url, {
+      method: "GET",
+      signal: this.getRequestSignal(),
+      headers: {
+        accept: "application/json",
+        Authorization: `Bearer ${token}`,
+        cookie: this.restCookie(session),
+        ...tenantId ? { "Tenant-Id": tenantId } : {},
+        ...schoolYearId ? { "X-Webuntis-Api-School-Year-Id": String(schoolYearId) } : {}
+      }
+    });
+    const cookie = mergeCookieHeader(this.sessionCookie, response.headers);
+    this.sessionCookie = cookie.value;
+    const body = await response.text();
+    let payload;
+    try {
+      payload = JSON.parse(body);
+    } catch {
+      payload = void 0;
+    }
+    const contentType = response.headers.get("content-type") || "";
+    (_a = this.onDiagnostic) == null ? void 0 : _a.call(this, {
+      method: "getGuardianExams",
+      authContext: "bearer",
+      personType: session.personType,
+      childScope: "unique",
+      linkedStudentCount,
+      contextLoaded: true,
+      tenantIdPresent: Boolean(tenantId),
+      schoolYearIdPresent: Boolean(schoolYearId),
+      status: response.status,
+      contentType,
+      url: redactUrl(response.url || url.href),
+      redirected: response.redirected,
+      length: body.length,
+      type: getResponseType(body, contentType),
+      cookiePresent: Boolean(this.sessionCookie),
+      cookieChanged: cookie.changed,
+      sessionCookieChanged: cookie.sessionCookieChanged
+    });
+    const context = `after modern guardian route (auth=bearer, personType=${session.personType}, childScope=unique, linkedStudents=${linkedStudentCount != null ? linkedStudentCount : 0})`;
+    if (response.status === 401 || response.redirected || isRecord(payload) && isLoginPagePayload(payload)) {
+      throw new import_WebUntisErrors.WebUntisError("SESSION_EXPIRED", `WebUntis session expired while loading exams ${context}`);
+    }
+    if (!response.ok) {
+      throw new import_WebUntisErrors.WebUntisError(
+        "API_REQUEST",
+        `WebUntis guardian exams request failed (HTTP ${response.status}) ${context}`
+      );
+    }
+    try {
+      return (0, import_Exams.normalizeModernGuardianExams)(payload);
+    } catch {
+      throw new import_WebUntisErrors.WebUntisError(
+        "INVALID_RESPONSE",
+        `Invalid WebUntis guardian exams response after modern guardian route ${context}`
+      );
     }
   }
   examScopeDetails(authContext, session, childScope, linkedStudentCount) {

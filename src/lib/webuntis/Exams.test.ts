@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/require-await */
 
 import { expect } from "chai";
-import { normalizeUpcomingExams } from "./Exams";
+import { normalizeModernGuardianExams, normalizeUpcomingExams } from "./Exams";
 import { WebUntisClient } from "./WebUntisClient";
 import type { WebUntisSession } from "./WebUntisTypes";
 
@@ -25,6 +25,88 @@ function requestUrl(input: unknown): URL {
 }
 
 describe("upcoming exams", () => {
+	it("normalizes only explicit modern guardian exam envelope shapes", () => {
+		const exam = {
+			examId: 4,
+			examStart: "2026-09-11T09:10:00",
+			examEnd: "2026-09-11T10:00:00",
+			examName: "Klausur",
+			examText: "Kapitel 2",
+			subject: { displayName: "Mathematik" },
+		};
+		const normalized = normalizeModernGuardianExams({
+			data: {
+				examsDone: [],
+				examsUpcoming: [{ exam, grade: null }],
+				examsFuture: [
+					{
+						exam: { ...exam, examId: 5, examStart: "2026-09-11T11:00:00", examEnd: "2026-09-11T11:45:00" },
+						grade: null,
+					},
+				],
+			},
+		});
+		expect(normalized).to.deep.equal([
+			{
+				id: 4,
+				subject: "Mathematik",
+				examDate: 20260911,
+				startTime: 910,
+				endTime: 1000,
+				name: "Klausur",
+				text: "Kapitel 2",
+			},
+			{
+				id: 5,
+				subject: "Mathematik",
+				examDate: 20260911,
+				startTime: 1100,
+				endTime: 1145,
+				name: "Klausur",
+				text: "Kapitel 2",
+			},
+		]);
+		expect(normalizeModernGuardianExams({ exams: [] })).to.deep.equal([]);
+		expect(normalizeModernGuardianExams({ examsDone: [], examsUpcoming: [], examsFuture: [] })).to.deep.equal([]);
+	});
+
+	it("rejects unknown guardian response envelopes and timezone-ambiguous timestamps", () => {
+		expect(() => normalizeModernGuardianExams({ records: [] })).to.throw(
+			"Invalid WebUntis guardian exams response",
+		);
+		expect(() => normalizeModernGuardianExams({ examsDone: [], examsUpcoming: [] })).to.throw(
+			"Invalid WebUntis guardian exams response",
+		);
+		expect(() => normalizeModernGuardianExams({ exams: [{ examId: 1 }] })).to.throw(
+			"Invalid WebUntis guardian exam entry",
+		);
+		expect(() =>
+			normalizeModernGuardianExams({
+				exams: [
+					{
+						examId: 1,
+						examStart: "2026-09-11T09:10:00",
+						examEnd: "2026-09-11T10:00:00",
+						examName: 7,
+						subject: { displayName: "Mathematik" },
+					},
+				],
+			}),
+		).to.throw("Invalid WebUntis guardian exam entry");
+		expect(() =>
+			normalizeModernGuardianExams({
+				exams: [
+					{
+						examId: 1,
+						examStart: "2026-09-11T09:10:00Z",
+						examEnd: "2026-09-11T10:00:00Z",
+						subject: { displayName: "Mathematik" },
+					},
+				],
+			}),
+		).to.throw("Invalid WebUntis guardian exam entry");
+	});
+
 	it("normalizes and sorts exams while retaining multiple same-day exams", () => {
 		const exams = normalizeUpcomingExams(
 			[
@@ -328,6 +410,143 @@ describe("upcoming exams", () => {
 		expect(JSON.stringify(diagnostics)).not.to.include("Private Student Name");
 		expect(JSON.stringify(diagnostics)).not.to.include("parent-secret-token");
 		expect(JSON.stringify(diagnostics)).not.to.include("cookie-tenant");
+	});
+
+	it("uses one scoped modern guardian request after the bounded legacy retry is forbidden", async () => {
+		const calls: Array<{ path: string; url: URL; headers: Headers }> = [];
+		let legacyRequests = 0;
+		const parentSession = { ...session, personType: 12, personId: 9001 };
+		const client = new WebUntisClient(
+			{ server: "https://example.webuntis.com", schoolName: "example" },
+			async (input, init) => {
+				const url = requestUrl(input);
+				const headers = new Headers(init?.headers);
+				calls.push({ path: url.pathname, url, headers });
+				if (url.pathname.endsWith("/api/token/new")) {
+					return new Response("parent-secret-token", { headers: { "set-cookie": "ROUTE=token; Path=/" } });
+				}
+				if (url.pathname.endsWith("/api/rest/view/v1/app/data")) {
+					return json({
+						data: {
+							user: { students: [{ id: 42, displayName: "Private Student Name" }] },
+							tenant: { id: 77 },
+							currentSchoolYear: { id: 2027 },
+						},
+					});
+				}
+				if (url.pathname.endsWith("/api/exams")) {
+					legacyRequests++;
+					return json({ errorMessage: "forbidden" }, 403);
+				}
+				if (url.pathname.endsWith("/api/rest/view/v1/exams/for-guardian")) {
+					return json({
+						data: [
+							{
+								examId: 71,
+								examStart: "2026-09-11T09:10:00",
+								examEnd: "2026-09-11T10:00:00",
+								examName: "Klausur",
+								examText: "Kapitel 2",
+								subject: { displayName: "Mathematik" },
+							},
+						],
+					});
+				}
+				throw new Error(`Unexpected endpoint ${url.pathname}`);
+			},
+			undefined,
+		);
+		const exams = await client.getExams(parentSession, 20260911, 20261210);
+		const modernCall = calls.find(call => call.path.endsWith("/api/rest/view/v1/exams/for-guardian"));
+		expect(exams).to.deep.equal([
+			{
+				id: 71,
+				subject: "Mathematik",
+				examDate: 20260911,
+				startTime: 910,
+				endTime: 1000,
+				name: "Klausur",
+				text: "Kapitel 2",
+			},
+		]);
+		expect(legacyRequests).to.equal(2);
+		expect(modernCall).to.exist;
+		expect(modernCall?.url.searchParams.get("start")).to.equal("2026-09-11");
+		expect(modernCall?.url.searchParams.get("end")).to.equal("2026-12-10");
+		expect(modernCall?.url.searchParams.has("studentId")).to.equal(false);
+		expect(modernCall?.url.searchParams.has("klasseId")).to.equal(false);
+		expect(modernCall?.headers.get("authorization")).to.equal("Bearer parent-secret-token");
+		expect(modernCall?.headers.get("tenant-id")).to.equal("77");
+		expect(modernCall?.headers.get("x-webuntis-api-school-year-id")).to.equal("2027");
+		expect(modernCall?.headers.get("cookie")).to.include("ROUTE=token");
+	});
+
+	it("fails boundedly when the modern guardian endpoint is forbidden", async () => {
+		let legacyRequests = 0;
+		let guardianRequests = 0;
+		const parentSession = { ...session, personType: 12, personId: 9001 };
+		const client = new WebUntisClient(
+			{ server: "https://example.webuntis.com", schoolName: "example" },
+			async input => {
+				const url = requestUrl(input);
+				if (url.pathname.endsWith("/api/token/new")) {
+					return new Response("parent-secret-token");
+				}
+				if (url.pathname.endsWith("/api/rest/view/v1/app/data")) {
+					return json({ data: { user: { students: [{ id: 42 }] } } });
+				}
+				if (url.pathname.endsWith("/api/exams")) {
+					legacyRequests++;
+					return json({}, 403);
+				}
+				if (url.pathname.endsWith("/api/rest/view/v1/exams/for-guardian")) {
+					guardianRequests++;
+					return json({}, 403);
+				}
+				throw new Error(`Unexpected endpoint ${url.pathname}`);
+			},
+		);
+		try {
+			await client.getExams(parentSession, 20260911, 20261210);
+			expect.fail("expected guardian endpoint forbidden error");
+		} catch (error) {
+			expect((error as { code: string }).code).to.equal("API_REQUEST");
+			expect((error as Error).message).to.include("HTTP 403");
+			expect((error as Error).message).to.include("modern guardian route");
+			expect((error as Error).message).not.to.include("9001");
+		}
+		expect(legacyRequests).to.equal(2);
+		expect(guardianRequests).to.equal(1);
+	});
+
+	it("does not treat an unknown successful guardian response as an empty exam list", async () => {
+		const parentSession = { ...session, personType: 12, personId: 9001 };
+		const client = new WebUntisClient(
+			{ server: "https://example.webuntis.com", schoolName: "example" },
+			async input => {
+				const url = requestUrl(input);
+				if (url.pathname.endsWith("/api/token/new")) {
+					return new Response("parent-secret-token");
+				}
+				if (url.pathname.endsWith("/api/rest/view/v1/app/data")) {
+					return json({ data: { user: { students: [{ id: 42 }] } } });
+				}
+				if (url.pathname.endsWith("/api/exams")) {
+					return json({}, 403);
+				}
+				if (url.pathname.endsWith("/api/rest/view/v1/exams/for-guardian")) {
+					return json({ records: [] });
+				}
+				throw new Error(`Unexpected endpoint ${url.pathname}`);
+			},
+		);
+		try {
+			await client.getExams(parentSession, 20260911, 20261210);
+			expect.fail("expected malformed guardian response");
+		} catch (error) {
+			expect((error as { code: string }).code).to.equal("INVALID_RESPONSE");
+			expect((error as Error).message).to.include("modern guardian route");
+		}
 	});
 
 	for (const testCase of [

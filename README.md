@@ -116,8 +116,10 @@ place; a successful response with no exams clears stale entries. Exam data
 does not include grades or student personal details. If the cookie-authenticated
 exam request is forbidden, the adapter retries that request once with its REST
 token. For parent accounts, it uses app data only when exactly one linked
-student is available, so it never guesses which child's exams to load. School
-permissions can still deny access.
+student is available, so it never guesses which child's exams to load. If the
+legacy parent request remains forbidden, it makes one scoped request to the
+modern guardian exams endpoint using the same account token and school-year
+context. School permissions can still deny access.
 
 ## Requirements and notes
 

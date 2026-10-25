@@ -18,6 +18,7 @@ var __copyProps = (to, from, except, desc) => {
 var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 var Exams_exports = {};
 __export(Exams_exports, {
+  normalizeModernGuardianExams: () => normalizeModernGuardianExams,
   normalizeUpcomingExams: () => normalizeUpcomingExams
 });
 module.exports = __toCommonJS(Exams_exports);
@@ -58,6 +59,84 @@ function optionalText(value) {
 function displayDate(date) {
   const [year, month, day] = date.split("-");
   return `${day}.${month}.${year}`;
+}
+function parseLocalDateTime(value) {
+  if (typeof value !== "string") {
+    return null;
+  }
+  const match = /^(\d{4})-(\d{2})-(\d{2})T([01]\d|2[0-3]):([0-5]\d)(?::[0-5]\d(?:\.\d+)?)?$/.exec(value);
+  if (!match) {
+    return null;
+  }
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  if (!isCalendarDate(year, month, day)) {
+    return null;
+  }
+  return {
+    date: year * 1e4 + month * 100 + day,
+    time: Number(match[4]) * 100 + Number(match[5])
+  };
+}
+function modernExamEntries(raw) {
+  if (Array.isArray(raw)) {
+    return raw;
+  }
+  if (!isRecord(raw)) {
+    throw new import_WebUntisErrors.WebUntisError("INVALID_RESPONSE", "Invalid WebUntis guardian exams response");
+  }
+  const source = isRecord(raw.data) ? raw.data : raw;
+  const groups = [source.examsDone, source.examsUpcoming, source.examsFuture];
+  if (groups.some((group) => group !== void 0)) {
+    if (!groups.every(Array.isArray)) {
+      throw new import_WebUntisErrors.WebUntisError("INVALID_RESPONSE", "Invalid WebUntis guardian exams response");
+    }
+    return groups.flatMap((group) => group);
+  }
+  if (Array.isArray(source.exams)) {
+    return source.exams;
+  }
+  if (raw.data !== void 0 && Array.isArray(raw.data)) {
+    return raw.data;
+  }
+  throw new import_WebUntisErrors.WebUntisError("INVALID_RESPONSE", "Invalid WebUntis guardian exams response");
+}
+function normalizeModernGuardianExams(raw) {
+  return modernExamEntries(raw).flatMap((candidate) => {
+    if (!isRecord(candidate)) {
+      throw new import_WebUntisErrors.WebUntisError("INVALID_RESPONSE", "Invalid WebUntis guardian exam entry");
+    }
+    if (candidate.exam !== void 0 && !isRecord(candidate.exam)) {
+      throw new import_WebUntisErrors.WebUntisError("INVALID_RESPONSE", "Invalid WebUntis guardian exam entry");
+    }
+    const exam = isRecord(candidate.exam) ? candidate.exam : candidate;
+    if (exam.deleted === true) {
+      return [];
+    }
+    const id = exam.examId;
+    const start = parseLocalDateTime(exam.examStart);
+    const end = parseLocalDateTime(exam.examEnd);
+    const rawSubject = exam.subject;
+    const subject = typeof rawSubject === "string" ? rawSubject.trim() : isRecord(rawSubject) && typeof rawSubject.displayName === "string" ? rawSubject.displayName.trim() : "";
+    if (exam.examName !== void 0 && typeof exam.examName !== "string" || exam.examText !== void 0 && typeof exam.examText !== "string") {
+      throw new import_WebUntisErrors.WebUntisError("INVALID_RESPONSE", "Invalid WebUntis guardian exam entry");
+    }
+    if (typeof id !== "number" || !Number.isSafeInteger(id) || id <= 0 || !start || !end || start.date !== end.date || end.time <= start.time || !subject) {
+      throw new import_WebUntisErrors.WebUntisError("INVALID_RESPONSE", "Invalid WebUntis guardian exam entry");
+    }
+    return [
+      {
+        id,
+        subject,
+        examDate: start.date,
+        startTime: start.time,
+        endTime: end.time,
+        name: optionalText(exam.examName),
+        text: optionalText(exam.examText)
+      }
+    ];
+  });
 }
 function normalizeUpcomingExams(raw, now) {
   const exams = Array.isArray(raw) ? raw : isRecord(raw) && isRecord(raw.data) && Array.isArray(raw.data.exams) ? raw.data.exams : null;
@@ -111,6 +190,7 @@ function normalizeUpcomingExams(raw, now) {
 }
 // Annotate the CommonJS export names for ESM import in node:
 0 && (module.exports = {
+  normalizeModernGuardianExams,
   normalizeUpcomingExams
 });
 //# sourceMappingURL=Exams.js.map

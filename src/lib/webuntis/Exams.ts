@@ -65,6 +65,113 @@ function displayDate(date: string): string {
 	return `${day}.${month}.${year}`;
 }
 
+function parseLocalDateTime(value: unknown): { date: number; time: number } | null {
+	if (typeof value !== "string") {
+		return null;
+	}
+	// Modern WebUntis timestamps are local school wall time. Reject timezone
+	// suffixes instead of risking a date/time shift during conversion.
+	const match = /^(\d{4})-(\d{2})-(\d{2})T([01]\d|2[0-3]):([0-5]\d)(?::[0-5]\d(?:\.\d+)?)?$/.exec(value);
+	if (!match) {
+		return null;
+	}
+	const year = Number(match[1]);
+	const month = Number(match[2]);
+	const day = Number(match[3]);
+	if (!isCalendarDate(year, month, day)) {
+		return null;
+	}
+	return {
+		date: year * 10000 + month * 100 + day,
+		time: Number(match[4]) * 100 + Number(match[5]),
+	};
+}
+
+function modernExamEntries(raw: unknown): unknown[] {
+	if (Array.isArray(raw)) {
+		return raw;
+	}
+	if (!isRecord(raw)) {
+		throw new WebUntisError("INVALID_RESPONSE", "Invalid WebUntis guardian exams response");
+	}
+	const source = isRecord(raw.data) ? raw.data : raw;
+	const groups = [source.examsDone, source.examsUpcoming, source.examsFuture];
+	if (groups.some(group => group !== undefined)) {
+		if (!groups.every(Array.isArray)) {
+			throw new WebUntisError("INVALID_RESPONSE", "Invalid WebUntis guardian exams response");
+		}
+		return groups.flatMap(group => group as unknown[]);
+	}
+	if (Array.isArray(source.exams)) {
+		return source.exams;
+	}
+	if (raw.data !== undefined && Array.isArray(raw.data)) {
+		return raw.data;
+	}
+	throw new WebUntisError("INVALID_RESPONSE", "Invalid WebUntis guardian exams response");
+}
+
+/**
+ * Convert the known modern exam representations to the legacy shape
+ * consumed by normalizeUpcomingExams. Only explicitly known envelope shapes
+ * are accepted so an unexpected successful response cannot clear stored data.
+ *
+ * @param raw The modern guardian exams response.
+ */
+export function normalizeModernGuardianExams(raw: unknown): unknown[] {
+	return modernExamEntries(raw).flatMap(candidate => {
+		if (!isRecord(candidate)) {
+			throw new WebUntisError("INVALID_RESPONSE", "Invalid WebUntis guardian exam entry");
+		}
+		if (candidate.exam !== undefined && !isRecord(candidate.exam)) {
+			throw new WebUntisError("INVALID_RESPONSE", "Invalid WebUntis guardian exam entry");
+		}
+		const exam = isRecord(candidate.exam) ? candidate.exam : candidate;
+		if (exam.deleted === true) {
+			return [];
+		}
+		const id = exam.examId;
+		const start = parseLocalDateTime(exam.examStart);
+		const end = parseLocalDateTime(exam.examEnd);
+		const rawSubject = exam.subject;
+		const subject =
+			typeof rawSubject === "string"
+				? rawSubject.trim()
+				: isRecord(rawSubject) && typeof rawSubject.displayName === "string"
+					? rawSubject.displayName.trim()
+					: "";
+		if (
+			(exam.examName !== undefined && typeof exam.examName !== "string") ||
+			(exam.examText !== undefined && typeof exam.examText !== "string")
+		) {
+			throw new WebUntisError("INVALID_RESPONSE", "Invalid WebUntis guardian exam entry");
+		}
+		if (
+			typeof id !== "number" ||
+			!Number.isSafeInteger(id) ||
+			id <= 0 ||
+			!start ||
+			!end ||
+			start.date !== end.date ||
+			end.time <= start.time ||
+			!subject
+		) {
+			throw new WebUntisError("INVALID_RESPONSE", "Invalid WebUntis guardian exam entry");
+		}
+		return [
+			{
+				id,
+				subject,
+				examDate: start.date,
+				startTime: start.time,
+				endTime: end.time,
+				name: optionalText(exam.examName),
+				text: optionalText(exam.examText),
+			},
+		];
+	});
+}
+
 /**
  * Convert and validate the WebUntis exams payload.
  *
