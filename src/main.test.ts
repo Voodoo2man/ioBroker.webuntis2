@@ -104,6 +104,7 @@ function makeAdapterHarness(
 	];
 	const overrides: Record<string, unknown> = {
 		unloaded: false,
+		delay: async () => undefined,
 		inboxMutationQueue: Promise.resolve(),
 		refreshMutationQueue: Promise.resolve(),
 		lastExamsWarningAt: 0,

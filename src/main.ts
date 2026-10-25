@@ -787,7 +787,7 @@ class WebuntisNext extends utils.Adapter {
 					throw error;
 				}
 				this.log.debug(`WebUntis exams request attempt ${attempt}/${EXAMS_MAX_ATTEMPTS} failed; retrying`);
-				await new Promise(resolve => setTimeout(resolve, attempt * 250));
+				await this.delay(attempt * 250);
 			}
 		}
 		throw new Error("WebUntis exams retry loop ended unexpectedly");
