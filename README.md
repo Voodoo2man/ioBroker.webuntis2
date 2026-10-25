@@ -114,37 +114,23 @@ contains the following fields:
 [
 	{
 		"id": 4102,
-		"subject": "Mathematik",
-		"date": "2026-11-05",
-		"startTime": "08:00",
-		"endTime": "09:30",
-		"name": "Bruchrechnung",
-		"text": "Kapitel 4, Aufgaben 1–6",
 		"displayText": "05.11.2026 · 08:00–09:30 · Mathematik · Kapitel 4, Aufgaben 1–6"
 	},
 	{
-		"id": 4103,
 		"subject": "Englisch",
 		"date": "2026-11-05",
 		"startTime": "10:00",
-		"endTime": "10:45",
-		"name": "Vocabulary",
 		"text": "Unit 3",
 		"displayText": "05.11.2026 · 10:00–10:45 · Englisch · Unit 3"
 	}
 ]
 ```
 
-The individual `entries.<NN>` channels expose `id` and `daysUntil` as number
-states, `date` as a calendar-date state, `startTime` and `endTime` as time
-states, and the remaining fields as text states. Date states store Unix
-timestamps with the `date` role and no unit, so ioBroker can display them in
-the short-date format for the configured regional settings. Exam times
-remain strings in `HH:mm` format. `daysUntil` is the number of local calendar
-days between today and the exam date; the state uses the `value.interval` role
-with unit `d`. The adapter includes exams from today through 90 calendar
-days from today, inclusive, and refreshes them during the normal five-minute
-update. All of today's exams are included, even if their start time has passed.
+The individual `entries.<NN>` channels expose `id` as a number, `date` as a
+calendar-date state, and `daysUntil` as the number of local calendar days from
+today to the exam date. The `daysUntil` state uses the `value.interval` role
+with unit `d`. Exam times remain strings in `HH:mm` format. Exam data refreshes
+during the normal five-minute update.
 Availability depends on the WebUntis account's school permissions and API
 scope. A failed or forbidden request leaves the last successful exam data in
 place; a successful response with no exams clears stale entries. Exam data

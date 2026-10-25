@@ -30,6 +30,24 @@ describe("object translations", () => {
 		expect(translatedName("upcomingExamCount").de).to.equal("Anzahl bevorstehender Prüfungen");
 		expect(translatedStateName("Exam ID").de).to.equal("Prüfungs-ID");
 		expect(translatedStateName("Exam start time").de).to.equal("Prüfungsbeginn");
+		for (const label of [
+			"Content",
+			"Content is preview",
+			"Date and time",
+			"Has attachments",
+			"Message ID",
+			"Read",
+			"Read in WebUntis",
+			"Sender",
+			"Subject",
+		]) {
+			const translated = translatedStateName(label);
+			for (const language of SUPPORTED_LANGUAGES) {
+				expect(translated[language], `${label} (${language})`).to.be.a("string").and.not.empty;
+			}
+		}
+		expect(translatedStateName("Content").de).to.equal("Inhalt");
+		expect(translatedName("refresh").de).to.equal("Jetzt aktualisieren");
 	});
 
 	it("translates dynamic timetable and weekday names", () => {

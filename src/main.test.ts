@@ -259,7 +259,9 @@ describe("upcoming exams adapter states", () => {
 				ensureTranslatedObject: (
 					id: string,
 					object: ioBroker.SettableObject,
-					legacyName?: string,
+					legacyName?: string | string[],
+					dynamicName?: boolean,
+					clearDescription?: boolean,
 				) => Promise<void>;
 			}
 		).ensureTranslatedObject;
@@ -276,6 +278,143 @@ describe("upcoming exams adapter states", () => {
 		);
 
 		expect(unit).to.equal(undefined);
+	});
+
+	it("removes the daysUntil description and migrates its legacy name", async () => {
+		const AdapterClass = loadAdapterClassForTest();
+		let updatedCommon: Record<string, unknown> = {};
+		const adapter = Object.assign(Object.create(AdapterClass.prototype) as object, {
+			unloaded: false,
+			migratedNames: new Set<string>(),
+			ensureActive: () => undefined,
+			setObjectNotExistsAsync: async () => undefined,
+			getObjectAsync: async () => ({
+				_id: "webuntis2.0.students.andres_lilly_marie.exams.entries.01.daysUntil",
+				type: "state",
+				common: {
+					name: "daysUntil",
+					desc: { en: "Old description" },
+					type: "number",
+					role: "value.interval",
+					read: true,
+					write: false,
+				},
+				native: {},
+			}),
+			extendObjectAsync: async (_id: string, patch: { common: Record<string, unknown> }) => {
+				updatedCommon = patch.common;
+			},
+		});
+		const ensureTranslatedObject = (
+			AdapterClass.prototype as unknown as {
+				ensureTranslatedObject: (
+					id: string,
+					object: ioBroker.SettableObject,
+					legacyName?: string | string[],
+					dynamicName?: boolean,
+					clearDescription?: boolean,
+				) => Promise<void>;
+			}
+		).ensureTranslatedObject;
+		await ensureTranslatedObject.call(
+			adapter,
+			"students.andres_lilly_marie.exams.entries.01.daysUntil",
+			{
+				type: "state",
+				common: {
+					name: {
+						en: "Days until",
+						de: "Tage bis dahin",
+						es: "Días restantes",
+						fr: "Jours restants",
+						it: "Giorni rimanenti",
+						nl: "Dagen tot",
+						pl: "Dni do",
+						pt: "Dias restantes",
+						ru: "Дней до начала",
+						uk: "Днів до початку",
+						"zh-cn": "剩余天数",
+					},
+					type: "number",
+					role: "value.interval",
+					read: true,
+					write: false,
+				},
+				native: {},
+			},
+			["Days until", "daysUntil"],
+			false,
+			true,
+		);
+
+		expect(updatedCommon.name).to.include({ en: "Days until", de: "Tage bis dahin" });
+		expect(updatedCommon.desc).to.equal(null);
+	});
+
+	it("removes the refresh description and migrates its legacy name", async () => {
+		const AdapterClass = loadAdapterClassForTest();
+		let updatedCommon: Record<string, unknown> = {};
+		const adapter = Object.assign(Object.create(AdapterClass.prototype) as object, {
+			unloaded: false,
+			migratedNames: new Set<string>(),
+			ensureActive: () => undefined,
+			setObjectNotExistsAsync: async () => undefined,
+			getObjectAsync: async () => ({
+				_id: "webuntis2.0.info.refresh",
+				type: "state",
+				common: { name: "refresh", desc: { en: "Old description" }, type: "boolean", role: "button" },
+				native: {},
+			}),
+			extendObjectAsync: async (_id: string, patch: { common: Record<string, unknown> }) => {
+				updatedCommon = patch.common;
+			},
+		});
+		const ensureTranslatedObject = (
+			AdapterClass.prototype as unknown as {
+				ensureTranslatedObject: (
+					id: string,
+					object: ioBroker.SettableObject,
+					legacyName?: string | string[],
+					dynamicName?: boolean,
+					clearDescription?: boolean,
+				) => Promise<void>;
+			}
+		).ensureTranslatedObject;
+
+		await ensureTranslatedObject.call(
+			adapter,
+			"info.refresh",
+			{
+				type: "state",
+				common: {
+					name: {
+						en: "Refresh now",
+						de: "Jetzt aktualisieren",
+						es: "Actualizar ahora",
+						fr: "Actualiser maintenant",
+						it: "Aggiorna ora",
+						nl: "Nu vernieuwen",
+						pl: "Odśwież teraz",
+						pt: "Atualizar agora",
+						ru: "Обновить сейчас",
+						uk: "Оновити зараз",
+						"zh-cn": "立即刷新",
+					},
+					type: "boolean",
+					role: "button",
+					read: false,
+					write: true,
+					def: false,
+				},
+				native: {},
+			},
+			["Refresh now", "refresh"],
+			false,
+			true,
+		);
+
+		expect(updatedCommon.name).to.include({ en: "Refresh now", de: "Jetzt aktualisieren" });
+		expect(updatedCommon.desc).to.equal(null);
 	});
 
 	it("keeps inbox at the instance root and migrates old info inbox values", async () => {
@@ -423,6 +562,18 @@ describe("upcoming exams adapter states", () => {
 			makeMessage(263116, "2026-10-24T12:00:00"),
 		] as never[]);
 
+		const readObjectName = (field: string): ioBroker.Translated =>
+			(harness.objects[`inbox.messages.read.01.${field}`].common as ioBroker.StateCommon)
+				.name as ioBroker.Translated;
+		expect(readObjectName("content").de).to.equal("Inhalt");
+		expect(readObjectName("contentIsPreview").de).to.equal("Inhalt ist eine Vorschau");
+		expect(readObjectName("dateTime").de).to.equal("Datum und Uhrzeit");
+		expect(readObjectName("hasAttachments").de).to.equal("Hat Anhänge");
+		expect(readObjectName("id").de).to.equal("Mitteilungs-ID");
+		expect(readObjectName("read").de).to.equal("Gelesen");
+		expect(readObjectName("readInWebUntis").de).to.equal("In WebUntis gelesen");
+		expect(readObjectName("sender").de).to.equal("Absender");
+		expect(readObjectName("subject").de).to.equal("Fach");
 		expect(harness.values.get("inbox.messages.read.01.id")).to.equal(263116);
 		expect(harness.values.get("inbox.messages.read.01.dateTime")).to.equal("2026-10-24T12:00:00");
 		expect((harness.objects["inbox.messages.read.01.dateTime"].common as ioBroker.StateCommon).role).to.equal(
@@ -577,6 +728,15 @@ describe("upcoming exams adapter states", () => {
 		await harness.methods.updateTimetable();
 
 		expect(harness.values.get("students.kind_eins.exams.count")).to.equal(1);
+		expect((harness.objects["students.kind_eins.exams.count"].common as ioBroker.StateCommon).name).to.include({
+			de: "Anzahl bevorstehender Prüfungen",
+		});
+		expect((harness.objects["students.kind_eins.exams.upcoming"].common as ioBroker.StateCommon).name).to.include({
+			de: "Bevorstehende Prüfungen",
+		});
+		expect(
+			(harness.objects["students.kind_eins.exams.upcomingText"].common as ioBroker.StateCommon).name,
+		).to.include({ de: "Text zu bevorstehenden Prüfungen" });
 		expect(JSON.parse(String(harness.values.get("students.kind_eins.exams.upcoming")))).to.deep.equal([exams[0]]);
 		expect(harness.values.get("students.kind_eins.exams.entries.01.id")).to.equal(11);
 		expect(harness.values.get("students.kind_eins.exams.entries.01.name")).to.equal("Written exam");
@@ -595,6 +755,12 @@ describe("upcoming exams adapter states", () => {
 		expect(
 			(harness.objects["students.kind_eins.exams.entries.01.daysUntil"].common as ioBroker.StateCommon).unit,
 		).to.equal("d");
+		expect(
+			(harness.objects["students.kind_eins.exams.entries.01.daysUntil"].common as ioBroker.StateCommon).name,
+		).to.include({ de: "Tage bis dahin" });
+		expect(
+			(harness.objects["students.kind_eins.exams.entries.01.daysUntil"].common as ioBroker.StateCommon).desc,
+		).to.equal(undefined);
 		expect(
 			(harness.objects["students.kind_eins.exams.entries.01.date"].common as ioBroker.StateCommon).role,
 		).to.equal("date");

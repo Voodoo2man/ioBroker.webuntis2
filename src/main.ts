@@ -176,8 +176,9 @@ class WebuntisNext extends utils.Adapter {
 	private async ensureTranslatedObject(
 		id: string,
 		object: ioBroker.SettableObject,
-		legacyName?: string,
+		legacyName?: string | string[],
 		dynamicName = false,
+		clearDescription = false,
 	): Promise<void> {
 		this.ensureActive();
 		await this.setObjectNotExistsAsync(id, object);
@@ -195,7 +196,9 @@ class WebuntisNext extends utils.Adapter {
 		const currentName = existing.common.name;
 		const generatedName = existing.native?.[WebuntisNext.generatedLessonNameKey];
 		const shouldMigrateName =
-			needsNameMigration(currentName, legacyName) ||
+			(Array.isArray(legacyName)
+				? legacyName.some(name => needsNameMigration(currentName, name))
+				: needsNameMigration(currentName, legacyName)) ||
 			(dynamicName && shouldMigrateDynamicName(currentName, generatedName));
 		const desiredCommon = (object.common || {}) as Record<string, unknown>;
 		const common: Record<string, unknown> = {};
@@ -203,6 +206,9 @@ class WebuntisNext extends utils.Adapter {
 			if (key in desiredCommon && hasObjectValueChanged(existing.common[key], desiredCommon[key])) {
 				common[key] = desiredCommon[key];
 			}
+		}
+		if (clearDescription && existing.common.desc !== undefined) {
+			common.desc = null;
 		}
 		if ("unit" in desiredCommon && hasObjectValueChanged(existing.common.unit, desiredCommon.unit)) {
 			common.unit = desiredCommon.unit;
@@ -413,7 +419,7 @@ class WebuntisNext extends utils.Adapter {
 			{
 				type: "state",
 				common: {
-					name: translatedStateName("refresh"),
+					name: translatedName("refresh"),
 					type: "boolean",
 					role: "button",
 					read: false,
@@ -422,7 +428,9 @@ class WebuntisNext extends utils.Adapter {
 				},
 				native: {},
 			},
-			"Refresh now",
+			["Refresh now", "refresh"],
+			false,
+			true,
 		);
 		await this.subscribeStatesAsync("info.refresh");
 		await this.subscribeInboxMessageActions();
@@ -783,7 +791,7 @@ class WebuntisNext extends utils.Adapter {
 		);
 		await this.ensureTranslatedObject(
 			"inbox.messages",
-			{ type: "channel", common: { name: "Messages" }, native: {} },
+			{ type: "channel", common: { name: translatedName("inbox") }, native: {} },
 			"Messages",
 		);
 		await this.ensureTranslatedObject(
@@ -1041,19 +1049,40 @@ class WebuntisNext extends utils.Adapter {
 				[
 					"count",
 					"Upcoming exam count",
-					{ name: "Upcoming exam count", type: "number", role: "value", read: true, write: false, def: 0 },
+					{
+						name: translatedName("upcomingExamCount"),
+						type: "number",
+						role: "value",
+						read: true,
+						write: false,
+						def: 0,
+					},
 					studentExams.length,
 				],
 				[
 					"upcoming",
 					"Upcoming exams",
-					{ name: "Upcoming exams", type: "string", role: "json", read: true, write: false, def: "[]" },
+					{
+						name: translatedName("upcomingExams"),
+						type: "string",
+						role: "json",
+						read: true,
+						write: false,
+						def: "[]",
+					},
 					JSON.stringify(studentExams),
 				],
 				[
 					"upcomingText",
 					"Upcoming exams text",
-					{ name: "Upcoming exams text", type: "string", role: "text", read: true, write: false, def: "" },
+					{
+						name: translatedName("upcomingExamsText"),
+						type: "string",
+						role: "text",
+						read: true,
+						write: false,
+						def: "",
+					},
 					studentExams.map(exam => exam.displayText).join("\n"),
 				],
 			];
@@ -1102,7 +1131,7 @@ class WebuntisNext extends utils.Adapter {
 					id: translatedStateName("Exam ID"),
 					subject: translatedStateName("Subject"),
 					date: translatedStateName("Date"),
-					daysUntil: translatedStateName("daysUntil"),
+					daysUntil: translatedName("daysUntil"),
 					startTime: translatedStateName("Exam start time"),
 					endTime: translatedStateName("Exam end time"),
 					name: translatedStateName("Exam name"),
@@ -1135,7 +1164,9 @@ class WebuntisNext extends utils.Adapter {
 							},
 							native: {},
 						},
-						String(names[field].en),
+						field === "daysUntil" ? [String(names[field].en), "daysUntil"] : String(names[field].en),
+						false,
+						field === "daysUntil",
 					);
 					await setStateChangedOrInitialize(this, `${base}.${field}`, value);
 				}

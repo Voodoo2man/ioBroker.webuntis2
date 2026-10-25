@@ -143,7 +143,7 @@ class WebuntisNext extends utils.Adapter {
   migratedNames = /* @__PURE__ */ new Set();
   lastMessageWarningAt = 0;
   lastExamsWarningAt = 0;
-  async ensureTranslatedObject(id, object, legacyName, dynamicName = false) {
+  async ensureTranslatedObject(id, object, legacyName, dynamicName = false, clearDescription = false) {
     var _a, _b, _c, _d;
     this.ensureActive();
     await this.setObjectNotExistsAsync(id, object);
@@ -160,13 +160,16 @@ class WebuntisNext extends utils.Adapter {
     }
     const currentName = existing.common.name;
     const generatedName = (_a = existing.native) == null ? void 0 : _a[WebuntisNext.generatedLessonNameKey];
-    const shouldMigrateName = (0, import_ObjectTranslations.needsNameMigration)(currentName, legacyName) || dynamicName && (0, import_ObjectTranslations.shouldMigrateDynamicName)(currentName, generatedName);
+    const shouldMigrateName = (Array.isArray(legacyName) ? legacyName.some((name) => (0, import_ObjectTranslations.needsNameMigration)(currentName, name)) : (0, import_ObjectTranslations.needsNameMigration)(currentName, legacyName)) || dynamicName && (0, import_ObjectTranslations.shouldMigrateDynamicName)(currentName, generatedName);
     const desiredCommon = object.common || {};
     const common = {};
     for (const key of ["type", "role", "read", "write", "def"]) {
       if (key in desiredCommon && (0, import_ObjectTranslations.hasObjectValueChanged)(existing.common[key], desiredCommon[key])) {
         common[key] = desiredCommon[key];
       }
+    }
+    if (clearDescription && existing.common.desc !== void 0) {
+      common.desc = null;
     }
     if ("unit" in desiredCommon && (0, import_ObjectTranslations.hasObjectValueChanged)(existing.common.unit, desiredCommon.unit)) {
       common.unit = desiredCommon.unit;
@@ -361,7 +364,7 @@ class WebuntisNext extends utils.Adapter {
       {
         type: "state",
         common: {
-          name: (0, import_ObjectTranslations.translatedStateName)("refresh"),
+          name: (0, import_ObjectTranslations.translatedName)("refresh"),
           type: "boolean",
           role: "button",
           read: false,
@@ -370,7 +373,9 @@ class WebuntisNext extends utils.Adapter {
         },
         native: {}
       },
-      "Refresh now"
+      ["Refresh now", "refresh"],
+      false,
+      true
     );
     await this.subscribeStatesAsync("info.refresh");
     await this.subscribeInboxMessageActions();
@@ -708,7 +713,7 @@ class WebuntisNext extends utils.Adapter {
     );
     await this.ensureTranslatedObject(
       "inbox.messages",
-      { type: "channel", common: { name: "Messages" }, native: {} },
+      { type: "channel", common: { name: (0, import_ObjectTranslations.translatedName)("inbox") }, native: {} },
       "Messages"
     );
     await this.ensureTranslatedObject(
@@ -948,19 +953,40 @@ class WebuntisNext extends utils.Adapter {
         [
           "count",
           "Upcoming exam count",
-          { name: "Upcoming exam count", type: "number", role: "value", read: true, write: false, def: 0 },
+          {
+            name: (0, import_ObjectTranslations.translatedName)("upcomingExamCount"),
+            type: "number",
+            role: "value",
+            read: true,
+            write: false,
+            def: 0
+          },
           studentExams.length
         ],
         [
           "upcoming",
           "Upcoming exams",
-          { name: "Upcoming exams", type: "string", role: "json", read: true, write: false, def: "[]" },
+          {
+            name: (0, import_ObjectTranslations.translatedName)("upcomingExams"),
+            type: "string",
+            role: "json",
+            read: true,
+            write: false,
+            def: "[]"
+          },
           JSON.stringify(studentExams)
         ],
         [
           "upcomingText",
           "Upcoming exams text",
-          { name: "Upcoming exams text", type: "string", role: "text", read: true, write: false, def: "" },
+          {
+            name: (0, import_ObjectTranslations.translatedName)("upcomingExamsText"),
+            type: "string",
+            role: "text",
+            read: true,
+            write: false,
+            def: ""
+          },
           studentExams.map((exam) => exam.displayText).join("\n")
         ]
       ];
@@ -1007,7 +1033,7 @@ class WebuntisNext extends utils.Adapter {
           id: (0, import_ObjectTranslations.translatedStateName)("Exam ID"),
           subject: (0, import_ObjectTranslations.translatedStateName)("Subject"),
           date: (0, import_ObjectTranslations.translatedStateName)("Date"),
-          daysUntil: (0, import_ObjectTranslations.translatedStateName)("daysUntil"),
+          daysUntil: (0, import_ObjectTranslations.translatedName)("daysUntil"),
           startTime: (0, import_ObjectTranslations.translatedStateName)("Exam start time"),
           endTime: (0, import_ObjectTranslations.translatedStateName)("Exam end time"),
           name: (0, import_ObjectTranslations.translatedStateName)("Exam name"),
@@ -1031,7 +1057,9 @@ class WebuntisNext extends utils.Adapter {
               },
               native: {}
             },
-            String(names[field].en)
+            field === "daysUntil" ? [String(names[field].en), "daysUntil"] : String(names[field].en),
+            false,
+            field === "daysUntil"
           );
           await (0, import_StateWriter.setStateChangedOrInitialize)(this, `${base}.${field}`, value);
         }
