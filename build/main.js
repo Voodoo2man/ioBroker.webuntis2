@@ -126,6 +126,7 @@ class WebuntisNext extends utils.Adapter {
   unloaded = false;
   migratedNames = /* @__PURE__ */ new Set();
   lastMessageWarningAt = 0;
+  lastExamsWarningAt = 0;
   async ensureTranslatedObject(id, object, legacyName, dynamicName = false) {
     var _a, _b, _c, _d;
     this.ensureActive();
@@ -166,11 +167,17 @@ class WebuntisNext extends utils.Adapter {
       await this.extendObjectAsync(id, { common, ...shouldMigrateMarker ? { native } : {} });
     }
   }
+  /** Throw when asynchronous work resumes after adapter shutdown. */
   ensureActive() {
     if (this.unloaded) {
       throw new import_WebUntisErrors.WebUntisError("ABORTED", "Adapter is shutting down");
     }
   }
+  /**
+   * Create the WebUntis adapter.
+   *
+   * @param options Adapter constructor options.
+   */
   constructor(options = {}) {
     super({ ...options, name: "webuntis2" });
     this.webUntis = new import_WebUntisService.WebUntisService(
@@ -257,6 +264,7 @@ class WebuntisNext extends utils.Adapter {
       "Next timetable update"
     );
     await this.ensureInboxRoot();
+    await this.ensureUpcomingExamsRoot();
     await this.cleanupObsoleteStructure();
     await this.setState("info.connection", false, true);
     if (!this.hasConnectionConfig()) {
@@ -330,6 +338,24 @@ class WebuntisNext extends utils.Adapter {
           this.lastMessageWarningAt = Date.now();
         }
       }
+      try {
+        const exams = await this.webUntis.loadUpcomingExams(this.config, now);
+        if (this.unloaded) {
+          return;
+        }
+        await this.writeUpcomingExams(exams);
+        this.lastExamsWarningAt = 0;
+      } catch (error) {
+        const warningIntervalMs = 30 * 60 * 1e3;
+        if (Date.now() - this.lastExamsWarningAt >= warningIntervalMs) {
+          const code = error instanceof import_WebUntisErrors.WebUntisError ? error.code : "UNEXPECTED_RESPONSE";
+          const detail = error instanceof Error ? ` (${error.message})` : "";
+          this.log.warn(
+            `WebUntis upcoming exams refresh failed: ${code}${detail}; previous exam data was kept`
+          );
+          this.lastExamsWarningAt = Date.now();
+        }
+      }
       await this.setState("info.lastSuccessfulUpdate", now.toISOString(), true);
       await this.setState("info.nextUpdate", new Date(now.getTime() + TIMETABLE_INTERVAL_MS).toISOString(), true);
       await this.setState("info.connection", true, true);
@@ -383,10 +409,10 @@ class WebuntisNext extends utils.Adapter {
       },
       "Unread messages"
     );
-    await this.initializeInboxState("inbox.unreadCount", 0);
-    await this.initializeInboxState("inbox.unread", "[]");
+    await this.initializeRootState("inbox.unreadCount", 0);
+    await this.initializeRootState("inbox.unread", "[]");
   }
-  async initializeInboxState(id, defaultValue) {
+  async initializeRootState(id, defaultValue) {
     var _a;
     const current = await this.getStateAsync(id);
     await (0, import_StateWriter.setStateChangedOrInitialize)(this, id, (_a = current == null ? void 0 : current.val) != null ? _a : defaultValue);
@@ -394,6 +420,151 @@ class WebuntisNext extends utils.Adapter {
   async writeUnreadMessages(messages) {
     await (0, import_StateWriter.setStateChangedOrInitialize)(this, "inbox.unreadCount", messages.length);
     await (0, import_StateWriter.setStateChangedOrInitialize)(this, "inbox.unread", JSON.stringify(messages));
+  }
+  async ensureUpcomingExamsRoot() {
+    await this.ensureTranslatedObject(
+      "exams",
+      { type: "channel", common: { name: (0, import_ObjectTranslations.translatedName)("exams") }, native: {} },
+      "Exams"
+    );
+    await this.ensureTranslatedObject(
+      "exams.entries",
+      { type: "channel", common: { name: (0, import_ObjectTranslations.translatedName)("upcomingExams") }, native: {} },
+      "Upcoming exams"
+    );
+    await this.ensureTranslatedObject(
+      "exams.count",
+      {
+        type: "state",
+        common: {
+          name: (0, import_ObjectTranslations.translatedName)("upcomingExamCount"),
+          type: "number",
+          role: "value",
+          read: true,
+          write: false,
+          def: 0
+        },
+        native: {}
+      },
+      "Upcoming exam count"
+    );
+    await this.ensureTranslatedObject(
+      "exams.upcoming",
+      {
+        type: "state",
+        common: {
+          name: (0, import_ObjectTranslations.translatedName)("upcomingExams"),
+          type: "string",
+          role: "json",
+          read: true,
+          write: false,
+          def: "[]"
+        },
+        native: {}
+      },
+      "Upcoming exams"
+    );
+    await this.ensureTranslatedObject(
+      "exams.upcomingText",
+      {
+        type: "state",
+        common: {
+          name: (0, import_ObjectTranslations.translatedName)("upcomingExamsText"),
+          type: "string",
+          role: "text",
+          read: true,
+          write: false,
+          def: ""
+        },
+        native: {}
+      },
+      "Upcoming exams text"
+    );
+    await this.initializeRootState("exams.count", 0);
+    await this.initializeRootState("exams.upcoming", "[]");
+    await this.initializeRootState("exams.upcomingText", "");
+  }
+  async writeUpcomingExams(exams) {
+    this.ensureActive();
+    await (0, import_StateWriter.setStateChangedOrInitialize)(this, "exams.count", exams.length);
+    this.ensureActive();
+    await (0, import_StateWriter.setStateChangedOrInitialize)(this, "exams.upcoming", JSON.stringify(exams));
+    this.ensureActive();
+    await (0, import_StateWriter.setStateChangedOrInitialize)(this, "exams.upcomingText", exams.map((exam) => exam.displayText).join("\n"));
+    const expected = new Set(exams.map((_exam, index) => String(index + 1).padStart(2, "0")));
+    for (const [index, exam] of exams.entries()) {
+      this.ensureActive();
+      const slot = String(index + 1).padStart(2, "0");
+      const base = `exams.entries.${slot}`;
+      const label = exam.displayText || (0, import_ObjectTranslations.translatedName)("examFallback").en;
+      await this.ensureTranslatedObject(
+        base,
+        {
+          type: "channel",
+          common: { name: label },
+          native: { [WebuntisNext.generatedLessonNameKey]: label }
+        },
+        `Exam ${exam.id}`,
+        true
+      );
+      const values = {
+        id: exam.id,
+        subject: exam.subject,
+        date: exam.date,
+        startTime: exam.startTime,
+        endTime: exam.endTime,
+        name: exam.name,
+        text: exam.text,
+        displayText: exam.displayText
+      };
+      const names = {
+        id: (0, import_ObjectTranslations.translatedStateName)("Exam ID"),
+        subject: (0, import_ObjectTranslations.translatedStateName)("Subject"),
+        date: (0, import_ObjectTranslations.translatedStateName)("Date"),
+        startTime: (0, import_ObjectTranslations.translatedStateName)("Exam start time"),
+        endTime: (0, import_ObjectTranslations.translatedStateName)("Exam end time"),
+        name: (0, import_ObjectTranslations.translatedStateName)("Exam name"),
+        text: (0, import_ObjectTranslations.translatedStateName)("Exam text"),
+        displayText: (0, import_ObjectTranslations.translatedStateName)("Display text")
+      };
+      for (const [field, value] of Object.entries(values)) {
+        this.ensureActive();
+        const type = field === "id" ? "number" : "string";
+        await this.ensureTranslatedObject(
+          `${base}.${field}`,
+          {
+            type: "state",
+            common: {
+              name: names[field],
+              type,
+              role: field === "id" ? "value" : field === "date" ? "date" : "text",
+              read: true,
+              write: false,
+              def: field === "id" ? 0 : ""
+            },
+            native: {}
+          },
+          String(names[field].en)
+        );
+        this.ensureActive();
+        await (0, import_StateWriter.setStateChangedOrInitialize)(this, `${base}.${field}`, value);
+      }
+    }
+    const existing = await this.getObjectListAsync({
+      startkey: `${this.namespace}.exams.entries.`,
+      endkey: `${this.namespace}.exams.entries.\uFFFF`
+    });
+    const stale = /* @__PURE__ */ new Set();
+    for (const object of existing.rows || []) {
+      const slot = object.id.replace(`${this.namespace}.exams.entries.`, "").split(".")[0];
+      if (slot && !expected.has(slot)) {
+        stale.add(slot);
+      }
+    }
+    for (const slot of stale) {
+      this.ensureActive();
+      await this.delObjectAsync(`exams.entries.${slot}`, { recursive: true });
+    }
   }
   async ensureTimetableRoot() {
     await this.ensureTranslatedObject(
@@ -899,7 +1070,9 @@ class WebuntisNext extends utils.Adapter {
   }
 }
 if (require.main !== module) {
-  module.exports = (options) => new WebuntisNext(options);
+  module.exports = Object.assign((options) => new WebuntisNext(options), {
+    WebuntisNext
+  });
 } else {
   (() => new WebuntisNext())();
 }

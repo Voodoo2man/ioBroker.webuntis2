@@ -13,8 +13,8 @@ const config = {
 	password: "secret",
 };
 
-function json(body: unknown): Response {
-	return new Response(JSON.stringify(body), { status: 200, headers: { "content-type": "application/json" } });
+function json(body: unknown, status = 200): Response {
+	return new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
 }
 
 function fetchFor(calls: string[], failingMasterdata = false): typeof fetch {
@@ -171,6 +171,41 @@ describe("WebUntis service session and master data caching", () => {
 		await service.loadTimetable(config, new Date("2026-09-11T08:00:00"));
 		expect(calls.filter(method => method === "authenticate")).to.have.length(2);
 		expect(calls.filter(method => method === "getTimetable")).to.have.length(2);
+	});
+
+	it("loads the inclusive 90-day exam range and reauthenticates once after expiry", async () => {
+		let authCount = 0;
+		let examCount = 0;
+		let examsUrl = "";
+		const service = new WebUntisService(undefined, undefined, undefined, async (input, init) => {
+			if (new URL(String(input)).pathname.endsWith("/api/exams")) {
+				examsUrl = String(input);
+				examCount++;
+				if (examCount === 1) return json({ loginError: "expired" }, 401);
+				return json({
+					data: {
+						exams: [
+							{ id: 2, subject: "Deutsch", examDate: 20261210, startTime: 1000, endTime: 1045 },
+							{ id: 1, subject: "Mathe", examDate: 20260911, startTime: 800, endTime: 845 },
+						],
+					},
+				});
+			}
+			const body = JSON.parse(String(init?.body || "{}")) as { method?: string };
+			if (body.method === "authenticate") {
+				authCount++;
+				return json({ result: { sessionId: `session-${authCount}`, personType: 5, personId: 1, klasseId: 2 } });
+			}
+			return json({ result: [] });
+		});
+		const exams = await service.loadUpcomingExams(config, new Date(2026, 8, 11, 17));
+		const url = new URL(examsUrl);
+		expect(url.searchParams.get("startDate")).to.equal("20260911");
+		expect(url.searchParams.get("endDate")).to.equal("20261210");
+		expect(url.searchParams.get("klasseId")).to.equal("-1");
+		expect(authCount).to.equal(2);
+		expect(examCount).to.equal(2);
+		expect(exams.map(exam => exam.id)).to.deep.equal([1, 2]);
 	});
 
 	it("aborts an in-flight request during shutdown", async () => {

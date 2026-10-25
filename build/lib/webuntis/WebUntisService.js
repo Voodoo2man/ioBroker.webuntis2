@@ -23,6 +23,7 @@ __export(WebUntisService_exports, {
 });
 module.exports = __toCommonJS(WebUntisService_exports);
 var import_Holidays = require("./Holidays");
+var import_Exams = require("./Exams");
 var import_SchoolDiscovery = require("./SchoolDiscovery");
 var import_Timetable = require("./Timetable");
 var import_WebUntisClient = require("./WebUntisClient");
@@ -87,6 +88,30 @@ class WebUntisService {
       this.sessionKey = void 0;
       ({ client, session } = await this.getSession(config));
       return client.getUnreadMessages(session);
+    }
+  }
+  async loadUpcomingExams(config, now = /* @__PURE__ */ new Date()) {
+    const start = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const end = new Date(start.getFullYear(), start.getMonth(), start.getDate() + 90);
+    const toWebUntisDate = (date) => date.getFullYear() * 1e4 + (date.getMonth() + 1) * 100 + date.getDate();
+    let { client, session } = await this.getSession(config);
+    try {
+      return (0, import_Exams.normalizeUpcomingExams)(
+        await client.getExams(session, toWebUntisDate(start), toWebUntisDate(end), -1),
+        now
+      );
+    } catch (error) {
+      if (!(error instanceof import_WebUntisErrors.WebUntisError) || error.code !== "SESSION_EXPIRED") {
+        throw error;
+      }
+      this.sessionClient = void 0;
+      this.session = void 0;
+      this.sessionKey = void 0;
+      ({ client, session } = await this.getSession(config));
+      return (0, import_Exams.normalizeUpcomingExams)(
+        await client.getExams(session, toWebUntisDate(start), toWebUntisDate(end), -1),
+        now
+      );
     }
   }
   async loadTimetableWithSession(config, now) {

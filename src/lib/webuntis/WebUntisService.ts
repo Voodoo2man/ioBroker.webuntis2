@@ -1,6 +1,7 @@
 /* eslint-disable jsdoc/no-blank-blocks, jsdoc/require-jsdoc, jsdoc/require-param */
 
 import { HolidayCache, summarizeHolidays, type HolidaySummary } from "./Holidays";
+import { normalizeUpcomingExams, type UpcomingExam } from "./Exams";
 import { searchSchools } from "./SchoolDiscovery";
 import type { TimetableMasterData } from "./Timetable";
 import { normalizeLessons, resolveTimetableReferences, splitTimetable, weekRange } from "./Timetable";
@@ -93,6 +94,32 @@ export class WebUntisService {
 			this.sessionKey = undefined;
 			({ client, session } = await this.getSession(config));
 			return client.getUnreadMessages(session);
+		}
+	}
+
+	public async loadUpcomingExams(config: WebUntisConnectionConfig, now = new Date()): Promise<UpcomingExam[]> {
+		const start = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+		const end = new Date(start.getFullYear(), start.getMonth(), start.getDate() + 90);
+		const toWebUntisDate = (date: Date): number =>
+			date.getFullYear() * 10000 + (date.getMonth() + 1) * 100 + date.getDate();
+		let { client, session } = await this.getSession(config);
+		try {
+			return normalizeUpcomingExams(
+				await client.getExams(session, toWebUntisDate(start), toWebUntisDate(end), -1),
+				now,
+			);
+		} catch (error) {
+			if (!(error instanceof WebUntisError) || error.code !== "SESSION_EXPIRED") {
+				throw error;
+			}
+			this.sessionClient = undefined;
+			this.session = undefined;
+			this.sessionKey = undefined;
+			({ client, session } = await this.getSession(config));
+			return normalizeUpcomingExams(
+				await client.getExams(session, toWebUntisDate(start), toWebUntisDate(end), -1),
+				now,
+			);
 		}
 	}
 

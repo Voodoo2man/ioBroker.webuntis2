@@ -400,6 +400,64 @@ class WebUntisClient {
     }
     return result;
   }
+  /** Load exams from the authenticated REST endpoint. */
+  async getExams(session, startDate, endDate, klasseId = -1) {
+    var _a, _b, _c;
+    const url = new URL(this.restUrl("/api/exams"));
+    url.searchParams.set("startDate", String(startDate));
+    url.searchParams.set("endDate", String(endDate));
+    url.searchParams.set("klasseId", String(klasseId));
+    url.searchParams.set("withGrades", "false");
+    try {
+      const response = await this.fetchImpl(url, {
+        method: "GET",
+        signal: this.getRequestSignal(),
+        headers: { accept: "application/json", cookie: this.restCookie(session) }
+      });
+      const cookie = mergeCookieHeader(this.sessionCookie, response.headers);
+      this.sessionCookie = cookie.value;
+      const body = await response.text();
+      let payload;
+      try {
+        payload = JSON.parse(body);
+      } catch {
+        payload = void 0;
+      }
+      (_a = this.onDiagnostic) == null ? void 0 : _a.call(this, {
+        method: "getExams",
+        status: response.status,
+        contentType: response.headers.get("content-type") || "",
+        url: redactUrl(response.url),
+        redirected: response.redirected,
+        length: body.length,
+        type: getResponseType(body, response.headers.get("content-type") || ""),
+        cookiePresent: Boolean(this.sessionCookie),
+        cookieChanged: cookie.changed,
+        sessionCookieChanged: cookie.sessionCookieChanged
+      });
+      if (response.status === 401 || response.redirected || isRecord(payload) && isLoginPagePayload(payload)) {
+        throw new import_WebUntisErrors.WebUntisError("SESSION_EXPIRED", "WebUntis session expired while loading exams");
+      }
+      if (!response.ok) {
+        throw new import_WebUntisErrors.WebUntisError("API_REQUEST", `WebUntis exams request failed (HTTP ${response.status})`);
+      }
+      if (!isRecord(payload) || !isRecord(payload.data) || !Array.isArray(payload.data.exams)) {
+        throw new import_WebUntisErrors.WebUntisError("INVALID_RESPONSE", "Invalid WebUntis exams response");
+      }
+      return payload.data.exams;
+    } catch (error) {
+      if (error instanceof import_WebUntisErrors.WebUntisError) {
+        throw error;
+      }
+      if (error instanceof DOMException && (error.name === "AbortError" || error.name === "TimeoutError")) {
+        throw new import_WebUntisErrors.WebUntisError(
+          ((_b = this.abortSignal) == null ? void 0 : _b.aborted) ? "ABORTED" : "TIMEOUT",
+          ((_c = this.abortSignal) == null ? void 0 : _c.aborted) ? "WebUntis exams request was aborted" : "WebUntis exams request timed out"
+        );
+      }
+      throw new import_WebUntisErrors.WebUntisError("SERVER_UNREACHABLE", "WebUntis exams request failed", { cause: error });
+    }
+  }
   restUrl(path) {
     return this.endpoint.replace(/\/jsonrpc\.do\?.*$/i, path);
   }

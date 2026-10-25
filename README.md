@@ -20,6 +20,7 @@ visualizations, notifications, and automations.
 - Daily summaries with lesson counts, school times, subjects, and changes
 - Current and next lesson information, including the remaining time
 - Current and upcoming school holidays
+- Upcoming exams, including subject, date, and start and end times
 - Automatic updates every five minutes by default
 
 ## Installation and setup
@@ -69,12 +70,57 @@ and an attachment indicator. The adapter retrieves full content when the
 WebUntis endpoint permits it and otherwise uses the available preview; the
 `contentIsPreview` property distinguishes the two.
 
+Upcoming exams are available below `exams`. `exams.count` gives the number of
+exams announced in the requested date window, `exams.upcoming` contains a JSON
+array, and `exams.upcomingText` joins the display text for all exams with
+newlines. Each exam also has a sequentially numbered channel such as
+`exams.entries.01` or `exams.entries.02`. Exams are ordered by date, start time,
+then WebUntis ID, so multiple exams on the same date or in the same subject
+remain separate. The channel numbers can change when the ordered exam list
+changes; use the `id` field to identify an exam across updates. The array
+contains the following fields:
+
+```json
+[
+  {
+    "id": 4102,
+    "subject": "Mathematik",
+    "date": "2026-11-05",
+    "startTime": "08:00",
+    "endTime": "09:30",
+    "name": "Bruchrechnung",
+    "text": "Kapitel 4, Aufgaben 1–6",
+    "displayText": "05.11.2026 · 08:00–09:30 · Mathematik · Kapitel 4, Aufgaben 1–6"
+  },
+  {
+    "id": 4103,
+    "subject": "Englisch",
+    "date": "2026-11-05",
+    "startTime": "10:00",
+    "endTime": "10:45",
+    "name": "Vocabulary",
+    "text": "Unit 3",
+    "displayText": "05.11.2026 · 10:00–10:45 · Englisch · Unit 3"
+  }
+]
+```
+
+The individual `entries.<NN>` channels expose `id` as a number and the other
+fields as strings. The display text uses the exam text when available and falls
+back to its name. The adapter includes exams from today through 90 calendar
+days from today, inclusive, and refreshes them during the normal five-minute
+update. All of today's exams are included, even if their start time has passed.
+Availability depends on the WebUntis account's school permissions and API
+scope. A failed or forbidden request leaves the last successful exam data in
+place; a successful response with no exams clears stale entries. Exam data
+does not include grades or student personal details.
+
 ## Requirements and notes
 
 - A WebUntis account with access to the selected school is required.
 - Username-and-password login is supported.
 - QR-code, Microsoft 365, SAML, and OAuth login are not supported.
-- Exams and homework are not provided.
+- Homework is not provided.
 - [WebUntis](https://webuntis.com/) is an external service. This project is
   independent and is not affiliated with Untis GmbH.
 
@@ -95,6 +141,7 @@ and include only relevant, non-sensitive log messages when asking for help.
 ## Changelog
 ### WORK IN PROGRESS
 
+- (Voodoo2man) Added upcoming exams with subject, date, and time information.
 - (Voodoo2man) Added the Ukrainian Admin translation.
 
 ### 0.1.10 (2026-10-18)

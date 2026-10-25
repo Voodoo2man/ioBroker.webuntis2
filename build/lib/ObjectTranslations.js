@@ -58,6 +58,19 @@ const OBJECT_NAMES = {
     uk: "\u041F\u043E\u0432\u0456\u0434\u043E\u043C\u043B\u0435\u043D\u043D\u044F",
     "zh-cn": "\u6D88\u606F"
   },
+  exams: {
+    en: "Exams",
+    de: "Pr\xFCfungen",
+    es: "Ex\xE1menes",
+    fr: "Examens",
+    it: "Esami",
+    nl: "Tentamens",
+    pl: "Egzaminy",
+    pt: "Exames",
+    ru: "\u042D\u043A\u0437\u0430\u043C\u0435\u043D\u044B",
+    uk: "\u0406\u0441\u043F\u0438\u0442\u0438",
+    "zh-cn": "\u8003\u8BD5"
+  },
   holidays: {
     en: "Holidays",
     de: "Ferien",
@@ -200,6 +213,58 @@ const OBJECT_NAMES = {
     ru: "\u0423\u0440\u043E\u043A",
     uk: "\u0423\u0440\u043E\u043A",
     "zh-cn": "\u8BFE\u7A0B"
+  },
+  upcomingExamCount: {
+    en: "Upcoming exam count",
+    de: "Anzahl bevorstehender Pr\xFCfungen",
+    es: "N\xFAmero de ex\xE1menes pr\xF3ximos",
+    fr: "Nombre d'examens \xE0 venir",
+    it: "Numero di esami imminenti",
+    nl: "Aantal komende tentamens",
+    pl: "Liczba nadchodz\u0105cych egzamin\xF3w",
+    pt: "N\xFAmero de exames futuros",
+    ru: "\u041A\u043E\u043B\u0438\u0447\u0435\u0441\u0442\u0432\u043E \u043F\u0440\u0435\u0434\u0441\u0442\u043E\u044F\u0449\u0438\u0445 \u044D\u043A\u0437\u0430\u043C\u0435\u043D\u043E\u0432",
+    uk: "\u041A\u0456\u043B\u044C\u043A\u0456\u0441\u0442\u044C \u043C\u0430\u0439\u0431\u0443\u0442\u043D\u0456\u0445 \u0456\u0441\u043F\u0438\u0442\u0456\u0432",
+    "zh-cn": "\u5373\u5C06\u5230\u6765\u7684\u8003\u8BD5\u6570\u91CF"
+  },
+  upcomingExams: {
+    en: "Upcoming exams",
+    de: "Bevorstehende Pr\xFCfungen",
+    es: "Pr\xF3ximos ex\xE1menes",
+    fr: "Examens \xE0 venir",
+    it: "Esami imminenti",
+    nl: "Komende tentamens",
+    pl: "Nadchodz\u0105ce egzaminy",
+    pt: "Pr\xF3ximos exames",
+    ru: "\u041F\u0440\u0435\u0434\u0441\u0442\u043E\u044F\u0449\u0438\u0435 \u044D\u043A\u0437\u0430\u043C\u0435\u043D\u044B",
+    uk: "\u041C\u0430\u0439\u0431\u0443\u0442\u043D\u0456 \u0456\u0441\u043F\u0438\u0442\u0438",
+    "zh-cn": "\u5373\u5C06\u5230\u6765\u7684\u8003\u8BD5"
+  },
+  upcomingExamsText: {
+    en: "Upcoming exams text",
+    de: "Text zu bevorstehenden Pr\xFCfungen",
+    es: "Texto de pr\xF3ximos ex\xE1menes",
+    fr: "Texte des examens \xE0 venir",
+    it: "Testo degli esami imminenti",
+    nl: "Tekst van komende tentamens",
+    pl: "Tekst nadchodz\u0105cych egzamin\xF3w",
+    pt: "Texto dos pr\xF3ximos exames",
+    ru: "\u0422\u0435\u043A\u0441\u0442 \u043F\u0440\u0435\u0434\u0441\u0442\u043E\u044F\u0449\u0438\u0445 \u044D\u043A\u0437\u0430\u043C\u0435\u043D\u043E\u0432",
+    uk: "\u0422\u0435\u043A\u0441\u0442 \u043C\u0430\u0439\u0431\u0443\u0442\u043D\u0456\u0445 \u0456\u0441\u043F\u0438\u0442\u0456\u0432",
+    "zh-cn": "\u5373\u5C06\u5230\u6765\u7684\u8003\u8BD5\u6587\u672C"
+  },
+  examFallback: {
+    en: "Exam",
+    de: "Pr\xFCfung",
+    es: "Examen",
+    fr: "Examen",
+    it: "Esame",
+    nl: "Tentamen",
+    pl: "Egzamin",
+    pt: "Exame",
+    ru: "\u042D\u043A\u0437\u0430\u043C\u0435\u043D",
+    uk: "\u0406\u0441\u043F\u0438\u0442",
+    "zh-cn": "\u8003\u8BD5"
   }
 };
 const STATE_NAMES = {
@@ -228,6 +293,84 @@ const STATE_NAMES = {
     ru: "\u041A\u043E\u043D\u0435\u0446 \u0443\u0440\u043E\u043A\u0430",
     uk: "\u041A\u0456\u043D\u0435\u0446\u044C \u0443\u0440\u043E\u043A\u0443",
     "zh-cn": "\u8BFE\u7A0B\u7ED3\u675F"
+  },
+  examId: {
+    en: "Exam ID",
+    de: "Pr\xFCfungs-ID",
+    es: "ID del examen",
+    fr: "ID de l'examen",
+    it: "ID dell'esame",
+    nl: "Tentamen-ID",
+    pl: "ID egzaminu",
+    pt: "ID do exame",
+    ru: "ID \u044D\u043A\u0437\u0430\u043C\u0435\u043D\u0430",
+    uk: "ID \u0456\u0441\u043F\u0438\u0442\u0443",
+    "zh-cn": "\u8003\u8BD5 ID"
+  },
+  examName: {
+    en: "Exam name",
+    de: "Pr\xFCfungsname",
+    es: "Nombre del examen",
+    fr: "Nom de l'examen",
+    it: "Nome dell'esame",
+    nl: "Tentamennaam",
+    pl: "Nazwa egzaminu",
+    pt: "Nome do exame",
+    ru: "\u041D\u0430\u0437\u0432\u0430\u043D\u0438\u0435 \u044D\u043A\u0437\u0430\u043C\u0435\u043D\u0430",
+    uk: "\u041D\u0430\u0437\u0432\u0430 \u0456\u0441\u043F\u0438\u0442\u0443",
+    "zh-cn": "\u8003\u8BD5\u540D\u79F0"
+  },
+  examText: {
+    en: "Exam text",
+    de: "Pr\xFCfungstext",
+    es: "Texto del examen",
+    fr: "Texte de l'examen",
+    it: "Testo dell'esame",
+    nl: "Tentamentekst",
+    pl: "Tekst egzaminu",
+    pt: "Texto do exame",
+    ru: "\u0422\u0435\u043A\u0441\u0442 \u044D\u043A\u0437\u0430\u043C\u0435\u043D\u0430",
+    uk: "\u0422\u0435\u043A\u0441\u0442 \u0456\u0441\u043F\u0438\u0442\u0443",
+    "zh-cn": "\u8003\u8BD5\u6587\u672C"
+  },
+  examStartTime: {
+    en: "Exam start time",
+    de: "Pr\xFCfungsbeginn",
+    es: "Hora de inicio del examen",
+    fr: "Heure de d\xE9but de l'examen",
+    it: "Ora di inizio dell'esame",
+    nl: "Begintijd tentamen",
+    pl: "Godzina rozpocz\u0119cia egzaminu",
+    pt: "Hora de in\xEDcio do exame",
+    ru: "\u0412\u0440\u0435\u043C\u044F \u043D\u0430\u0447\u0430\u043B\u0430 \u044D\u043A\u0437\u0430\u043C\u0435\u043D\u0430",
+    uk: "\u0427\u0430\u0441 \u043F\u043E\u0447\u0430\u0442\u043A\u0443 \u0456\u0441\u043F\u0438\u0442\u0443",
+    "zh-cn": "\u8003\u8BD5\u5F00\u59CB\u65F6\u95F4"
+  },
+  examEndTime: {
+    en: "Exam end time",
+    de: "Pr\xFCfungsende",
+    es: "Hora de finalizaci\xF3n del examen",
+    fr: "Heure de fin de l'examen",
+    it: "Ora di fine dell'esame",
+    nl: "Eindtijd tentamen",
+    pl: "Godzina zako\u0144czenia egzaminu",
+    pt: "Hora de fim do exame",
+    ru: "\u0412\u0440\u0435\u043C\u044F \u043E\u043A\u043E\u043D\u0447\u0430\u043D\u0438\u044F \u044D\u043A\u0437\u0430\u043C\u0435\u043D\u0430",
+    uk: "\u0427\u0430\u0441 \u0437\u0430\u0432\u0435\u0440\u0448\u0435\u043D\u043D\u044F \u0456\u0441\u043F\u0438\u0442\u0443",
+    "zh-cn": "\u8003\u8BD5\u7ED3\u675F\u65F6\u95F4"
+  },
+  displayText: {
+    en: "Display text",
+    de: "Anzeigetext",
+    es: "Texto mostrado",
+    fr: "Texte affich\xE9",
+    it: "Testo visualizzato",
+    nl: "Weergavetekst",
+    pl: "Tekst wy\u015Bwietlany",
+    pt: "Texto exibido",
+    ru: "\u041E\u0442\u043E\u0431\u0440\u0430\u0436\u0430\u0435\u043C\u044B\u0439 \u0442\u0435\u043A\u0441\u0442",
+    uk: "\u0422\u0435\u043A\u0441\u0442 \u0434\u043B\u044F \u0432\u0456\u0434\u043E\u0431\u0440\u0430\u0436\u0435\u043D\u043D\u044F",
+    "zh-cn": "\u663E\u793A\u6587\u672C"
   },
   active: {
     en: "Active",

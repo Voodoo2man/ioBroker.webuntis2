@@ -21,6 +21,15 @@ describe("object translations", () => {
 		}
 		expect(name.en).to.equal("Lesson count");
 		expect(translatedName("hasSchool").de).to.equal("Hat Schule");
+		for (const key of ["exams", "upcomingExamCount", "upcomingExams", "upcomingExamsText"] as const) {
+			const translated = translatedName(key);
+			for (const language of SUPPORTED_LANGUAGES) {
+				expect(translated[language]).to.be.a("string");
+			}
+		}
+		expect(translatedName("upcomingExamCount").de).to.equal("Anzahl bevorstehender Prüfungen");
+		expect(translatedStateName("Exam ID").de).to.equal("Prüfungs-ID");
+		expect(translatedStateName("Exam start time").de).to.equal("Prüfungsbeginn");
 	});
 
 	it("translates dynamic timetable and weekday names", () => {

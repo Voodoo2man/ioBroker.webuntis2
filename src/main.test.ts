@@ -11,10 +11,197 @@ import {
 import { WebUntisClient } from "./lib/webuntis/WebUntisClient";
 import { WebUntisError } from "./lib/webuntis/WebUntisErrors";
 import { WebUntisService } from "./lib/webuntis/WebUntisService";
+import type { UpcomingExam } from "./lib/webuntis/Exams";
 
 function response(body: unknown, status = 200): Response {
 	return new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
 }
+
+type AdapterClass = { prototype: object };
+
+function loadAdapterClassForTest(): AdapterClass {
+	// eslint-disable-next-line @typescript-eslint/no-require-imports
+	const nodeModule = require("node:module") as {
+		_load: (request: string, parent: unknown, isMain: boolean) => unknown;
+	};
+	const originalLoad = nodeModule._load;
+	nodeModule._load = function (request, parent, isMain) {
+		if (request === "@iobroker/adapter-core") {
+			return { Adapter: class {} };
+		}
+		return originalLoad.call(this, request, parent, isMain);
+	};
+	try {
+		// eslint-disable-next-line @typescript-eslint/no-require-imports
+		return (require("./main") as { WebuntisNext: AdapterClass }).WebuntisNext;
+	} finally {
+		nodeModule._load = originalLoad;
+	}
+}
+
+type AdapterHarness = {
+	adapter: object;
+	methods: { updateTimetable(): Promise<void>; ensureUpcomingExamsRoot(): Promise<void> };
+	values: Map<string, ioBroker.StateValue>;
+	deleted: string[];
+	objects: Record<string, ioBroker.SettableObject>;
+	warnings: string[];
+};
+
+function makeAdapterHarness(examLoader: () => Promise<UpcomingExam[]>, existingSlots: number[] = []): AdapterHarness {
+	const AdapterClass = loadAdapterClassForTest();
+	const adapter = Object.create(AdapterClass.prototype) as object;
+	const values = new Map<string, ioBroker.StateValue>([
+		["exams.count", 8],
+		["exams.upcoming", '[{"id":88}]'],
+		["exams.upcomingText", "previous exams"],
+	]);
+	const deleted: string[] = [];
+	const objects: Record<string, ioBroker.SettableObject> = {};
+	const warnings: string[] = [];
+	const allObjectRows = existingSlots.flatMap(slot => {
+		const slotId = String(slot).padStart(2, "0");
+		return [{ id: `webuntis2.0.exams.entries.${slotId}` }, { id: `webuntis2.0.exams.entries.${slotId}.subject` }];
+	});
+	const overrides: Record<string, unknown> = {
+		unloaded: false,
+		lastExamsWarningAt: 0,
+		namespace: "webuntis2.0",
+		config: { server: "https://example.webuntis.com" },
+		webUntis: {
+			loadTimetable: async () => ({ today: [], tomorrow: [], week: [], holidays: {} as never }),
+			loadUnreadMessages: async () => [],
+			loadUpcomingExams: examLoader,
+		},
+		log: { warn: (message: string) => warnings.push(message), debug: () => undefined, error: () => undefined },
+		setState: async (id: string, value: ioBroker.StateValue) => {
+			values.set(id, value);
+		},
+		getStateAsync: async (id: string) => {
+			const val = values.get(id);
+			return val === undefined ? null : ({ val, ack: true } as ioBroker.State);
+		},
+		setStateAsync: async (id: string, value: ioBroker.StateValue) => {
+			values.set(id, value);
+		},
+		setStateChangedAsync: async (id: string, value: ioBroker.StateValue) => {
+			if (values.get(id) !== value) {
+				values.set(id, value);
+			}
+		},
+		ensureTranslatedObject: async (id: string, object: ioBroker.SettableObject) => {
+			objects[id] = object;
+		},
+		getObjectAsync: async () => null,
+		getObjectListAsync: async () => ({ rows: allObjectRows }),
+		delObjectAsync: async (id: string) => {
+			deleted.push(id);
+		},
+		ensureTimetableRoot: async () => undefined,
+		ensureHolidaysRoot: async () => undefined,
+		writeTimetableGroup: async () => ({ updated: 0, removed: 0 }),
+		writeHolidaySummary: async () => undefined,
+		writeUnreadMessages: async () => undefined,
+	};
+	Object.assign(adapter, overrides);
+	const methods = adapter as unknown as {
+		updateTimetable(): Promise<void>;
+		ensureUpcomingExamsRoot(): Promise<void>;
+	};
+	return { adapter, methods, values, deleted, objects, warnings };
+}
+
+const sampleExam = (id: number, startTime: string, displayText: string): UpcomingExam => ({
+	id,
+	subject: "Mathematics",
+	date: "2026-11-03",
+	startTime,
+	endTime: "10:00",
+	name: "Written exam",
+	text: "Chapters 1–3",
+	displayText,
+});
+
+describe("upcoming exams adapter states", () => {
+	it("writes distinct exams on the same day and removes obsolete entries", async () => {
+		const exams = [
+			sampleExam(11, "08:00", "03.11.2026 08:00–10:00 Mathematics"),
+			sampleExam(12, "11:00", "03.11.2026 11:00–10:00 Mathematics"),
+		];
+		const harness = makeAdapterHarness(async () => exams, [1, 2, 3]);
+		await harness.methods.updateTimetable();
+
+		expect(harness.values.get("exams.count")).to.equal(2);
+		expect(JSON.parse(String(harness.values.get("exams.upcoming")))).to.deep.equal(exams);
+		expect(harness.values.get("exams.upcomingText")).to.equal(exams.map(exam => exam.displayText).join("\n"));
+		expect(harness.values.get("exams.entries.01.id")).to.equal(11);
+		expect(harness.values.get("exams.entries.02.id")).to.equal(12);
+		expect(harness.values.get("exams.entries.02.startTime")).to.equal("11:00");
+		expect(harness.deleted).to.deep.equal(["exams.entries.03"]);
+		expect(harness.values.get("info.connection")).to.equal(true);
+	});
+
+	it("preserves existing aggregate states while creating the exams objects", async () => {
+		const harness = makeAdapterHarness(async () => []);
+		await harness.methods.ensureUpcomingExamsRoot();
+
+		expect(harness.values.get("exams.count")).to.equal(8);
+		expect(harness.values.get("exams.upcoming")).to.equal('[{"id":88}]');
+		expect(harness.values.get("exams.upcomingText")).to.equal("previous exams");
+		expect(harness.objects["exams.entries"].type).to.equal("channel");
+		expect((harness.objects["exams.count"].common as ioBroker.StateCommon).def).to.equal(0);
+	});
+
+	it("clears aggregate values and all entries after a successful empty result", async () => {
+		const harness = makeAdapterHarness(async () => [], [1, 2]);
+		await harness.methods.updateTimetable();
+
+		expect(harness.values.get("exams.count")).to.equal(0);
+		expect(harness.values.get("exams.upcoming")).to.equal("[]");
+		expect(harness.values.get("exams.upcomingText")).to.equal("");
+		expect(harness.deleted).to.deep.equal(["exams.entries.01", "exams.entries.02"]);
+	});
+
+	it("preserves existing exam values on optional load failure while timetable succeeds", async () => {
+		const harness = makeAdapterHarness(async () => {
+			throw new WebUntisError("API_REQUEST", "exam permission denied");
+		}, [1]);
+		await harness.methods.updateTimetable();
+
+		expect(harness.values.get("exams.count")).to.equal(8);
+		expect(harness.values.get("exams.upcoming")).to.equal('[{"id":88}]');
+		expect(harness.values.get("exams.upcomingText")).to.equal("previous exams");
+		expect(harness.deleted).to.deep.equal([]);
+		expect(harness.values.get("info.connection")).to.equal(true);
+		expect(harness.warnings).to.have.length(1);
+	});
+
+	it("updates fields for the same exam ID on later cycles", async () => {
+		let loaded = [sampleExam(11, "08:00", "First text"), sampleExam(12, "11:00", "Second text")];
+		const harness = makeAdapterHarness(async () => loaded, [1, 2]);
+		await harness.methods.updateTimetable();
+		loaded = [sampleExam(12, "09:00", "Updated text")];
+		await harness.methods.updateTimetable();
+
+		expect(harness.values.get("exams.entries.01.id")).to.equal(12);
+		expect(harness.values.get("exams.entries.01.startTime")).to.equal("09:00");
+		expect(harness.values.get("exams.entries.01.displayText")).to.equal("Updated text");
+		expect(harness.deleted).to.deep.equal(["exams.entries.02"]);
+	});
+
+	it("does not remove stale entries if unload begins during cleanup", async () => {
+		const exams = [sampleExam(11, "08:00", "Updated exam")];
+		const harness = makeAdapterHarness(async () => exams, [3]);
+		const adapterOverrides = harness.adapter as unknown as Record<string, unknown>;
+		adapterOverrides.getObjectListAsync = async () => {
+			adapterOverrides.unloaded = true;
+			return { rows: [{ id: "webuntis2.0.exams.entries.03.subject" }] };
+		};
+		await harness.methods.updateTimetable();
+
+		expect(harness.deleted).to.deep.equal([]);
+	});
+});
 
 describe("WebUntis school discovery", () => {
 	it("maps a valid school search response", async () => {
