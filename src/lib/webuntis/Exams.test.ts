@@ -246,6 +246,154 @@ describe("upcoming exams", () => {
 		}
 	});
 
+	it("resolves exactly one parent child from app data and sends tenant/year context", async () => {
+		const calls: Array<{
+			path: string;
+			url: URL;
+			authorization: string | null;
+			tenantId: string | null;
+			schoolYearId: string | null;
+			cookie: string;
+		}> = [];
+		const diagnostics: unknown[] = [];
+		let examRequests = 0;
+		const parentSession = { ...session, personType: 12, personId: 9001 };
+		const client = new WebUntisClient(
+			{ server: "https://example.webuntis.com", schoolName: "example" },
+			async (input, init) => {
+				const url = requestUrl(input);
+				const headers = new Headers(init?.headers);
+				calls.push({
+					path: url.pathname,
+					url,
+					authorization: headers.get("authorization"),
+					tenantId: headers.get("tenant-id"),
+					schoolYearId: headers.get("x-webuntis-api-school-year-id"),
+					cookie: headers.get("cookie") || "",
+				});
+				if (url.pathname.endsWith("/jsonrpc.do")) {
+					return new Response(
+						JSON.stringify({
+							result: { sessionId: "parent-session", personType: 12, personId: 9001, klasseId: 0 },
+						}),
+						{
+							headers: {
+								"content-type": "application/json",
+								"set-cookie": 'JSESSIONID=parent-session; Path=/, Tenant-Id="cookie-tenant"; Path=/',
+							},
+						},
+					);
+				}
+				if (url.pathname.endsWith("/api/token/new")) {
+					return new Response("parent-secret-token", { headers: { "set-cookie": "ROUTE=token; Path=/" } });
+				}
+				if (url.pathname.endsWith("/api/rest/view/v1/app/data")) {
+					return json({
+						data: {
+							user: { students: [{ id: 42, displayName: "Private Student Name" }] },
+							tenant: { id: 77 },
+							currentSchoolYear: { id: 2027 },
+						},
+					});
+				}
+				examRequests++;
+				return examRequests === 1
+					? new Response(JSON.stringify({ errorMessage: "forbidden" }), {
+							status: 403,
+							headers: { "content-type": "application/json" },
+						})
+					: json({ data: { exams: [{ id: 7 }] } });
+			},
+			undefined,
+			diagnostic => diagnostics.push(diagnostic),
+		);
+		await client.authenticate("parent", "secret");
+		const exams = await client.getExams(parentSession, 20260911, 20261210);
+		const examCalls = calls.filter(call => call.path.endsWith("/api/exams"));
+		const tokenCall = calls.find(call => call.path.endsWith("/api/token/new"));
+		const contextCall = calls.find(call => call.path.endsWith("/api/rest/view/v1/app/data"));
+		expect(exams).to.deep.equal([{ id: 7 }]);
+		expect(examCalls).to.have.length(2);
+		expect(examCalls[0].url.searchParams.has("studentId")).to.equal(false);
+		expect(examCalls[1].url.searchParams.get("studentId")).to.equal("42");
+		expect(examCalls[1].url.searchParams.get("studentId")).not.to.equal("9001");
+		expect(examCalls[1].authorization).to.equal("Bearer parent-secret-token");
+		expect(tokenCall?.tenantId).to.equal("cookie-tenant");
+		expect(contextCall?.tenantId).to.equal("cookie-tenant");
+		expect(examCalls[1].tenantId).to.equal("77");
+		expect(examCalls[1].schoolYearId).to.equal("2027");
+		expect(examCalls[1].cookie).to.include("ROUTE=token");
+		expect(JSON.stringify(diagnostics)).not.to.include("42");
+		expect(JSON.stringify(diagnostics)).not.to.include("9001");
+		expect(JSON.stringify(diagnostics)).not.to.include("Private Student Name");
+		expect(JSON.stringify(diagnostics)).not.to.include("parent-secret-token");
+		expect(JSON.stringify(diagnostics)).not.to.include("cookie-tenant");
+	});
+
+	for (const testCase of [
+		{ label: "no linked students", students: [], scope: "unresolved", count: 0 },
+		{ label: "multiple linked students", students: [{ id: 41 }, { id: 42 }], scope: "ambiguous", count: 2 },
+	]) {
+		it(`does not guess a child when the parent has ${testCase.label}`, async () => {
+			let examRequests = 0;
+			let tokenRequests = 0;
+			let contextRequests = 0;
+			const parentSession = { ...session, personType: 12, personId: 9001 };
+			const client = new WebUntisClient(
+				{ server: "https://example.webuntis.com", schoolName: "example" },
+				async input => {
+					const url = requestUrl(input);
+					if (url.pathname.endsWith("/api/token/new")) {
+						tokenRequests++;
+						return new Response("parent-secret-token");
+					}
+					if (url.pathname.endsWith("/api/rest/view/v1/app/data")) {
+						contextRequests++;
+						return json({ data: { user: { students: testCase.students } } });
+					}
+					examRequests++;
+					return json({ errorMessage: "forbidden" }, 403);
+				},
+			);
+			try {
+				await client.getExams(parentSession, 20260911, 20261210);
+				expect.fail("expected unresolved parent student scope");
+			} catch (error) {
+				expect((error as { code: string }).code).to.equal("API_REQUEST");
+				expect((error as Error).message).to.include(`childScope=${testCase.scope}`);
+				expect((error as Error).message).to.include(`linkedStudents=${testCase.count}`);
+				expect((error as Error).message).not.to.include("9001");
+			}
+			expect(examRequests).to.equal(1);
+			expect(tokenRequests).to.equal(1);
+			expect(contextRequests).to.equal(1);
+		});
+	}
+
+	it("rejects malformed parent app data instead of treating it as empty exams", async () => {
+		const parentSession = { ...session, personType: 12, personId: 9001 };
+		const client = new WebUntisClient(
+			{ server: "https://example.webuntis.com", schoolName: "example" },
+			async input => {
+				const url = requestUrl(input);
+				if (url.pathname.endsWith("/api/token/new")) {
+					return new Response("parent-secret-token");
+				}
+				if (url.pathname.endsWith("/api/rest/view/v1/app/data")) {
+					return json({ data: { user: { students: [{ id: 41 }, { id: "not-a-valid-id" }] } } });
+				}
+				return json({}, 403);
+			},
+		);
+		try {
+			await client.getExams(parentSession, 20260911, 20261210);
+			expect.fail("expected malformed parent context");
+		} catch (error) {
+			expect((error as { code: string }).code).to.equal("INVALID_RESPONSE");
+			expect((error as Error).message).to.include("parent exam context");
+		}
+	});
+
 	it("marks expired sessions and malformed REST responses as errors", async () => {
 		const expired = new WebUntisClient(
 			{ server: "https://example.webuntis.com", schoolName: "example" },

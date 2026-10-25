@@ -24,6 +24,63 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 	return typeof value === "object" && value !== null;
 }
 
+interface ParentExamContext {
+	studentIds: number[];
+	tenantId?: string;
+	schoolYearId?: number;
+}
+
+function positiveSafeId(value: unknown): number | undefined {
+	return typeof value === "number" && Number.isSafeInteger(value) && value > 0 ? value : undefined;
+}
+
+function safeHeaderId(value: unknown): string | undefined {
+	const text = typeof value === "number" && Number.isSafeInteger(value) && value > 0 ? String(value) : value;
+	if (typeof text !== "string") {
+		return undefined;
+	}
+	const unquoted = text.trim().replace(/^"(.*)"$/, "$1");
+	return /^[A-Za-z0-9._:-]{1,128}$/.test(unquoted) ? unquoted : undefined;
+}
+
+function tenantIdFromCookie(header: string | undefined): string | undefined {
+	return safeHeaderId(cookieValue(header, "Tenant-Id") ?? cookieValue(header, "tenant-id"));
+}
+
+/**
+ * Read the parent account's permitted students and current tenant/year context
+ * from the observed app-data shape: user.students[].id, tenant.id, and
+ * currentSchoolYear.id. The frontend may wrap this object in data.
+ */
+function parseParentExamContext(raw: unknown): ParentExamContext {
+	if (!isRecord(raw)) {
+		throw new WebUntisError("INVALID_RESPONSE", "Invalid WebUntis parent exam context response");
+	}
+	if (raw.data !== undefined && !isRecord(raw.data)) {
+		throw new WebUntisError("INVALID_RESPONSE", "Invalid WebUntis parent exam context response");
+	}
+	const data = isRecord(raw.data) ? raw.data : raw;
+	const user = data.user;
+	if (!isRecord(user) || !Array.isArray(user.students)) {
+		throw new WebUntisError("INVALID_RESPONSE", "Invalid WebUntis parent exam context response");
+	}
+	const studentIds: number[] = [];
+	for (const student of user.students) {
+		const id = isRecord(student) ? positiveSafeId(student.id) : undefined;
+		if (id === undefined) {
+			throw new WebUntisError("INVALID_RESPONSE", "Invalid WebUntis parent exam context response");
+		}
+		studentIds.push(id);
+	}
+	const tenant = isRecord(data.tenant) ? data.tenant : undefined;
+	const schoolYear = isRecord(data.currentSchoolYear) ? data.currentSchoolYear : undefined;
+	return {
+		studentIds: [...new Set(studentIds)],
+		tenantId: safeHeaderId(tenant?.id),
+		schoolYearId: positiveSafeId(schoolYear?.id),
+	};
+}
+
 function isAuthenticationResponse(value: unknown): value is WebUntisSession {
 	return (
 		isRecord(value) &&
@@ -154,7 +211,9 @@ function getResponseType(body: string, contentType: string): WebUntisHttpDiagnos
 }
 
 function redactUrl(url: string): string {
-	return url.replace(/;jsessionid=[^?;]+/gi, ";jsessionid=<redacted>");
+	return url
+		.replace(/;jsessionid=[^?;]+/gi, ";jsessionid=<redacted>")
+		.replace(/([?&]studentId=)[^&]*/gi, "$1<redacted>");
 }
 
 function getCookieHeader(headers: Headers): string | undefined {
@@ -465,14 +524,29 @@ export class WebUntisClient {
 			url.searchParams.set("studentId", String(session.personId));
 		}
 		try {
-			const request = async (token?: string): Promise<{ response: Response; payload: unknown }> => {
-				const response = await this.fetchImpl(url, {
+			let authContext: "cookie" | "bearer" = "cookie";
+			let childScope: WebUntisHttpDiagnostic["childScope"] =
+				session.personType === 5 ? "self" : session.personType > 5 ? "unresolved" : "not-applicable";
+			let linkedStudentCount: number | undefined;
+			let contextLoaded = false;
+			let tenantId = tenantIdFromCookie(this.sessionCookie);
+			let schoolYearId: number | undefined;
+			const request = async (
+				options: { token?: string; studentId?: number } = {},
+			): Promise<{ response: Response; payload: unknown }> => {
+				const requestUrl = new URL(url.href);
+				if (options.studentId) {
+					requestUrl.searchParams.set("studentId", String(options.studentId));
+				}
+				const response = await this.fetchImpl(requestUrl, {
 					method: "GET",
 					signal: this.getRequestSignal(),
 					headers: {
 						accept: "application/json",
 						cookie: this.restCookie(session),
-						...(token ? { Authorization: `Bearer ${token}` } : {}),
+						...(options.token ? { Authorization: `Bearer ${options.token}` } : {}),
+						...(tenantId ? { "Tenant-Id": tenantId } : {}),
+						...(schoolYearId ? { "X-Webuntis-Api-School-Year-Id": String(schoolYearId) } : {}),
 					},
 				});
 				const cookie = mergeCookieHeader(this.sessionCookie, response.headers);
@@ -486,6 +560,13 @@ export class WebUntisClient {
 				}
 				this.onDiagnostic?.({
 					method: "getExams",
+					authContext,
+					personType: session.personType,
+					childScope,
+					linkedStudentCount,
+					contextLoaded,
+					tenantIdPresent: Boolean(tenantId),
+					schoolYearIdPresent: Boolean(schoolYearId),
 					status: response.status,
 					contentType: response.headers.get("content-type") || "",
 					url: redactUrl(response.url),
@@ -501,14 +582,49 @@ export class WebUntisClient {
 			let result = await request();
 			if (result.response.status === 403) {
 				const token = await this.getRestToken(session, "exams");
-				result = await request(token);
+				authContext = "bearer";
+				tenantId = tenantIdFromCookie(this.sessionCookie) ?? tenantId;
+				let studentId: number | undefined;
+				if (session.personType > 5) {
+					const context = await this.getParentExamContext(session, token, tenantId);
+					contextLoaded = true;
+					linkedStudentCount = context.studentIds.length;
+					tenantId = context.tenantId ?? tenantId;
+					schoolYearId = context.schoolYearId;
+					if (linkedStudentCount === 1) {
+						childScope = "unique";
+						studentId = context.studentIds[0];
+					} else {
+						childScope = linkedStudentCount > 1 ? "ambiguous" : "unresolved";
+						const scope = linkedStudentCount > 1 ? "ambiguous" : "unresolved";
+						throw new WebUntisError(
+							"API_REQUEST",
+							`WebUntis parent exam scope ${scope} after app-data lookup (auth=bearer, personType=${session.personType}, childScope=${scope}, linkedStudents=${linkedStudentCount})`,
+						);
+					}
+				}
+				result = await request({ token, studentId });
 			}
 			const { response, payload } = result;
 			if (response.status === 401 || response.redirected || (isRecord(payload) && isLoginPagePayload(payload))) {
-				throw new WebUntisError("SESSION_EXPIRED", "WebUntis session expired while loading exams");
+				const retryDetails =
+					authContext === "bearer"
+						? ` after REST token retry (${this.examScopeDetails(authContext, session, childScope, linkedStudentCount)})`
+						: "";
+				throw new WebUntisError(
+					"SESSION_EXPIRED",
+					`WebUntis session expired while loading exams${retryDetails}`,
+				);
 			}
 			if (!response.ok) {
-				throw new WebUntisError("API_REQUEST", `WebUntis exams request failed (HTTP ${response.status})`);
+				const retryDetails =
+					authContext === "bearer"
+						? ` after REST token retry (${this.examScopeDetails(authContext, session, childScope, linkedStudentCount)})`
+						: ` (${this.examScopeDetails(authContext, session, childScope, linkedStudentCount)})`;
+				throw new WebUntisError(
+					"API_REQUEST",
+					`WebUntis exams request failed (HTTP ${response.status})${retryDetails}`,
+				);
 			}
 			if (!isRecord(payload) || !isRecord(payload.data) || !Array.isArray(payload.data.exams)) {
 				throw new WebUntisError("INVALID_RESPONSE", "Invalid WebUntis exams response");
@@ -528,6 +644,17 @@ export class WebUntisClient {
 			}
 			throw new WebUntisError("SERVER_UNREACHABLE", "WebUntis exams request failed", { cause: error });
 		}
+	}
+
+	private examScopeDetails(
+		authContext: "cookie" | "bearer",
+		session: WebUntisSession,
+		childScope: WebUntisHttpDiagnostic["childScope"],
+		linkedStudentCount: number | undefined,
+	): string {
+		return `auth=${authContext}, personType=${session.personType}, childScope=${childScope}${
+			linkedStudentCount === undefined ? "" : `, linkedStudents=${linkedStudentCount}`
+		}`;
 	}
 
 	private restUrl(path: string): string {
@@ -557,13 +684,27 @@ export class WebUntisClient {
 			const response = await this.fetchImpl(url, {
 				method: "GET",
 				signal: this.getRequestSignal(),
-				headers: { accept: "application/json", cookie: this.restCookie(session, schoolCookie) },
+				headers: {
+					accept: "application/json",
+					cookie: this.restCookie(session, schoolCookie),
+					...(context === "exams" && tenantIdFromCookie(this.sessionCookie)
+						? { "Tenant-Id": tenantIdFromCookie(this.sessionCookie) }
+						: {}),
+				},
 			});
 			const cookie = mergeCookieHeader(this.sessionCookie, response.headers);
 			this.sessionCookie = cookie.value;
 			const body = await response.text();
 			this.onDiagnostic?.({
 				method: context === "exams" ? "getExamsToken" : "getMessageToken",
+				...(context === "exams"
+					? {
+							authContext: "bearer" as const,
+							personType: session.personType,
+							childScope: session.personType === 5 ? ("self" as const) : ("unresolved" as const),
+							tenantIdPresent: Boolean(tenantIdFromCookie(this.sessionCookie)),
+						}
+					: {}),
 				status: response.status,
 				contentType: response.headers.get("content-type") || "",
 				url: redactUrl(response.url),
@@ -605,6 +746,99 @@ export class WebUntisClient {
 			return token;
 		}
 		throw new WebUntisError("API_REQUEST", `WebUntis ${context} authentication failed`);
+	}
+
+	private async getParentExamContext(
+		session: WebUntisSession,
+		token: string,
+		tenantId?: string,
+	): Promise<ParentExamContext> {
+		const url = this.restUrl("/api/rest/view/v1/app/data");
+		const response = await this.fetchImpl(url, {
+			method: "GET",
+			signal: this.getRequestSignal(),
+			headers: {
+				accept: "application/json",
+				Authorization: `Bearer ${token}`,
+				cookie: this.restCookie(session),
+				...(tenantId ? { "Tenant-Id": tenantId } : {}),
+			},
+		});
+		const cookie = mergeCookieHeader(this.sessionCookie, response.headers);
+		this.sessionCookie = cookie.value;
+		const body = await response.text();
+		let payload: unknown;
+		try {
+			payload = JSON.parse(body);
+		} catch {
+			payload = undefined;
+		}
+		const diagnosticBase: Pick<
+			WebUntisHttpDiagnostic,
+			| "method"
+			| "authContext"
+			| "personType"
+			| "childScope"
+			| "tenantIdPresent"
+			| "contextLoaded"
+			| "status"
+			| "contentType"
+			| "url"
+			| "redirected"
+			| "length"
+			| "type"
+			| "cookiePresent"
+			| "cookieChanged"
+			| "sessionCookieChanged"
+		> = {
+			method: "getExamContext",
+			authContext: "bearer",
+			personType: session.personType,
+			childScope: "unresolved",
+			tenantIdPresent: Boolean(tenantId),
+			contextLoaded: false,
+			status: response.status,
+			contentType: response.headers.get("content-type") || "",
+			url: redactUrl(response.url),
+			redirected: response.redirected,
+			length: body.length,
+			type: getResponseType(body, response.headers.get("content-type") || ""),
+			cookiePresent: Boolean(this.sessionCookie),
+			cookieChanged: cookie.changed,
+			sessionCookieChanged: cookie.sessionCookieChanged,
+		};
+		if (response.status === 401 || response.redirected || (isRecord(payload) && isLoginPagePayload(payload))) {
+			this.onDiagnostic?.(diagnosticBase);
+			throw new WebUntisError("SESSION_EXPIRED", "WebUntis parent exam context session expired");
+		}
+		if (!response.ok) {
+			this.onDiagnostic?.(diagnosticBase);
+			throw new WebUntisError(
+				"API_REQUEST",
+				`WebUntis parent exam context request failed (HTTP ${response.status}, auth=bearer, personType=${session.personType}, childScope=unresolved)`,
+			);
+		}
+		let context: ParentExamContext;
+		try {
+			context = parseParentExamContext(payload);
+		} catch {
+			this.onDiagnostic?.(diagnosticBase);
+			throw new WebUntisError(
+				"INVALID_RESPONSE",
+				`Invalid WebUntis parent exam context response (auth=bearer, personType=${session.personType}, childScope=unresolved)`,
+			);
+		}
+		const childScope =
+			context.studentIds.length === 1 ? "unique" : context.studentIds.length > 1 ? "ambiguous" : "unresolved";
+		this.onDiagnostic?.({
+			...diagnosticBase,
+			childScope,
+			linkedStudentCount: context.studentIds.length,
+			tenantIdPresent: Boolean(context.tenantId ?? tenantId),
+			schoolYearIdPresent: Boolean(context.schoolYearId),
+			contextLoaded: true,
+		});
+		return context;
 	}
 
 	private async restRequest(path: string, session: WebUntisSession, token: string, method: string): Promise<unknown> {

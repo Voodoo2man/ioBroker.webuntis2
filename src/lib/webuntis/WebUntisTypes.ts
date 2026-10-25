@@ -138,6 +138,12 @@ export interface WebUntisHttpDiagnostic {
 	resultKeys?: string[];
 	resultType?: "array" | "object" | "primitive" | "missing";
 	resultLength?: number;
+	authContext?: "cookie" | "bearer";
+	childScope?: "self" | "unresolved" | "unique" | "ambiguous" | "not-applicable";
+	linkedStudentCount?: number;
+	tenantIdPresent?: boolean;
+	schoolYearIdPresent?: boolean;
+	contextLoaded?: boolean;
 }
 
 /**
