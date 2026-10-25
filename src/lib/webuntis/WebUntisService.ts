@@ -1,7 +1,7 @@
 /* eslint-disable jsdoc/no-blank-blocks, jsdoc/require-jsdoc, jsdoc/require-param */
 
-import { HolidayCache, summarizeHolidays, type HolidaySummary } from "./Holidays";
 import { normalizeUpcomingExams, type UpcomingExam } from "./Exams";
+import { HolidayCache, summarizeHolidays, type HolidaySummary } from "./Holidays";
 import { searchSchools } from "./SchoolDiscovery";
 import type { TimetableMasterData } from "./Timetable";
 import { normalizeLessons, resolveTimetableReferences, splitTimetable, weekRange } from "./Timetable";

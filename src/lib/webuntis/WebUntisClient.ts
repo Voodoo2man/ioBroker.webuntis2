@@ -1,7 +1,7 @@
 /* eslint-disable jsdoc/no-blank-blocks, jsdoc/require-param */
 
-import type { HolidayEntry } from "./Holidays";
 import { normalizeGuardianTimetableExams } from "./Exams";
+import type { HolidayEntry } from "./Holidays";
 import { WebUntisError } from "./WebUntisErrors";
 import type {
 	TimetableQuery,

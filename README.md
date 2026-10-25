@@ -56,10 +56,13 @@ The instance tree has four top-level channels: `students`, `holidays`, `inbox`,
 and `info`. The adapter reads the account type from WebUntis automatically and
 reports it in the `info.accountType` state as `Student`, `Parent`, or `Other`.
 
-Each student has a channel below `students.student_<id>`. Timetables are
-available at `students.student_<id>.timetable.today`,
-`students.student_<id>.timetable.tomorrow`, and
-`students.student_<id>.timetable.week`. Each lesson contains readable values
+Each student has a channel below `students.<name>`. The channel ID is
+based on the student's name, normalized for ioBroker IDs; duplicate normalized
+names are disambiguated with the WebUntis student ID. If WebUntis provides no
+student name, the ID is used as a fallback. Timetables are available at
+`students.<name>.timetable.today`,
+`students.<name>.timetable.tomorrow`, and
+`students.<name>.timetable.week`. Each lesson contains readable values
 for the subject, teacher, room, class, start and end time, and lesson status.
 Lesson `startTime` and `endTime` are strings with the `time` role.
 
@@ -73,10 +76,10 @@ connection status, account type, and update information. Holiday information
 is available below `holidays`.
 
 For a WebUntis parent account, WebUntis supplies each linked student's ID and
-name; the adapter creates the same `students.student_<id>` structure
+name; the adapter creates the same `students.<name>` structure
 automatically. Each student's timetable includes lesson details, daily
 summaries, and current/next lesson values. Exams are available under
-`students.student_<id>.exams`, including a JSON array and numbered entry
+`students.<name>.exams`, including a JSON array and numbered entry
 channels. Holidays and messages remain account-level data because WebUntis does
 not associate those responses with an individual student.
 
@@ -90,18 +93,18 @@ an attachment indicator. The adapter retrieves full content when the WebUntis
 endpoint permits it and otherwise uses the available preview; the
 `contentIsPreview` property distinguishes the two.
 
-The `info.refresh` button triggers an immediate refresh of timetable, messages,
-exams, and holidays. The weekly `schoolStart` and `schoolEnd` summary states
-are strings with the `time` role and show the first lesson start and last
-lesson end.
+The `info.refresh` button runs the complete startup refresh immediately:
+timetable, messages, exams, holidays, cleanup, and derived current/next lesson
+states. The weekly `schoolStart` and `schoolEnd` summary states are strings
+with the `time` role and show the first lesson start and last lesson end.
 
 Upcoming exams are available below each student's `exams` channel.
-`students.student_<id>.exams.count` gives the number of exams announced in the
-requested date window, `students.student_<id>.exams.upcoming` contains a JSON
-array, and `students.student_<id>.exams.upcomingText` joins the display text
+`students.<name>.exams.count` gives the number of exams announced in the
+requested date window, `students.<name>.exams.upcoming` contains a JSON
+array, and `students.<name>.exams.upcomingText` joins the display text
 for that student's exams with newlines. Each exam also has a sequentially
-numbered channel such as `students.student_<id>.exams.entries.01` or
-`students.student_<id>.exams.entries.02`. Exams are ordered by date, start time,
+numbered channel such as `students.<name>.exams.entries.01` or
+`students.<name>.exams.entries.02`. Exams are ordered by date, start time,
 then WebUntis ID, so multiple exams on the same date or in the same subject
 remain separate. The channel numbers can change when the ordered exam list
 changes; use the `id` field to identify an exam across updates. The array
@@ -138,7 +141,8 @@ states, and the remaining fields as text states. Date states store Unix
 timestamps with the `date` role and no unit, so ioBroker can display them in
 the short-date format for the configured regional settings. Exam times
 remain strings in `HH:mm` format. `daysUntil` is the number of local calendar
-days between today and the exam date. The adapter includes exams from today through 90 calendar
+days between today and the exam date; the state uses the `value.interval` role
+with unit `d`. The adapter includes exams from today through 90 calendar
 days from today, inclusive, and refreshes them during the normal five-minute
 update. All of today's exams are included, even if their start time has passed.
 Availability depends on the WebUntis account's school permissions and API
@@ -151,6 +155,11 @@ data and reads each student's timetable, so identical exams remain separate
 and are attributed to the correct child. School permissions can still deny
 access to one or more child timetables; a failed refresh preserves the last
 successful data.
+
+Redundant `*Timestamp` aliases for holiday dates and timetable day and lesson
+dates are removed automatically. Use the corresponding `startDate`, `endDate`,
+or `date` state, which already stores the calendar date as a Unix timestamp
+with the `date` role.
 
 ## Requirements and notes
 
@@ -179,11 +188,12 @@ and include only relevant, non-sensitive log messages when asking for help.
 
 ### WORK IN PROGRESS
 
-- (Voodoo2man) Added upcoming exams for students and linked children, including exam details, days-until values, date and time roles, and more reliable loading for guardian accounts.
-- (Voodoo2man) Improved timetable data and assigned time roles to lesson start and end states.
-- (Voodoo2man) Expanded the inbox with read and unread message channels, local read marking, WebUntis read status, chronological numbering, and nested message counts and summaries.
-- (Voodoo2man) Added a manual refresh button, fixed its event handling, and assigned time roles to daily school start and end states.
-- (Voodoo2man) Removed the milliseconds unit from calendar date states.
+- (Voodoo2man) Added multi Student support and structure.
+- (Voodoo2man) Added upcoming exams
+- (Voodoo2man) Added read and unread inbox messages
+- (Voodoo2man) Added a manual full refresh button
+- (Voodoo2man) Improved timetable details
+- (Voodoo2man) Removed duplicate date states.
 
 ### 0.1.10 (2026-10-18)
 

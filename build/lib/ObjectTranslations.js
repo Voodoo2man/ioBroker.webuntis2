@@ -476,45 +476,6 @@ const STATE_NAMES = {
     uk: "\u0414\u0430\u0442\u0430",
     "zh-cn": "\u65E5\u671F"
   },
-  dateTimestamp: {
-    en: "Date (Unix timestamp ms)",
-    de: "Datum (Unix-Zeitstempel ms)",
-    es: "Fecha (marca de tiempo Unix ms)",
-    fr: "Date (horodatage Unix ms)",
-    it: "Data (timestamp Unix ms)",
-    nl: "Datum (Unix-tijdstempel ms)",
-    pl: "Data (znacznik czasu Unix ms)",
-    pt: "Data (timestamp Unix ms)",
-    ru: "\u0414\u0430\u0442\u0430 (\u043C\u0435\u0442\u043A\u0430 \u0432\u0440\u0435\u043C\u0435\u043D\u0438 Unix \u043C\u0441)",
-    uk: "\u0414\u0430\u0442\u0430 (\u043C\u0456\u0442\u043A\u0430 \u0447\u0430\u0441\u0443 Unix \u043C\u0441)",
-    "zh-cn": "\u65E5\u671F\uFF08Unix \u65F6\u95F4\u6233\u6BEB\u79D2\uFF09"
-  },
-  startDateTimestamp: {
-    en: "Start date (Unix timestamp ms)",
-    de: "Startdatum (Unix-Zeitstempel ms)",
-    es: "Fecha de inicio (marca de tiempo Unix ms)",
-    fr: "Date de d\xE9but (horodatage Unix ms)",
-    it: "Data di inizio (timestamp Unix ms)",
-    nl: "Begindatum (Unix-tijdstempel ms)",
-    pl: "Data rozpocz\u0119cia (znacznik czasu Unix ms)",
-    pt: "Data de in\xEDcio (timestamp Unix ms)",
-    ru: "\u0414\u0430\u0442\u0430 \u043D\u0430\u0447\u0430\u043B\u0430 (\u043C\u0435\u0442\u043A\u0430 \u0432\u0440\u0435\u043C\u0435\u043D\u0438 Unix \u043C\u0441)",
-    uk: "\u0414\u0430\u0442\u0430 \u043F\u043E\u0447\u0430\u0442\u043A\u0443 (\u043C\u0456\u0442\u043A\u0430 \u0447\u0430\u0441\u0443 Unix \u043C\u0441)",
-    "zh-cn": "\u5F00\u59CB\u65E5\u671F\uFF08Unix \u65F6\u95F4\u6233\u6BEB\u79D2\uFF09"
-  },
-  endDateTimestamp: {
-    en: "End date (Unix timestamp ms)",
-    de: "Enddatum (Unix-Zeitstempel ms)",
-    es: "Fecha de finalizaci\xF3n (marca de tiempo Unix ms)",
-    fr: "Date de fin (horodatage Unix ms)",
-    it: "Data di fine (timestamp Unix ms)",
-    nl: "Einddatum (Unix-tijdstempel ms)",
-    pl: "Data zako\u0144czenia (znacznik czasu Unix ms)",
-    pt: "Data de fim (timestamp Unix ms)",
-    ru: "\u0414\u0430\u0442\u0430 \u043E\u043A\u043E\u043D\u0447\u0430\u043D\u0438\u044F (\u043C\u0435\u0442\u043A\u0430 \u0432\u0440\u0435\u043C\u0435\u043D\u0438 Unix \u043C\u0441)",
-    uk: "\u0414\u0430\u0442\u0430 \u0437\u0430\u0432\u0435\u0440\u0448\u0435\u043D\u043D\u044F (\u043C\u0456\u0442\u043A\u0430 \u0447\u0430\u0441\u0443 Unix \u043C\u0441)",
-    "zh-cn": "\u7ED3\u675F\u65E5\u671F\uFF08Unix \u65F6\u95F4\u6233\u6BEB\u79D2\uFF09"
-  },
   lessonCount: {
     en: "Lesson count",
     de: "Anzahl der Unterrichtsstunden",

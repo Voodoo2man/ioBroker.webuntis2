@@ -22,8 +22,8 @@ __export(WebUntisService_exports, {
   WebUntisService: () => WebUntisService
 });
 module.exports = __toCommonJS(WebUntisService_exports);
-var import_Holidays = require("./Holidays");
 var import_Exams = require("./Exams");
+var import_Holidays = require("./Holidays");
 var import_SchoolDiscovery = require("./SchoolDiscovery");
 var import_Timetable = require("./Timetable");
 var import_WebUntisClient = require("./WebUntisClient");

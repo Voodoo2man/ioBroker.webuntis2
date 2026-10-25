@@ -2,6 +2,7 @@
 
 import { expect } from "chai";
 import { removeStaleLessonStates } from "./lib/LessonStateCleanup";
+import type { UpcomingExam } from "./lib/webuntis/Exams";
 import {
 	mergeSchoolSelection,
 	rankSchoolResults,
@@ -11,7 +12,6 @@ import {
 import { WebUntisClient } from "./lib/webuntis/WebUntisClient";
 import { WebUntisError } from "./lib/webuntis/WebUntisErrors";
 import { WebUntisService } from "./lib/webuntis/WebUntisService";
-import type { UpcomingExam } from "./lib/webuntis/Exams";
 import type { WebUntisInboxMessage } from "./lib/webuntis/WebUntisTypes";
 
 function response(body: unknown, status = 200): Response {
@@ -44,12 +44,15 @@ type AdapterHarness = {
 	adapter: object;
 	methods: {
 		updateTimetable(): Promise<void>;
+		refreshAll(): Promise<void>;
 		ensureInboxRoot(): Promise<void>;
 		writeUnreadMessages(messages: never[]): Promise<void>;
 		onStateChange(id: string, state: ioBroker.State | null): Promise<void>;
 		writeDaySummary(path: string, summary: never, lessons: never[]): Promise<void>;
 		writeTimetableDay(path: string, lessons: never[], date: string): Promise<{ removed: number }>;
 		writeHolidaySummary(summary: never): Promise<void>;
+		cleanupObsoleteStructure(): Promise<void>;
+		updateCurrentNextStates(): Promise<void>;
 	};
 	values: Map<string, ioBroker.StateValue>;
 	deleted: string[];
@@ -65,13 +68,15 @@ function makeAdapterHarness(
 	writeRealHolidaySummary = false,
 	writeRealUnreadMessages = false,
 	existingMessageIds: string[] = [],
+	existingTimestampIds: string[] = [],
+	existingSlotsStudentRoot = "42",
 ): AdapterHarness {
 	const AdapterClass = loadAdapterClassForTest();
 	const adapter = Object.create(AdapterClass.prototype) as object;
 	const values = new Map<string, ioBroker.StateValue>([
-		["students.student_42.exams.count", 8],
-		["students.student_42.exams.upcoming", '[{"id":88}]'],
-		["students.student_42.exams.upcomingText", "previous exams"],
+		["students.42.exams.count", 8],
+		["students.42.exams.upcoming", '[{"id":88}]'],
+		["students.42.exams.upcomingText", "previous exams"],
 		["info.inbox.unreadCount", 3],
 		["info.inbox.unread", '[{"id":1}]'],
 	]);
@@ -80,11 +85,12 @@ function makeAdapterHarness(
 	const warnings: string[] = [];
 	const groupWrites: Array<{ group: string; root: string }> = [];
 	const allObjectRows = [
+		...existingTimestampIds.map(id => ({ id: `webuntis2.0.${id}` })),
 		...existingSlots.flatMap(slot => {
 			const slotId = String(slot).padStart(2, "0");
 			return [
-				{ id: `webuntis2.0.students.student_42.exams.entries.${slotId}` },
-				{ id: `webuntis2.0.students.student_42.exams.entries.${slotId}.subject` },
+				{ id: `webuntis2.0.students.${existingSlotsStudentRoot}.exams.entries.${slotId}` },
+				{ id: `webuntis2.0.students.${existingSlotsStudentRoot}.exams.entries.${slotId}.subject` },
 			];
 		}),
 		...existingMessageIds.flatMap(id => [
@@ -130,7 +136,7 @@ function makeAdapterHarness(
 		ensureTranslatedObject: async (id: string, object: ioBroker.SettableObject) => {
 			objects[id] = object;
 		},
-		getObjectAsync: async () => null,
+		getObjectAsync: async (id: string) => (objects[id] as ioBroker.Object | undefined) ?? null,
 		getObjectListAsync: async ({ startkey }: { startkey: string }) => ({
 			rows: [...allObjectRows, ...Object.keys(objects).map(id => ({ id: `webuntis2.0.${id}` }))].filter(row =>
 				row.id.startsWith(startkey),
@@ -164,12 +170,15 @@ function makeAdapterHarness(
 	}
 	const methods = adapter as unknown as {
 		updateTimetable(): Promise<void>;
+		refreshAll(): Promise<void>;
 		ensureInboxRoot(): Promise<void>;
 		writeUnreadMessages(messages: never[]): Promise<void>;
 		onStateChange(id: string, state: ioBroker.State | null): Promise<void>;
 		writeDaySummary(path: string, summary: never, lessons: never[]): Promise<void>;
 		writeTimetableDay(path: string, lessons: never[], date: string): Promise<{ removed: number }>;
 		writeHolidaySummary(summary: never): Promise<void>;
+		cleanupObsoleteStructure(): Promise<void>;
+		updateCurrentNextStates(): Promise<void>;
 	};
 	return { adapter, methods, values, deleted, objects, warnings, groupWrites };
 }
@@ -186,16 +195,33 @@ const sampleExam = (id: number, startTime: string, displayText: string): Upcomin
 });
 
 describe("upcoming exams adapter states", () => {
-	it("triggers a timetable refresh from local and fully qualified info button IDs", async () => {
+	it("triggers a full refresh for local and qualified IDs regardless of ack", async () => {
 		const harness = makeAdapterHarness(async () => []);
 		let refreshCount = 0;
-		Object.assign(harness.adapter, { updateTimetable: async () => void (refreshCount += 1) });
+		Object.assign(harness.adapter, { refreshAll: async () => void (refreshCount += 1) });
 
 		await harness.methods.onStateChange("info.refresh", { val: true, ack: false } as ioBroker.State);
-		await harness.methods.onStateChange("webuntis2.0.info.refresh", { val: true, ack: false } as ioBroker.State);
+		await harness.methods.onStateChange("webuntis2.0.info.refresh", { val: true, ack: true } as ioBroker.State);
 
 		expect(refreshCount).to.equal(2);
 		expect(harness.values.get("info.refresh")).to.equal(false);
+	});
+
+	it("runs all startup refresh steps when manually refreshed", async () => {
+		const harness = makeAdapterHarness(async () => []);
+		const steps: string[] = [];
+		Object.assign(harness.adapter, {
+			ensureStudentsRoot: async () => void steps.push("students"),
+			ensureInboxRoot: async () => void steps.push("inbox"),
+			ensureHolidaysRoot: async () => void steps.push("holidays"),
+			cleanupObsoleteStructure: async () => void steps.push("cleanup"),
+			updateTimetable: async () => void steps.push("timetable"),
+			updateCurrentNextStates: async () => void steps.push("current-next"),
+		});
+
+		await harness.methods.refreshAll();
+
+		expect(steps).to.deep.equal(["students", "inbox", "holidays", "cleanup", "timetable", "current-next"]);
 	});
 
 	it("removes legacy units from calendar date objects", async () => {
@@ -465,8 +491,12 @@ describe("upcoming exams adapter states", () => {
 		expect(
 			(harness.objects["students.student_10759.timetable.tomorrow.date"].common as ioBroker.StateCommon).unit,
 		).to.equal(undefined);
+		expect(harness.objects["students.student_10759.timetable.tomorrow.dateTimestamp"]).to.equal(undefined);
 		expect(harness.values.get("students.student_10759.timetable.tomorrow.lessons.01.date")).to.equal(
 			new Date(2026, 9, 26).getTime(),
+		);
+		expect(harness.objects["students.student_10759.timetable.tomorrow.lessons.01.dateTimestamp"]).to.equal(
+			undefined,
 		);
 		expect(harness.objects["students.student_10759.timetable.tomorrow.lessons.01.date"].common).to.have.property(
 			"role",
@@ -497,16 +527,28 @@ describe("upcoming exams adapter states", () => {
 		const harness = makeAdapterHarness(async () => [], [], children);
 		await harness.methods.updateTimetable();
 
-		expect(harness.groupWrites.filter(write => write.root.startsWith("students.student_"))).to.deep.equal(
-			[41, 42].flatMap(id =>
+		expect(harness.groupWrites.filter(write => write.root.startsWith("students."))).to.deep.equal(
+			["kind_a", "kind_b"].flatMap(channelId =>
 				["today", "tomorrow", "week"].map(group => ({
 					group,
-					root: `students.student_${id}.timetable`,
+					root: `students.${channelId}.timetable`,
 				})),
 			),
 		);
-		expect((harness.objects["students.student_41"].common as ioBroker.ChannelCommon).name).to.equal("Kind A");
-		expect((harness.objects["students.student_42"].common as ioBroker.ChannelCommon).name).to.equal("Kind B");
+		expect((harness.objects["students.kind_a"].common as ioBroker.ChannelCommon).name).to.equal("Kind A");
+		expect((harness.objects["students.kind_b"].common as ioBroker.ChannelCommon).name).to.equal("Kind B");
+	});
+
+	it("disambiguates linked students whose names normalize to the same channel ID", async () => {
+		const children = [
+			{ id: 41, name: "Émilie A", timetable: { today: [], tomorrow: [], week: [] } },
+			{ id: 42, name: "Emilie-A", timetable: { today: [], tomorrow: [], week: [] } },
+		];
+		const harness = makeAdapterHarness(async () => [], [], children);
+		await harness.methods.updateTimetable();
+
+		expect(harness.objects["students.emilie_a_41"]).to.exist;
+		expect(harness.objects["students.emilie_a_42"]).to.exist;
 	});
 
 	it("writes distinct exams on the same day and removes obsolete entries", async () => {
@@ -518,35 +560,42 @@ describe("upcoming exams adapter states", () => {
 			},
 			{ ...sampleExam(12, "11:00", "03.11.2026 11:00–10:00 Mathematics"), studentId: 41 },
 		];
-		const harness = makeAdapterHarness(async () => exams, [1, 3]);
+		const children = [
+			{ id: 42, name: "Kind Eins", timetable: { today: [], tomorrow: [], week: [] } },
+			{ id: 41, name: "Student 41", timetable: { today: [], tomorrow: [], week: [] } },
+		];
+		const harness = makeAdapterHarness(async () => exams, [1, 3], children, false, false, [], [], "kind_eins");
 		await harness.methods.updateTimetable();
 
-		expect(harness.values.get("students.student_42.exams.count")).to.equal(1);
-		expect(JSON.parse(String(harness.values.get("students.student_42.exams.upcoming")))).to.deep.equal([exams[0]]);
-		expect(harness.values.get("students.student_42.exams.entries.01.id")).to.equal(11);
-		expect(harness.values.get("students.student_42.exams.entries.01.name")).to.equal("Written exam");
-		expect(harness.values.get("students.student_42.exams.entries.01.date")).to.equal(
+		expect(harness.values.get("students.kind_eins.exams.count")).to.equal(1);
+		expect(JSON.parse(String(harness.values.get("students.kind_eins.exams.upcoming")))).to.deep.equal([exams[0]]);
+		expect(harness.values.get("students.kind_eins.exams.entries.01.id")).to.equal(11);
+		expect(harness.values.get("students.kind_eins.exams.entries.01.name")).to.equal("Written exam");
+		expect(harness.values.get("students.kind_eins.exams.entries.01.date")).to.equal(
 			new Date(2026, 10, 3).getTime(),
 		);
-		expect(harness.values.get("students.student_42.exams.entries.01.daysUntil")).to.equal(
+		expect(harness.values.get("students.kind_eins.exams.entries.01.daysUntil")).to.equal(
 			Math.floor(Date.UTC(2026, 10, 3) / 86_400_000) -
 				Math.floor(
 					Date.UTC(new Date().getFullYear(), new Date().getMonth(), new Date().getDate()) / 86_400_000,
 				),
 		);
 		expect(
-			(harness.objects["students.student_42.exams.entries.01.daysUntil"].common as ioBroker.StateCommon).role,
-		).to.equal("value");
+			(harness.objects["students.kind_eins.exams.entries.01.daysUntil"].common as ioBroker.StateCommon).role,
+		).to.equal("value.interval");
 		expect(
-			(harness.objects["students.student_42.exams.entries.01.date"].common as ioBroker.StateCommon).role,
+			(harness.objects["students.kind_eins.exams.entries.01.daysUntil"].common as ioBroker.StateCommon).unit,
+		).to.equal("d");
+		expect(
+			(harness.objects["students.kind_eins.exams.entries.01.date"].common as ioBroker.StateCommon).role,
 		).to.equal("date");
 		expect(
-			(harness.objects["students.student_42.exams.entries.01.date"].common as ioBroker.StateCommon).unit,
+			(harness.objects["students.kind_eins.exams.entries.01.date"].common as ioBroker.StateCommon).unit,
 		).to.equal(undefined);
-		expect(harness.values.get("students.student_41.exams.entries.01.id")).to.equal(12);
-		expect(harness.objects["students.student_42"].common).to.exist;
+		expect(harness.values.get("students.41.exams.entries.01.id")).to.equal(12);
+		expect(harness.objects["students.kind_eins"].common).to.exist;
 		expect(harness.values.has("exams.count")).to.equal(false);
-		expect(harness.deleted).to.deep.equal(["students.student_42.exams.entries.03"]);
+		expect(harness.deleted).to.deep.equal(["students.kind_eins.exams.entries.03"]);
 		expect(harness.values.get("info.connection")).to.equal(true);
 	});
 
@@ -563,13 +612,10 @@ describe("upcoming exams adapter states", () => {
 		const harness = makeAdapterHarness(async () => [], [1, 2], children);
 		await harness.methods.updateTimetable();
 
-		expect(harness.values.get("students.student_42.exams.count")).to.equal(0);
-		expect(harness.values.get("students.student_42.exams.upcoming")).to.equal("[]");
-		expect(harness.values.get("students.student_42.exams.upcomingText")).to.equal("");
-		expect(harness.deleted).to.deep.equal([
-			"students.student_42.exams.entries.01",
-			"students.student_42.exams.entries.02",
-		]);
+		expect(harness.values.get("students.42.exams.count")).to.equal(0);
+		expect(harness.values.get("students.42.exams.upcoming")).to.equal("[]");
+		expect(harness.values.get("students.42.exams.upcomingText")).to.equal("");
+		expect(harness.deleted).to.deep.equal(["students.42.exams.entries.01", "students.42.exams.entries.02"]);
 	});
 
 	it("preserves existing exam values on optional load failure while timetable succeeds", async () => {
@@ -583,9 +629,9 @@ describe("upcoming exams adapter states", () => {
 		);
 		await harness.methods.updateTimetable();
 
-		expect(harness.values.get("students.student_42.exams.count")).to.equal(8);
-		expect(harness.values.get("students.student_42.exams.upcoming")).to.equal('[{"id":88}]');
-		expect(harness.values.get("students.student_42.exams.upcomingText")).to.equal("previous exams");
+		expect(harness.values.get("students.42.exams.count")).to.equal(8);
+		expect(harness.values.get("students.42.exams.upcoming")).to.equal('[{"id":88}]');
+		expect(harness.values.get("students.42.exams.upcomingText")).to.equal("previous exams");
 		expect(harness.deleted).to.deep.equal([]);
 		expect(harness.values.get("info.connection")).to.equal(true);
 		expect(harness.warnings).to.have.length(1);
@@ -604,7 +650,7 @@ describe("upcoming exams adapter states", () => {
 		await harness.methods.updateTimetable();
 
 		expect(attempts).to.equal(2);
-		expect(harness.values.get("students.student_42.exams.entries.01.id")).to.equal(21);
+		expect(harness.values.get("students.42.exams.entries.01.id")).to.equal(21);
 		expect(harness.warnings.some(message => message.includes("upcoming exams refresh failed"))).to.equal(false);
 	});
 
@@ -618,19 +664,19 @@ describe("upcoming exams adapter states", () => {
 		loaded = [{ ...sampleExam(12, "09:00", "Updated text"), studentId: 42 }];
 		await harness.methods.updateTimetable();
 
-		expect(harness.values.get("students.student_42.exams.entries.01.id")).to.equal(12);
-		expect(harness.values.get("students.student_42.exams.entries.01.startTime")).to.equal("09:00");
-		expect(harness.values.get("students.student_42.exams.entries.01.endTime")).to.equal("10:00");
-		expect(harness.objects["students.student_42.exams.entries.01.startTime"].common).to.include({
+		expect(harness.values.get("students.42.exams.entries.01.id")).to.equal(12);
+		expect(harness.values.get("students.42.exams.entries.01.startTime")).to.equal("09:00");
+		expect(harness.values.get("students.42.exams.entries.01.endTime")).to.equal("10:00");
+		expect(harness.objects["students.42.exams.entries.01.startTime"].common).to.include({
 			type: "string",
 			role: "time",
 		});
-		expect(harness.objects["students.student_42.exams.entries.01.endTime"].common).to.include({
+		expect(harness.objects["students.42.exams.entries.01.endTime"].common).to.include({
 			type: "string",
 			role: "time",
 		});
-		expect(harness.values.get("students.student_42.exams.entries.01.displayText")).to.equal("Updated text");
-		expect(harness.deleted).to.deep.equal(["students.student_42.exams.entries.02"]);
+		expect(harness.values.get("students.42.exams.entries.01.displayText")).to.equal("Updated text");
+		expect(harness.deleted).to.deep.equal(["students.42.exams.entries.02"]);
 	});
 
 	it("does not remove stale entries if unload begins during cleanup", async () => {
@@ -648,7 +694,7 @@ describe("upcoming exams adapter states", () => {
 });
 
 describe("holiday summary adapter states", () => {
-	it("stores next holiday dates with date roles and preserves timestamp states", async () => {
+	it("stores holiday dates without redundant timestamp states", async () => {
 		const harness = makeAdapterHarness(async () => [], [], [], true);
 		const summary = {
 			current: { active: false, name: "", longName: "", startDate: "", endDate: "" },
@@ -670,9 +716,43 @@ describe("holiday summary adapter states", () => {
 		expect((harness.objects["holidays.current.startDate"].common as ioBroker.StateCommon).role).to.equal("date");
 		expect((harness.objects["holidays.next.startDate"].common as ioBroker.StateCommon).type).to.equal("number");
 		expect((harness.objects["holidays.next.startDate"].common as ioBroker.StateCommon).unit).to.equal(undefined);
-		expect((harness.objects["holidays.next.endDateTimestamp"].common as ioBroker.StateCommon).role).to.equal(
-			"value",
+		for (const id of [
+			"holidays.current.startDateTimestamp",
+			"holidays.current.endDateTimestamp",
+			"holidays.next.startDateTimestamp",
+			"holidays.next.endDateTimestamp",
+		]) {
+			expect(harness.objects[id]).to.equal(undefined);
+		}
+	});
+
+	it("deletes previously created redundant timestamp states", async () => {
+		const harness = makeAdapterHarness(
+			async () => [],
+			[],
+			[],
+			false,
+			false,
+			[],
+			[
+				"holidays.current.startDateTimestamp",
+				"holidays.current.endDateTimestamp",
+				"holidays.next.startDateTimestamp",
+				"holidays.next.endDateTimestamp",
+				"students.student_10759.timetable.tomorrow.dateTimestamp",
+				"students.student_10759.timetable.tomorrow.lessons.01.dateTimestamp",
+			],
 		);
+		await harness.methods.cleanupObsoleteStructure();
+
+		expect(harness.deleted).to.include.members([
+			"holidays.current.startDateTimestamp",
+			"holidays.current.endDateTimestamp",
+			"holidays.next.startDateTimestamp",
+			"holidays.next.endDateTimestamp",
+			"students.student_10759.timetable.tomorrow.dateTimestamp",
+			"students.student_10759.timetable.tomorrow.lessons.01.dateTimestamp",
+		]);
 	});
 });
 

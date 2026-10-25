@@ -3,13 +3,13 @@ import {
 	buildLessonComparison,
 	dateNumber,
 	lessonChannelName,
+	nextWeekday,
 	normalizeLesson,
 	normalizeLessons,
 	resolveTimetableReferences,
 	splitTimetable,
 	summarizeTimetable,
 	weekRange,
-	nextWeekday,
 } from "./Timetable";
 
 describe("WebUntis timetable normalization", () => {

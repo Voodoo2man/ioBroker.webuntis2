@@ -1,17 +1,17 @@
 import * as utils from "@iobroker/adapter-core";
 import { cleanupLegacyNamespace } from "./lib/LegacyNamespaceCleanup";
-import { setStateChangedOrInitialize } from "./lib/StateWriter";
 import { removeStaleLessonStates } from "./lib/LessonStateCleanup";
 import {
 	hasObjectValueChanged,
-	shouldMigrateDynamicName,
 	needsNameMigration,
+	shouldMigrateDynamicName,
 	translatedLessonFallback,
 	translatedName,
 	translatedStateName,
 	translatedTimetableGroup,
 	translatedWeekday,
 } from "./lib/ObjectTranslations";
+import { setStateChangedOrInitialize } from "./lib/StateWriter";
 import { deriveCurrentNextLesson, type CurrentNextLessonSummary } from "./lib/webuntis/CurrentNextLesson";
 import type { UpcomingExam } from "./lib/webuntis/Exams";
 import type { HolidaySummary } from "./lib/webuntis/Holidays";
@@ -32,6 +32,27 @@ const CURRENT_NEXT_INTERVAL_MS = 60 * 1000;
 const EXAMS_MAX_ATTEMPTS = 3;
 const TIMETABLE_GROUPS = ["today", "tomorrow", "week"] as const;
 type TimetableGroup = (typeof TIMETABLE_GROUPS)[number];
+
+function studentChannelIds(students: Array<{ id: number; name: string }>): Map<number, string> {
+	const normalize = (name: string): string =>
+		name
+			.normalize("NFKD")
+			.replace(/[\u0300-\u036f]/g, "")
+			.toLowerCase()
+			.replace(/[^a-z0-9]+/g, "_")
+			.replace(/^_+|_+$/g, "") || "student";
+	const names = students.map(student => ({
+		...student,
+		key: normalize(!student.name || student.name === `Student ${student.id}` ? String(student.id) : student.name),
+	}));
+	const counts = new Map<string, number>();
+	for (const student of names) {
+		counts.set(student.key, (counts.get(student.key) ?? 0) + 1);
+	}
+	return new Map(
+		names.map(student => [student.id, `${student.key}${counts.get(student.key)! > 1 ? `_${student.id}` : ""}`]),
+	);
+}
 
 const SUMMARY_STATE_DEFINITIONS: Record<
 	keyof TimetableSummary,
@@ -65,7 +86,6 @@ const SUMMARY_STATE_DEFINITIONS: Record<
 
 const LESSON_STATE_NAMES: Record<string, ioBroker.Translated> = {
 	date: translatedName("date"),
-	dateTimestamp: translatedName("dateTimestamp"),
 	startTime: translatedName("startTime"),
 	endTime: translatedName("endTime"),
 	subject: translatedName("subject"),
@@ -146,7 +166,7 @@ class WebuntisNext extends utils.Adapter {
 	private timetableTimer?: ioBroker.Timeout;
 	private currentNextTimer?: ioBroker.Timeout;
 	private todayLessons: TimetableLesson[] = [];
-	private childTodayLessons = new Map<number, { name: string; lessons: TimetableLesson[] }>();
+	private childTodayLessons = new Map<number, { name: string; channelId: string; lessons: TimetableLesson[] }>();
 	private hasTimetableSnapshot = false;
 	private unloaded = false;
 	private readonly migratedNames = new Set<string>();
@@ -238,17 +258,20 @@ class WebuntisNext extends utils.Adapter {
 	}
 
 	private async onStateChange(id: string, state: ioBroker.State | null | undefined): Promise<void> {
-		if (!state || state.ack || state.val !== true || this.unloaded) {
+		if (!state || state.val !== true || this.unloaded) {
 			return;
 		}
 		if (id === "info.refresh" || id === `${this.namespace}.info.refresh`) {
 			try {
-				await this.updateTimetable();
+				await this.refreshAll();
 			} finally {
 				if (!this.unloaded) {
 					await this.setStateAsync("info.refresh", false, true);
 				}
 			}
+			return;
+		}
+		if (state.ack) {
 			return;
 		}
 		const match = /^inbox\.messages\.unread\.([a-zA-Z0-9_-]+)\.markRead$/.exec(id);
@@ -400,6 +423,7 @@ class WebuntisNext extends utils.Adapter {
 			},
 			"Refresh now",
 		);
+		await this.subscribeStatesAsync("info.refresh");
 		await this.ensureTranslatedObject(
 			"info.connection",
 			{
@@ -479,14 +503,25 @@ class WebuntisNext extends utils.Adapter {
 		await this.ensureStudentsRoot();
 		await this.ensureInboxRoot();
 		await this.ensureHolidaysRoot();
-		await this.cleanupObsoleteStructure();
 		await this.setState("info.connection", false, true);
 		if (!this.hasConnectionConfig()) {
 			return;
 		}
-		await this.updateTimetable();
+		await this.refreshAll();
 		this.scheduleTimetableUpdate();
 		this.scheduleCurrentNextUpdate();
+	}
+
+	private async refreshAll(): Promise<void> {
+		if (this.unloaded) {
+			return;
+		}
+		await this.ensureStudentsRoot();
+		await this.ensureInboxRoot();
+		await this.ensureHolidaysRoot();
+		await this.cleanupObsoleteStructure();
+		await this.updateTimetable();
+		await this.updateCurrentNextStates();
 	}
 
 	private scheduleTimetableUpdate(): void {
@@ -549,12 +584,20 @@ class WebuntisNext extends utils.Adapter {
 			let updated = 0;
 			let removed = 0;
 			if (students.length) {
+				const childChannelIds = studentChannelIds(students);
 				this.childTodayLessons = new Map(
-					students.map(student => [student.id, { name: student.name, lessons: student.timetable.today }]),
+					students.map(student => [
+						student.id,
+						{
+							name: student.name,
+							channelId: childChannelIds.get(student.id)!,
+							lessons: student.timetable.today,
+						},
+					]),
 				);
 				for (const child of students) {
 					this.ensureActive();
-					const childRoot = `students.student_${child.id}`;
+					const childRoot = `students.${childChannelIds.get(child.id)}`;
 					await this.ensureTranslatedObject(
 						childRoot,
 						{
@@ -585,7 +628,7 @@ class WebuntisNext extends utils.Adapter {
 					startkey: `${this.namespace}.students.student_`,
 					endkey: `${this.namespace}.students.student_\uffff`,
 				});
-				const expectedChildren = new Set(students.map(student => `student_${student.id}`));
+				const expectedChildren = new Set(childChannelIds.values());
 				const staleChildren = new Set<string>();
 				for (const object of existingChildren.rows || []) {
 					const childId = object.id.replace(`${this.namespace}.students.`, "").split(".")[0];
@@ -713,7 +756,11 @@ class WebuntisNext extends utils.Adapter {
 		for (const object of existingStudents.rows || []) {
 			const studentId = object.id.replace(`${this.namespace}.students.`, "").split(".")[0];
 			if (/^\d+$/.test(studentId)) {
-				await this.delObjectAsync(`students.${studentId}`, { recursive: true });
+				const studentRoot = await this.getObjectAsync(`students.${studentId}`);
+				const native = studentRoot?.native as { studentId?: unknown } | undefined;
+				if (!Number.isSafeInteger(native?.studentId)) {
+					await this.delObjectAsync(`students.${studentId}`, { recursive: true });
+				}
 			}
 		}
 	}
@@ -951,14 +998,20 @@ class WebuntisNext extends utils.Adapter {
 			const studentExams = students.get(exam.studentId) ?? [];
 			studentExams.push(exam);
 			students.set(exam.studentId, studentExams);
+			if (exam.studentName) {
+				studentNames.set(exam.studentId, exam.studentName);
+			}
 		}
+		const channelIds = studentChannelIds(
+			[...students.keys()].map(id => ({ id, name: studentNames.get(id) || `Student ${id}` })),
+		);
 		for (const [studentId, studentExams] of students) {
 			this.ensureActive();
 			const studentName =
 				studentExams.find(exam => exam.studentName)?.studentName ||
 				studentNames.get(studentId) ||
 				`Student ${studentId}`;
-			const studentRoot = `students.student_${studentId}`;
+			const studentRoot = `students.${channelIds.get(studentId)}`;
 			await this.ensureTranslatedObject(
 				studentRoot,
 				{
@@ -1060,9 +1113,12 @@ class WebuntisNext extends utils.Adapter {
 										? "date"
 										: field === "startTime" || field === "endTime"
 											? "time"
-											: type === "number"
-												? "value"
-												: "text",
+											: field === "daysUntil"
+												? "value.interval"
+												: type === "number"
+													? "value"
+													: "text",
+								...(field === "daysUntil" ? { unit: "d" } : {}),
 								read: true,
 								write: false,
 								def: type === "number" ? 0 : "",
@@ -1149,30 +1205,12 @@ class WebuntisNext extends utils.Adapter {
 			0,
 		);
 		await this.writeSimpleState(
-			"holidays.current.startDateTimestamp",
-			numericDate(summary.current.startDate),
-			"Start date (Unix timestamp ms)",
-			"number",
-			"value",
-			0,
-			"ms",
-		);
-		await this.writeSimpleState(
 			"holidays.current.endDate",
 			numericDate(summary.current.endDate),
 			"End date",
 			"number",
 			"date",
 			0,
-		);
-		await this.writeSimpleState(
-			"holidays.current.endDateTimestamp",
-			numericDate(summary.current.endDate),
-			"End date (Unix timestamp ms)",
-			"number",
-			"value",
-			0,
-			"ms",
 		);
 		await this.writeSimpleState("holidays.next.name", summary.next.name, "Name", "string", "text", "");
 		await this.writeSimpleState("holidays.next.longName", summary.next.longName, "Long name", "string", "text", "");
@@ -1183,15 +1221,6 @@ class WebuntisNext extends utils.Adapter {
 			"number",
 			"date",
 			0,
-		);
-		await this.writeSimpleState(
-			"holidays.next.startDateTimestamp",
-			numericDate(summary.next.startDate),
-			"Start date (Unix timestamp ms)",
-			"number",
-			"value",
-			0,
-			"ms",
 		);
 		await this.writeSimpleState(
 			"holidays.next.endDate",
@@ -1209,15 +1238,6 @@ class WebuntisNext extends utils.Adapter {
 			"value.interval",
 			0,
 			"d",
-		);
-		await this.writeSimpleState(
-			"holidays.next.endDateTimestamp",
-			numericDate(summary.next.endDate),
-			"End date (Unix timestamp ms)",
-			"number",
-			"value",
-			0,
-			"ms",
 		);
 	}
 
@@ -1293,11 +1313,11 @@ class WebuntisNext extends utils.Adapter {
 		if (this.unloaded || !this.hasTimetableSnapshot) {
 			return;
 		}
-		for (const [studentId, child] of this.childTodayLessons) {
+		for (const child of this.childTodayLessons.values()) {
 			await this.writeCurrentNextSummary(
 				child.lessons,
 				new Date(),
-				`students.student_${studentId}.timetable.today`,
+				`students.${child.channelId}.timetable.today`,
 			);
 		}
 	}
@@ -1314,6 +1334,17 @@ class WebuntisNext extends utils.Adapter {
 		]) {
 			if (await this.getObjectAsync(id)) {
 				await this.delObjectAsync(id, { recursive: true });
+			}
+		}
+		for (const root of ["holidays", "students"]) {
+			const existing = await this.getObjectListAsync({
+				startkey: `${this.namespace}.${root}.`,
+				endkey: `${this.namespace}.${root}.\uffff`,
+			});
+			for (const object of existing.rows || []) {
+				if (/\.(?:dateTimestamp|startDateTimestamp|endDateTimestamp)$/.test(object.id)) {
+					await this.delObjectAsync(object.id.slice(this.namespace.length + 1));
+				}
 			}
 		}
 	}
@@ -1402,15 +1433,6 @@ class WebuntisNext extends utils.Adapter {
 			dayName,
 		);
 		await this.writeSimpleState(`${path}.date`, numericDate(date), "Date", "number", "date", 0);
-		await this.writeSimpleState(
-			`${path}.dateTimestamp`,
-			numericDate(date),
-			"Date (Unix timestamp ms)",
-			"number",
-			"value",
-			0,
-			"ms",
-		);
 		await this.writeSimpleState(`${path}.lessonCount`, lessons.length, "Lesson count", "number", "value", 0);
 		await this.ensureTranslatedObject(
 			`${path}.lessons`,
@@ -1497,7 +1519,6 @@ class WebuntisNext extends utils.Adapter {
 			{ value: string | number | boolean; type: "string" | "number" | "boolean"; role: string; unit?: string }
 		> = {
 			date: { value: numericDate(lesson.date), type: "number", role: "date" },
-			dateTimestamp: { value: numericDate(lesson.date), type: "number", role: "value", unit: "ms" },
 			startTime: { value: lesson.startTime, type: "string", role: "time" },
 			endTime: { value: lesson.endTime, type: "string", role: "time" },
 			subject: { value: lesson.subject, type: "string", role: "text" },
