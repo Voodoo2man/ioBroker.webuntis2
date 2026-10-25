@@ -113,7 +113,9 @@ update. All of today's exams are included, even if their start time has passed.
 Availability depends on the WebUntis account's school permissions and API
 scope. A failed or forbidden request leaves the last successful exam data in
 place; a successful response with no exams clears stale entries. Exam data
-does not include grades or student personal details.
+does not include grades or student personal details. If the cookie-authenticated
+exam request is forbidden, the adapter retries that request once with its REST
+token; school permissions can still deny access.
 
 ## Requirements and notes
 

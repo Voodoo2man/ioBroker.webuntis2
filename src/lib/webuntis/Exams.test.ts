@@ -11,6 +11,19 @@ function json(body: unknown, status = 200): Response {
 	return new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
 }
 
+function requestUrl(input: unknown): URL {
+	if (input instanceof URL) {
+		return input;
+	}
+	if (typeof input === "string") {
+		return new URL(input);
+	}
+	if (input instanceof Request) {
+		return new URL(input.url);
+	}
+	throw new Error("Unexpected request URL input");
+}
+
 describe("upcoming exams", () => {
 	it("normalizes and sorts exams while retaining multiple same-day exams", () => {
 		const exams = normalizeUpcomingExams(
@@ -93,6 +106,7 @@ describe("upcoming exams", () => {
 		expect(url.searchParams.get("endDate")).to.equal("20261210");
 		expect(url.searchParams.get("klasseId")).to.equal("-1");
 		expect(url.searchParams.get("withGrades")).to.equal("false");
+		expect(url.searchParams.get("studentId")).to.equal("1");
 		expect(cookie).to.include("JSESSIONID=session");
 		expect(cookie).to.include("schoolname=");
 		expect(result).to.have.length(1);
@@ -128,6 +142,108 @@ describe("upcoming exams", () => {
 		expect(requestCookies[0]).to.include("ROUTE=auth");
 		expect(requestCookies[1]).to.include("ROUTE=updated");
 		expect(requestCookies[1]).to.include("JSESSIONID=session");
+	});
+
+	it("retries one forbidden cookie request with a bearer token and the updated cookies", async () => {
+		const calls: Array<{ path: string; authorization: string | null; cookie: string }> = [];
+		const diagnostics: unknown[] = [];
+		let examRequests = 0;
+		const client = new WebUntisClient(
+			{ server: "https://example.webuntis.com", schoolName: "example" },
+			async (input, init) => {
+				const url = requestUrl(input);
+				const headers = new Headers(init?.headers);
+				calls.push({
+					path: url.pathname,
+					authorization: headers.get("authorization"),
+					cookie: headers.get("cookie") || "",
+				});
+				if (url.pathname.endsWith("/api/token/new")) {
+					return new Response("secret-token", {
+						headers: { "set-cookie": "ROUTE=token; Path=/" },
+					});
+				}
+				examRequests++;
+				if (examRequests === 1) {
+					return new Response(JSON.stringify({ errorMessage: "forbidden" }), {
+						status: 403,
+						headers: { "content-type": "application/json", "set-cookie": "ROUTE=initial; Path=/" },
+					});
+				}
+				return json({ data: { exams: [{ id: 7 }] } });
+			},
+			undefined,
+			diagnostic => diagnostics.push(diagnostic),
+		);
+		const exams = await client.getExams(session, 20260911, 20261210);
+		const examCalls = calls.filter(call => call.path.endsWith("/api/exams"));
+		const tokenCalls = calls.filter(call => call.path.endsWith("/api/token/new"));
+		expect(exams).to.deep.equal([{ id: 7 }]);
+		expect(examCalls).to.have.length(2);
+		expect(tokenCalls).to.have.length(1);
+		expect(examCalls[0].authorization).to.equal(null);
+		expect(examCalls[1].authorization).to.equal("Bearer secret-token");
+		expect(tokenCalls[0].cookie).to.include("ROUTE=initial");
+		expect(examCalls[1].cookie).to.include("ROUTE=token");
+		expect(JSON.stringify(diagnostics)).not.to.include("secret-token");
+		expect(JSON.stringify(diagnostics)).not.to.include("ROUTE=");
+	});
+
+	it("does not add a studentId for non-student accounts", async () => {
+		let requestUrl = "";
+		const parentSession = { ...session, personType: 6, personId: 99 };
+		const client = new WebUntisClient(
+			{ server: "https://example.webuntis.com", schoolName: "example" },
+			async input => {
+				requestUrl = (input as URL).href;
+				return json({ data: { exams: [] } });
+			},
+		);
+		await client.getExams(parentSession, 20260911, 20261210);
+		expect(new URL(requestUrl).searchParams.has("studentId")).to.equal(false);
+	});
+
+	it("does not loop after a bearer retry is forbidden", async () => {
+		let examRequests = 0;
+		let tokenRequests = 0;
+		const client = new WebUntisClient(
+			{ server: "https://example.webuntis.com", schoolName: "example" },
+			async input => {
+				const url = requestUrl(input);
+				if (url.pathname.endsWith("/api/token/new")) {
+					tokenRequests++;
+					return new Response("secret-token");
+				}
+				examRequests++;
+				return json({ errorMessage: "forbidden" }, 403);
+			},
+		);
+		try {
+			await client.getExams(session, 20260911, 20261210);
+			expect.fail("expected forbidden exams request");
+		} catch (error) {
+			expect((error as { code: string }).code).to.equal("API_REQUEST");
+			expect((error as Error).message).to.include("HTTP 403");
+		}
+		expect(examRequests).to.equal(2);
+		expect(tokenRequests).to.equal(1);
+	});
+
+	it("propagates an expired token session for the service to reauthenticate", async () => {
+		const client = new WebUntisClient(
+			{ server: "https://example.webuntis.com", schoolName: "example" },
+			async input => {
+				const url = requestUrl(input);
+				return url.pathname.endsWith("/api/token/new") ? json({ loginError: "expired" }, 401) : json({}, 403);
+			},
+		);
+		try {
+			await client.getExams(session, 20260911, 20261210);
+			expect.fail("expected expired token session");
+		} catch (error) {
+			expect((error as { code: string }).code).to.equal("SESSION_EXPIRED");
+			expect((error as Error).message).to.include("exams authentication failed");
+		}
 	});
 
 	it("marks expired sessions and malformed REST responses as errors", async () => {

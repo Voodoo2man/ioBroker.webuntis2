@@ -402,39 +402,56 @@ class WebUntisClient {
   }
   /** Load exams from the authenticated REST endpoint. */
   async getExams(session, startDate, endDate, klasseId = -1) {
-    var _a, _b, _c;
+    var _a, _b;
     const url = new URL(this.restUrl("/api/exams"));
     url.searchParams.set("startDate", String(startDate));
     url.searchParams.set("endDate", String(endDate));
     url.searchParams.set("klasseId", String(klasseId));
     url.searchParams.set("withGrades", "false");
+    if (session.personType === 5 && Number.isSafeInteger(session.personId) && session.personId > 0) {
+      url.searchParams.set("studentId", String(session.personId));
+    }
     try {
-      const response = await this.fetchImpl(url, {
-        method: "GET",
-        signal: this.getRequestSignal(),
-        headers: { accept: "application/json", cookie: this.restCookie(session) }
-      });
-      const cookie = mergeCookieHeader(this.sessionCookie, response.headers);
-      this.sessionCookie = cookie.value;
-      const body = await response.text();
-      let payload;
-      try {
-        payload = JSON.parse(body);
-      } catch {
-        payload = void 0;
+      const request = async (token) => {
+        var _a2;
+        const response2 = await this.fetchImpl(url, {
+          method: "GET",
+          signal: this.getRequestSignal(),
+          headers: {
+            accept: "application/json",
+            cookie: this.restCookie(session),
+            ...token ? { Authorization: `Bearer ${token}` } : {}
+          }
+        });
+        const cookie = mergeCookieHeader(this.sessionCookie, response2.headers);
+        this.sessionCookie = cookie.value;
+        const body = await response2.text();
+        let payload2;
+        try {
+          payload2 = JSON.parse(body);
+        } catch {
+          payload2 = void 0;
+        }
+        (_a2 = this.onDiagnostic) == null ? void 0 : _a2.call(this, {
+          method: "getExams",
+          status: response2.status,
+          contentType: response2.headers.get("content-type") || "",
+          url: redactUrl(response2.url),
+          redirected: response2.redirected,
+          length: body.length,
+          type: getResponseType(body, response2.headers.get("content-type") || ""),
+          cookiePresent: Boolean(this.sessionCookie),
+          cookieChanged: cookie.changed,
+          sessionCookieChanged: cookie.sessionCookieChanged
+        });
+        return { response: response2, payload: payload2 };
+      };
+      let result = await request();
+      if (result.response.status === 403) {
+        const token = await this.getRestToken(session, "exams");
+        result = await request(token);
       }
-      (_a = this.onDiagnostic) == null ? void 0 : _a.call(this, {
-        method: "getExams",
-        status: response.status,
-        contentType: response.headers.get("content-type") || "",
-        url: redactUrl(response.url),
-        redirected: response.redirected,
-        length: body.length,
-        type: getResponseType(body, response.headers.get("content-type") || ""),
-        cookiePresent: Boolean(this.sessionCookie),
-        cookieChanged: cookie.changed,
-        sessionCookieChanged: cookie.sessionCookieChanged
-      });
+      const { response, payload } = result;
       if (response.status === 401 || response.redirected || isRecord(payload) && isLoginPagePayload(payload)) {
         throw new import_WebUntisErrors.WebUntisError("SESSION_EXPIRED", "WebUntis session expired while loading exams");
       }
@@ -451,8 +468,8 @@ class WebUntisClient {
       }
       if (error instanceof DOMException && (error.name === "AbortError" || error.name === "TimeoutError")) {
         throw new import_WebUntisErrors.WebUntisError(
-          ((_b = this.abortSignal) == null ? void 0 : _b.aborted) ? "ABORTED" : "TIMEOUT",
-          ((_c = this.abortSignal) == null ? void 0 : _c.aborted) ? "WebUntis exams request was aborted" : "WebUntis exams request timed out"
+          ((_a = this.abortSignal) == null ? void 0 : _a.aborted) ? "ABORTED" : "TIMEOUT",
+          ((_b = this.abortSignal) == null ? void 0 : _b.aborted) ? "WebUntis exams request was aborted" : "WebUntis exams request timed out"
         );
       }
       throw new import_WebUntisErrors.WebUntisError("SERVER_UNREACHABLE", "WebUntis exams request failed", { cause: error });
@@ -475,7 +492,7 @@ class WebUntisClient {
     cookies.set("schoolname", `schoolname=${schoolCookie}`);
     return [...cookies.values()].join("; ");
   }
-  async getRestToken(session) {
+  async getRestToken(session, context = "message") {
     var _a;
     const url = this.restUrl("/api/token/new");
     const schoolCookies = [.../* @__PURE__ */ new Set([`_${Buffer.from(this.schoolName).toString("base64")}`, this.schoolName])];
@@ -490,7 +507,7 @@ class WebUntisClient {
       this.sessionCookie = cookie.value;
       const body = await response.text();
       (_a = this.onDiagnostic) == null ? void 0 : _a.call(this, {
-        method: "getMessageToken",
+        method: context === "exams" ? "getExamsToken" : "getMessageToken",
         status: response.status,
         contentType: response.headers.get("content-type") || "",
         url: redactUrl(response.url),
@@ -506,7 +523,7 @@ class WebUntisClient {
         const responseDetail = response.redirected ? "redirected" : `HTTP ${response.status}`;
         const error = new import_WebUntisErrors.WebUntisError(
           response.status === 401 || response.redirected ? "SESSION_EXPIRED" : "API_REQUEST",
-          `WebUntis message authentication failed (${responseDetail})`
+          `WebUntis ${context} authentication failed (${responseDetail})`
         );
         if (error.code === "SESSION_EXPIRED" || response.status !== 406 || index === schoolCookies.length - 1) {
           throw error;
@@ -522,16 +539,16 @@ class WebUntisClient {
           }
           token = parsed;
         } catch {
-          throw new import_WebUntisErrors.WebUntisError("INVALID_RESPONSE", "Invalid WebUntis message token response");
+          throw new import_WebUntisErrors.WebUntisError("INVALID_RESPONSE", `Invalid WebUntis ${context} token response`);
         }
       }
       if (!token || token.startsWith("<")) {
-        throw new import_WebUntisErrors.WebUntisError("INVALID_RESPONSE", "Invalid WebUntis message token response");
+        throw new import_WebUntisErrors.WebUntisError("INVALID_RESPONSE", `Invalid WebUntis ${context} token response`);
       }
       this.messageSchoolCookie = schoolCookie;
       return token;
     }
-    throw new import_WebUntisErrors.WebUntisError("API_REQUEST", "WebUntis message authentication failed");
+    throw new import_WebUntisErrors.WebUntisError("API_REQUEST", `WebUntis ${context} authentication failed`);
   }
   async restRequest(path, session, token, method) {
     var _a;

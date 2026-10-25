@@ -208,6 +208,34 @@ describe("WebUntis service session and master data caching", () => {
 		expect(exams.map(exam => exam.id)).to.deep.equal([1, 2]);
 	});
 
+	it("reauthenticates when the exams token request expires the WebUntis session", async () => {
+		let authCount = 0;
+		let examCount = 0;
+		let tokenCount = 0;
+		const service = new WebUntisService(undefined, undefined, undefined, async (input, init) => {
+			const url = new URL(typeof input === "string" ? input : (input as URL).href);
+			if (url.pathname.endsWith("/api/exams")) {
+				examCount++;
+				return examCount === 1 ? json({ errorMessage: "forbidden" }, 403) : json({ data: { exams: [] } });
+			}
+			if (url.pathname.endsWith("/api/token/new")) {
+				tokenCount++;
+				return json({ loginError: "expired" }, 401);
+			}
+			const requestBody = JSON.parse(String(init?.body || "{}")) as { method?: string };
+			if (requestBody.method === "authenticate") {
+				authCount++;
+				return json({ result: { sessionId: `session-${authCount}`, personType: 5, personId: 1, klasseId: 2 } });
+			}
+			return json({ result: [] });
+		});
+		const exams = await service.loadUpcomingExams(config, new Date(2026, 8, 11));
+		expect(exams).to.deep.equal([]);
+		expect(authCount).to.equal(2);
+		expect(examCount).to.equal(2);
+		expect(tokenCount).to.equal(1);
+	});
+
 	it("aborts an in-flight request during shutdown", async () => {
 		const service = new WebUntisService(undefined, undefined, undefined, async (_input, init) => {
 			await new Promise<never>((_resolve, reject) => {
