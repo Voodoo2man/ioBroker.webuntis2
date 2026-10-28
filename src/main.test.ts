@@ -712,6 +712,7 @@ describe("upcoming exams adapter states", () => {
 		expect(harness.objects["inbox.read.01"].type).to.equal("channel");
 		expect(harness.values.get("inbox.read.01.read")).to.equal(true);
 		expect(harness.values.get("inbox.read.01.readInWebUntis")).to.equal(true);
+		expect((harness.objects["inbox.read.01.readLocally"].common as ioBroker.StateCommon).write).to.equal(false);
 		expect(harness.values.get("inbox.read.count")).to.equal(1);
 		expect(harness.values.get("inbox.unread.count")).to.equal(0);
 	});
@@ -789,7 +790,7 @@ describe("upcoming exams adapter states", () => {
 
 		expect(harness.objects["inbox.read.01"].type).to.equal("channel");
 		expect(harness.objects["inbox.unread.01"]).to.equal(undefined);
-		expect(harness.values.get("inbox.read.01.readLocally")).to.equal(true);
+		expect(harness.values.get("inbox.read.01.readLocally")).to.equal(false);
 		expect(harness.values.get("inbox.read.count")).to.equal(1);
 		expect(harness.values.get("inbox.unread.count")).to.equal(0);
 	});

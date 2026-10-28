@@ -327,7 +327,7 @@ class WebuntisNext extends utils.Adapter {
 		const sourceId = await this.getStateAsync(`${sourcePath}.id`);
 		const readInWebUntis = await this.getStateAsync(`${sourcePath}.readInWebUntis`);
 		if (readInWebUntis?.val !== false) {
-			await this.setStateAsync(`${sourcePath}.readLocally`, true, true);
+			await this.setStateAsync(`${sourcePath}.readLocally`, false, true);
 			return;
 		}
 
@@ -1059,7 +1059,7 @@ class WebuntisNext extends utils.Adapter {
 			}
 		}
 		for (const message of sortedMessages) {
-			const locallyRead = locallyReadIds.has(String(message.id));
+			const locallyRead = !message.readInWebUntis && locallyReadIds.has(String(message.id));
 			if (!message.readInWebUntis && !locallyRead) {
 				unreadMessages.push(message);
 			}
@@ -1070,7 +1070,7 @@ class WebuntisNext extends utils.Adapter {
 		const slots: Record<"read" | "unread", number> = { read: 0, unread: 0 };
 		for (const message of sortedMessages) {
 			this.ensureActive();
-			const locallyRead = locallyReadIds.has(String(message.id));
+			const locallyRead = !message.readInWebUntis && locallyReadIds.has(String(message.id));
 			const group = locallyRead || message.readInWebUntis ? "read" : "unread";
 			const slot = String(++slots[group]).padStart(2, "0");
 			const messagePath = `${messageRoot}.${group}.${slot}`;
@@ -1131,7 +1131,7 @@ class WebuntisNext extends utils.Adapter {
 						type: "boolean",
 						role: "indicator",
 						read: true,
-						write: group === "read",
+						write: group === "read" && !message.readInWebUntis,
 						def: false,
 					},
 					native: {},
