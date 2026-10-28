@@ -1,4 +1,9 @@
 # Changelog
+## 0.1.7 (2026-10-14)
+
+- (Voodoo2man) Improved ioBroker compliance, multilingual object names, shutdown handling, and state updates.
+- (Voodoo2man) Added regression tests and removed the historical object dump containing adapter data.
+
 ## 0.1.6 (2026-10-08)
 
 - (Voodoo2man) Improved school search feedback, mobile layout, and button behavior in the Admin interface.

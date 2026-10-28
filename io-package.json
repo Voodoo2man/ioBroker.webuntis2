@@ -1,9 +1,22 @@
 {
   "common": {
     "name": "webuntis2",
-    "version": "0.2.0",
+    "version": "0.2.1",
     "nogit": true,
     "news": {
+      "0.2.1": {
+        "en": "Moved read and unread messages directly under inbox, renamed the unread count state to inbox.unread.count, and removed the redundant JSON state.\nKept inbox refresh independent of timetable failures and replaced the local read toggle with a mark-as-unread button.",
+        "de": "Gelesene und ungelesene Nachrichten direkt in den Posteingang verschoben, in inbox.unread.count umbenannt und überflüssigen JSON-Status entfernt.\nDer Posteingang wurde unabhängig von Stundenplanfehlern aktualisiert und durch „Als ungelesen markieren“ ersetzt.",
+        "ru": "Перемещал прочитанные и непрочитанные сообщения непосредственно в папку «Входящие», переименовал состояние количества непрочитанных в inbox.unread.count и удалил избыточное состояние JSON.\nСохраните обновление папки «Входящие» независимо от сбоев в расписании и заменил локальный переключатель чтения кнопкой «Пометить как непрочитанное».",
+        "pt": "Moveu mensagens lidas e não lidas diretamente para a caixa de entrada, renomeou para inbox.unread.count e removeu o estado JSON redundante.\nManteve a caixa de entrada atualizada sem falhas de horário e substituiu a opção de leitura local por não lida.",
+        "nl": "Lezen en ongelezen berichten rechtstreeks naar de inbox verplaatst, de status van het aantal ongelezen berichten hernoemd naar inbox.unread.count en de overbodige JSON-status verwijderd.\nDe inbox werd vernieuwd, onafhankelijk van fouten in de dienstregeling en de lokale leesschakelaar werd vervangen door een knop Markeren als ongelezen.",
+        "fr": "A déplacé les messages lus et non lus directement dans la boîte de réception, renommé l'état du compte non lu en inbox.unread.count et supprimé l'état JSON redondant.\nLa boîte de réception a été actualisée en cas de panne de calendrier et a remplacé le bouton de lecture local par un bouton Marquer comme non lu.",
+        "it": "Ha spostato i messaggi letti e non letti direttamente in Inbox, lo ha rinominato in inbox.unread.count e rimosso lo stato JSON ridondante.\nHa aggiornato la posta in arrivo senza errori di orario e ha sostituito la lettura locale con un pulsante",
+        "es": "Movió los mensajes leídos y no leídos directamente a la bandeja de entrada, cambió el estado de recuento de no leídos a inbox.unread.count y eliminó el estado JSON redundante.\nMantuvo la bandeja de entrada sin problemas de horario y sustituyó el botón de lectura local por un botón de marcar como no leído.",
+        "pl": "Przeniesiono odczytane i nieprzeczytane wiadomości bezpośrednio pod skrzynkę odbiorczą, zmienił stan nieprzeczytanej liczby na inbox.unread.count i usunął nadmiarowy stan JSON.\nUtrzymał odświeżanie skrzynki odbiorczej niezależnie od błędów rozkładu jazdy i zastąpił przełącznik odczytu lokalnego przyciskiem oznaczeń jako nieprzeczytany.",
+        "uk": "Перемістили прочитані та непрочитані повідомлення безпосередньо під папку «Вхідні», перейменували стан кількості непрочитаних на inbox.unread.count та видалили зайвий стан JSON.\nЗберігав оновлення папки «Вхідні» незалежно від помилок розкладу та замінив локальний перемикач читання кнопкою позначити як непрочитане.",
+        "zh-cn": "将已读和未读邮件直接移至收件箱下方，将未读计数状态重命名为 inbox.unread.count，并删除了冗余的 JSON 状态。\n保持收件箱刷新不受时间表故障的影响，并将本地读取开关替换为 “标记为未读” 按钮。"
+      },
       "0.2.0": {
         "en": "Raised the minimum Node.js, js-controller, and Admin requirements.\nAdded the Ukrainian Admin translation.\nAdded multi Student support and structure.\nAdded upcoming exams\nAdded read and unread inbox messages\nAdded a manual full refresh button\nImproved timetable details\nRemoved duplicate date states.",
         "de": "Mindestwerte für Node.js, JS-Controller und Admin erhöht.\nAdmin-Übersetzung auf Ukrainisch hinzugefügt.\nMehrstudentische Betreuung und Struktur.\nKommende Prüfungen hinzugefügt\nGelesene und ungelesene Inbox hinzugefügt\nManueller Vollabgleich hinzugefügt\nBessere Fahrplandetails\nDoppelte Datumsangaben entfernt.",
@@ -81,19 +94,6 @@
         "pl": "Ulepszono konfigurację w Admin, komunikaty wyszukiwania szkół i układ mobilny",
         "uk": "Покращено налаштування в Admin, відгук під час пошуку шкіл і мобільне компонування",
         "zh-cn": "改进了 Admin 配置、学校搜索反馈和移动端布局"
-      },
-      "0.1.5": {
-        "en": "Fixed the empty adapter configuration page in ioBroker Admin",
-        "de": "Leere Adapter-Konfigurationsseite in ioBroker Admin behoben",
-        "ru": "Исправлена пустая страница конфигурации адаптера в ioBroker Admin",
-        "pt": "Corrigida a página de configuração vazia do adaptador no ioBroker Admin",
-        "nl": "Lege adapterconfiguratiepagina in ioBroker Admin opgelost",
-        "fr": "Correction de la page de configuration vide dans ioBroker Admin",
-        "it": "Corretta la pagina di configurazione vuota dell'adattatore in ioBroker Admin",
-        "es": "Corregida la página de configuración vacía del adaptador en ioBroker Admin",
-        "pl": "Naprawiono pustą stronę konfiguracji adaptera w ioBroker Admin",
-        "uk": "Виправлено порожню сторінку конфігурації адаптера в ioBroker Admin",
-        "zh-cn": "修复了 ioBroker Admin 中适配器配置页面为空的问题"
       }
     },
     "titleLang": {
