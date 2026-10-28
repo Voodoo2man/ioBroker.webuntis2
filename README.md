@@ -92,8 +92,8 @@ endpoint permits it and otherwise uses the available preview; the
 `contentIsPreview` property distinguishes the two.
 
 For messages that WebUntis still reports as unread, set `readLocally` to `false`
-in `inbox.read` to move them back to `inbox.unread`. The state is read-only for
-messages already read in WebUntis, which remain in `inbox.read`.
+in `inbox.read` to move them back to `inbox.unread`. Messages already read in
+WebUntis remain in `inbox.read` even if `readLocally` is set to `false`.
 
 The `info.refresh` button runs the complete startup refresh immediately:
 timetable, messages, exams, holidays, cleanup, and derived current/next lesson

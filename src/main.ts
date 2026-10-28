@@ -1131,7 +1131,7 @@ class WebuntisNext extends utils.Adapter {
 						type: "boolean",
 						role: "indicator",
 						read: true,
-						write: group === "read" && !message.readInWebUntis,
+						write: group === "read",
 						def: false,
 					},
 					native: {},
