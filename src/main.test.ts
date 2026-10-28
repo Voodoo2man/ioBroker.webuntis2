@@ -98,8 +98,8 @@ function makeAdapterHarness(
 			];
 		}),
 		...existingMessageIds.flatMap(id => [
-			{ id: `webuntis2.0.inbox.messages.unread.${id}` },
-			{ id: `webuntis2.0.inbox.messages.unread.${id}.subject` },
+			{ id: `webuntis2.0.inbox.unread.${id}` },
+			{ id: `webuntis2.0.inbox.unread.${id}.subject` },
 		]),
 	];
 	const overrides: Record<string, unknown> = {
@@ -148,12 +148,19 @@ function makeAdapterHarness(
 		},
 		getObjectAsync: async (id: string) => (objects[id] as ioBroker.Object | undefined) ?? null,
 		getObjectListAsync: async ({ startkey }: { startkey: string }) => ({
-			rows: [...allObjectRows, ...Object.keys(objects).map(id => ({ id: `webuntis2.0.${id}` }))].filter(row =>
-				row.id.startsWith(startkey),
+			rows: [...allObjectRows, ...Object.keys(objects).map(id => ({ id: `webuntis2.0.${id}` }))].filter(
+				row =>
+					row.id.startsWith(startkey) &&
+					!deleted.some(id => row.id === `webuntis2.0.${id}` || row.id.startsWith(`webuntis2.0.${id}.`)),
 			),
 		}),
 		delObjectAsync: async (id: string) => {
 			deleted.push(id);
+			for (const stateId of values.keys()) {
+				if (stateId === id || stateId.startsWith(`${id}.`)) {
+					values.delete(stateId);
+				}
+			}
 			for (const objectId of Object.keys(objects)) {
 				if (objectId === id || objectId.startsWith(`${id}.`)) {
 					delete objects[objectId];
@@ -218,7 +225,35 @@ describe("upcoming exams adapter states", () => {
 		const harness = makeAdapterHarness(async () => []);
 		await harness.methods.subscribeInboxMessageActions();
 
-		expect(harness.subscriptions).to.deep.equal(["inbox.messages.unread.*.markRead"]);
+		expect(harness.subscriptions).to.deep.equal(["inbox.unread.*.markRead", "inbox.read.*.readLocally"]);
+	});
+
+	it("writes inbox messages even when the timetable refresh fails", async () => {
+		const harness = makeAdapterHarness(async () => [], [], [], false, true);
+		const message: WebUntisInboxMessage = {
+			id: 503,
+			readInWebUntis: false,
+			dateTime: "2026-10-28T10:00:00",
+			sender: "Office",
+			subject: "Inbox refresh",
+			content: "Available independently of the timetable",
+			contentIsPreview: false,
+			hasAttachments: false,
+		};
+		const webUntis = (harness.adapter as { webUntis: object }).webUntis as {
+			loadTimetable: () => Promise<never>;
+			loadUnreadMessages: () => Promise<WebUntisInboxMessage[]>;
+		};
+		webUntis.loadTimetable = async () => {
+			throw new Error("Timetable request failed");
+		};
+		webUntis.loadUnreadMessages = async () => [message];
+
+		await harness.methods.updateTimetable();
+
+		expect(harness.objects["inbox.unread.01"].type).to.equal("channel");
+		expect(harness.values.get("inbox.unread.01.id")).to.equal(message.id);
+		expect(harness.values.get("inbox.unread.count")).to.equal(1);
 	});
 
 	it("runs all startup refresh steps when manually refreshed", async () => {
@@ -503,20 +538,20 @@ describe("upcoming exams adapter states", () => {
 		await harness.methods.writeUnreadMessages(messages as never[]);
 
 		await Promise.all([
-			harness.methods.onStateChange("inbox.messages.unread.01.markRead", {
+			harness.methods.onStateChange("inbox.unread.01.markRead", {
 				val: true,
 				ack: false,
 			} as ioBroker.State),
-			harness.methods.onStateChange("inbox.messages.unread.02.markRead", {
+			harness.methods.onStateChange("inbox.unread.02.markRead", {
 				val: true,
 				ack: false,
 			} as ioBroker.State),
 		]);
 
-		expect(harness.values.get("inbox.messages.read.count")).to.equal(2);
-		expect(harness.values.get("inbox.messages.read.01.id")).to.equal(101);
-		expect(harness.values.get("inbox.messages.read.02.id")).to.equal(102);
-		expect(harness.values.get("inbox.messages.unread.unreadCount")).to.equal(0);
+		expect(harness.values.get("inbox.read.count")).to.equal(2);
+		expect(harness.values.get("inbox.read.01.id")).to.equal(101);
+		expect(harness.values.get("inbox.read.02.id")).to.equal(102);
+		expect(harness.values.get("inbox.unread.count")).to.equal(0);
 	});
 
 	it("updates generated message slot names and native IDs when the slot changes identity", async () => {
@@ -529,7 +564,7 @@ describe("upcoming exams adapter states", () => {
 			ensureActive: () => undefined,
 			setObjectNotExistsAsync: async () => undefined,
 			getObjectAsync: async () => ({
-				_id: "webuntis2.0.inbox.messages.unread.01",
+				_id: "webuntis2.0.inbox.unread.01",
 				type: "channel",
 				common: { name: "Old message subject" },
 				native: { messageId: 1, webuntis2GeneratedName: "Old message subject" },
@@ -555,7 +590,7 @@ describe("upcoming exams adapter states", () => {
 
 		await ensureTranslatedObject.call(
 			adapter,
-			"inbox.messages.unread.01",
+			"inbox.unread.01",
 			{
 				type: "channel",
 				common: { name: "New message subject" },
@@ -571,15 +606,24 @@ describe("upcoming exams adapter states", () => {
 
 	it("keeps inbox at the instance root and migrates old info inbox values", async () => {
 		const harness = makeAdapterHarness(async () => [], [], [], true);
+		harness.objects["inbox.messages"] = { type: "channel", common: { name: "Legacy messages" }, native: {} };
+		harness.values.set("inbox.messages.unread.count", 7);
+		harness.values.set("inbox.messages.unread.unread", '[{"id":7}]');
 		await harness.methods.ensureInboxRoot();
 
 		expect(harness.objects.inbox.type).to.equal("channel");
-		expect(harness.objects["inbox.messages.unread.unreadCount"]).to.exist;
-		expect(harness.objects["inbox.messages.unread.unread"]).to.exist;
+		expect(harness.objects["inbox.unread.count"]).to.exist;
+		expect(harness.objects["inbox.read"].type).to.equal("channel");
+		expect(harness.objects["inbox.unread"].type).to.equal("channel");
+		expect(harness.objects["inbox.messages"]).to.exist;
+		expect(harness.objects["inbox.messages.unread.unreadCount"]).to.equal(undefined);
+		expect(harness.objects["inbox.messages.unread.unread"]).to.equal(undefined);
 		expect(harness.objects["inbox.unreadCount"]).to.equal(undefined);
-		expect(harness.objects["inbox.unread"]).to.equal(undefined);
-		expect(harness.values.get("inbox.messages.unread.unreadCount")).to.equal(3);
-		expect(harness.values.get("inbox.messages.unread.unread")).to.equal('[{"id":1}]');
+		expect(harness.objects["inbox.unread"].type).to.equal("channel");
+		expect(harness.values.get("inbox.unread.count")).to.equal(7);
+		expect(harness.values.get("inbox.messages.unread.count")).to.equal(7);
+		expect(harness.values.get("inbox.messages.unread.unread")).to.equal(undefined);
+		expect(harness.deleted).to.include("inbox.messages.unread.unread");
 	});
 
 	it("writes each unread message to its own channel with all fields", async () => {
@@ -597,58 +641,57 @@ describe("upcoming exams adapter states", () => {
 
 		await harness.methods.ensureInboxRoot();
 		harness.deleted.length = 0;
+		harness.objects["inbox.messages"] = { type: "channel", common: { name: "Legacy messages" }, native: {} };
 		await harness.methods.writeUnreadMessages([message] as never[]);
 
-		expect(harness.objects["inbox.messages.unread.01"].type).to.equal("channel");
+		expect(harness.objects["inbox.unread.01"].type).to.equal("channel");
 		for (const [field, value] of Object.entries(message)) {
 			if (field !== "readInWebUntis") {
-				expect(harness.values.get(`inbox.messages.unread.01.${field}`)).to.equal(value);
-				expect(harness.objects[`inbox.messages.unread.01.${field}`]).to.exist;
+				expect(harness.values.get(`inbox.unread.01.${field}`)).to.equal(value);
+				expect(harness.objects[`inbox.unread.01.${field}`]).to.exist;
 			}
 		}
-		expect(harness.values.get("inbox.messages.unread.unreadCount")).to.equal(1);
-		expect(JSON.parse(String(harness.values.get("inbox.messages.unread.unread")))).to.deep.equal([message]);
-		expect(harness.objects["inbox.messages.unread.unreadCount"]).to.exist;
-		expect(harness.objects["inbox.messages.unread.unread"]).to.exist;
-		expect(harness.objects["inbox.messages.read.count"]).to.exist;
-		expect(harness.deleted).to.deep.equal(["inbox.messages.unread.123"]);
-		expect(harness.objects["inbox.messages.unread.01.markRead"].common).to.include({
+		expect(harness.values.get("inbox.unread.count")).to.equal(1);
+		expect(harness.objects["inbox.unread.count"]).to.exist;
+		expect(harness.objects["inbox.unread.unread"]).to.equal(undefined);
+		expect(harness.objects["inbox.read.count"]).to.exist;
+		expect(harness.deleted).to.deep.equal(["inbox.unread.123", "inbox.messages"]);
+		expect(harness.objects["inbox.messages"]).to.equal(undefined);
+		expect(harness.objects["inbox.unread.01.markRead"].common).to.include({
 			type: "boolean",
 			role: "button",
 			read: false,
 			write: true,
 		});
-		expect(harness.objects["inbox.messages.unread.01.read"].common).to.include({
+		expect(harness.objects["inbox.unread.01.read"].common).to.include({
 			type: "boolean",
 			role: "indicator",
 			read: true,
 			write: false,
 		});
-		await harness.methods.onStateChange("webuntis2.0.inbox.messages.unread.01.markRead", {
+		await harness.methods.onStateChange("webuntis2.0.inbox.unread.01.markRead", {
 			val: true,
 			ack: false,
 		} as ioBroker.State);
-		expect(harness.objects["inbox.messages.read.01"].type).to.equal("channel");
+		expect(harness.objects["inbox.read.01"].type).to.equal("channel");
 		for (const [field, value] of Object.entries(message)) {
-			expect(harness.values.get(`inbox.messages.read.01.${field}`)).to.equal(value);
+			expect(harness.values.get(`inbox.read.01.${field}`)).to.equal(value);
 		}
-		expect((harness.objects["inbox.messages.read.01.id"].common as ioBroker.StateCommon).type).to.equal("number");
-		expect(harness.values.get("inbox.messages.read.01.read")).to.equal(true);
-		expect(harness.values.get("inbox.messages.read.01.readInWebUntis")).to.equal(false);
-		expect(harness.values.get("inbox.messages.read.count")).to.equal(1);
-		expect(harness.deleted).to.include("inbox.messages.unread.01");
-		expect(harness.values.get("inbox.messages.unread.unreadCount")).to.equal(0);
-		expect(harness.values.get("inbox.messages.unread.unread")).to.equal("[]");
+		expect((harness.objects["inbox.read.01.id"].common as ioBroker.StateCommon).type).to.equal("number");
+		expect(harness.values.get("inbox.read.01.read")).to.equal(true);
+		expect(harness.values.get("inbox.read.01.readInWebUntis")).to.equal(false);
+		expect(harness.values.get("inbox.read.count")).to.equal(1);
+		expect(harness.deleted).to.include("inbox.unread.01");
+		expect(harness.values.get("inbox.unread.count")).to.equal(0);
 		harness.deleted.length = 0;
 		await harness.methods.writeUnreadMessages([message] as never[]);
-		expect(harness.objects["inbox.messages.read.01"].type).to.equal("channel");
-		expect(harness.values.get("inbox.messages.read.01.read")).to.equal(true);
-		expect(harness.values.get("inbox.messages.read.01.readInWebUntis")).to.equal(false);
-		expect(harness.values.get("inbox.messages.unread.unreadCount")).to.equal(0);
-		expect(harness.values.get("inbox.messages.unread.unread")).to.equal("[]");
-		expect(harness.deleted).to.deep.equal(["inbox.messages.unread.123"]);
+		expect(harness.objects["inbox.read.01"].type).to.equal("channel");
+		expect(harness.values.get("inbox.read.01.read")).to.equal(true);
+		expect(harness.values.get("inbox.read.01.readInWebUntis")).to.equal(false);
+		expect(harness.values.get("inbox.unread.count")).to.equal(0);
+		expect(harness.deleted).to.deep.equal(["inbox.unread.123", "inbox.messages"]);
 		await harness.methods.writeUnreadMessages([{ ...message, readInWebUntis: true }] as never[]);
-		expect(harness.values.get("inbox.messages.read.01.readInWebUntis")).to.equal(true);
+		expect(harness.values.get("inbox.read.01.readInWebUntis")).to.equal(true);
 	});
 
 	it("places messages read in WebUntis into the read channel", async () => {
@@ -666,12 +709,11 @@ describe("upcoming exams adapter states", () => {
 
 		await harness.methods.writeUnreadMessages([message] as never[]);
 
-		expect(harness.objects["inbox.messages.read.01"].type).to.equal("channel");
-		expect(harness.values.get("inbox.messages.read.01.read")).to.equal(true);
-		expect(harness.values.get("inbox.messages.read.01.readInWebUntis")).to.equal(true);
-		expect(harness.values.get("inbox.messages.read.count")).to.equal(1);
-		expect(harness.values.get("inbox.messages.unread.unreadCount")).to.equal(0);
-		expect(harness.values.get("inbox.messages.unread.unread")).to.equal("[]");
+		expect(harness.objects["inbox.read.01"].type).to.equal("channel");
+		expect(harness.values.get("inbox.read.01.read")).to.equal(true);
+		expect(harness.values.get("inbox.read.01.readInWebUntis")).to.equal(true);
+		expect(harness.values.get("inbox.read.count")).to.equal(1);
+		expect(harness.values.get("inbox.unread.count")).to.equal(0);
 	});
 
 	it("returns a WebUntis-read message to unread when WebUntis resets its read status", async () => {
@@ -688,17 +730,68 @@ describe("upcoming exams adapter states", () => {
 		};
 
 		await harness.methods.writeUnreadMessages([message] as never[]);
-		expect(harness.values.get("inbox.messages.read.01.readLocally")).to.equal(false);
+		expect(harness.values.get("inbox.read.01.readLocally")).to.equal(false);
 
 		await harness.methods.writeUnreadMessages([{ ...message, readInWebUntis: false }] as never[]);
 
-		expect(harness.values.get("inbox.messages.unread.unreadCount")).to.equal(1);
-		expect(JSON.parse(String(harness.values.get("inbox.messages.unread.unread")))).to.deep.equal([
-			{ ...message, readInWebUntis: false },
-		]);
-		expect(harness.values.get("inbox.messages.unread.01.read")).to.equal(false);
-		expect(harness.values.get("inbox.messages.unread.01.readLocally")).to.equal(false);
-		expect(harness.values.get("inbox.messages.read.count")).to.equal(0);
+		expect(harness.values.get("inbox.unread.count")).to.equal(1);
+		expect(harness.values.get("inbox.unread.01.read")).to.equal(false);
+		expect(harness.values.get("inbox.unread.01.readLocally")).to.equal(false);
+		expect(harness.values.get("inbox.read.count")).to.equal(0);
+	});
+
+	it("moves a locally read message back to unread when readLocally is set to false", async () => {
+		const harness = makeAdapterHarness(async () => [], [], [], false, true);
+		const message = {
+			id: 791,
+			readInWebUntis: false,
+			dateTime: "2026-10-18T10:00:00",
+			sender: "Office",
+			subject: "Please review",
+			content: "Still unread in WebUntis",
+			contentIsPreview: false,
+			hasAttachments: false,
+		};
+
+		await harness.methods.writeUnreadMessages([message] as never[]);
+		await harness.methods.onStateChange("inbox.unread.01.markRead", { val: true, ack: false } as ioBroker.State);
+		expect((harness.objects["inbox.read.01.readLocally"].common as ioBroker.StateCommon).write).to.equal(true);
+
+		await harness.methods.onStateChange("inbox.read.01.readLocally", { val: false, ack: false } as ioBroker.State);
+
+		expect(harness.objects["inbox.unread.01"].type).to.equal("channel");
+		expect(harness.values.get("inbox.unread.01.id")).to.equal(message.id);
+		expect(harness.values.get("inbox.unread.01.subject")).to.equal(message.subject);
+		expect(harness.values.get("inbox.unread.01.read")).to.equal(false);
+		expect(harness.values.get("inbox.unread.01.readLocally")).to.equal(false);
+		expect(harness.objects["inbox.read.01"]).to.equal(undefined);
+		expect(harness.values.get("inbox.unread.count")).to.equal(1);
+		expect(harness.values.get("inbox.read.count")).to.equal(0);
+	});
+
+	it("keeps a locally read message in read when WebUntis also marks it read", async () => {
+		const harness = makeAdapterHarness(async () => [], [], [], false, true);
+		const message = {
+			id: 792,
+			readInWebUntis: true,
+			dateTime: "2026-10-19T10:00:00",
+			sender: "Office",
+			subject: "Already read",
+			content: "WebUntis marks this as read",
+			contentIsPreview: false,
+			hasAttachments: false,
+		};
+
+		await harness.methods.writeUnreadMessages([message] as never[]);
+		harness.values.set("inbox.read.01.readLocally", true);
+
+		await harness.methods.onStateChange("inbox.read.01.readLocally", { val: false, ack: false } as ioBroker.State);
+
+		expect(harness.objects["inbox.read.01"].type).to.equal("channel");
+		expect(harness.objects["inbox.unread.01"]).to.equal(undefined);
+		expect(harness.values.get("inbox.read.01.readLocally")).to.equal(true);
+		expect(harness.values.get("inbox.read.count")).to.equal(1);
+		expect(harness.values.get("inbox.unread.count")).to.equal(0);
 	});
 
 	it("numbers unread channels by ascending arrival date", async () => {
@@ -719,8 +812,8 @@ describe("upcoming exams adapter states", () => {
 			makeMessage(1, "2026-10-24T12:00:00"),
 		] as never[]);
 
-		expect(harness.values.get("inbox.messages.unread.01.id")).to.equal(1);
-		expect(harness.values.get("inbox.messages.unread.02.id")).to.equal(2);
+		expect(harness.values.get("inbox.unread.01.id")).to.equal(1);
+		expect(harness.values.get("inbox.unread.02.id")).to.equal(2);
 	});
 
 	it("numbers read channels by ascending arrival date", async () => {
@@ -741,9 +834,10 @@ describe("upcoming exams adapter states", () => {
 			makeMessage(263116, "2026-10-24T12:00:00"),
 		] as never[]);
 
-		const readObjectName = (field: string): ioBroker.Translated =>
-			(harness.objects[`inbox.messages.read.01.${field}`].common as ioBroker.StateCommon)
-				.name as ioBroker.Translated;
+		const readObjectName = (field: string): ioBroker.Translated => {
+			const common = harness.objects[`inbox.read.01.${field}`].common as ioBroker.StateCommon;
+			return common.name as ioBroker.Translated;
+		};
 		expect(readObjectName("content").de).to.equal("Inhalt");
 		expect(readObjectName("contentIsPreview").de).to.equal("Inhalt ist eine Vorschau");
 		expect(readObjectName("dateTime").de).to.equal("Datum und Uhrzeit");
@@ -753,13 +847,11 @@ describe("upcoming exams adapter states", () => {
 		expect(readObjectName("readInWebUntis").de).to.equal("In WebUntis gelesen");
 		expect(readObjectName("sender").de).to.equal("Absender");
 		expect(readObjectName("subject").de).to.equal("Fach");
-		expect(harness.values.get("inbox.messages.read.01.id")).to.equal(263116);
-		expect(harness.values.get("inbox.messages.read.01.dateTime")).to.equal("2026-10-24T12:00:00");
-		expect((harness.objects["inbox.messages.read.01.dateTime"].common as ioBroker.StateCommon).role).to.equal(
-			"date",
-		);
-		expect(harness.values.get("inbox.messages.read.02.id")).to.equal(263117);
-		expect(harness.values.get("inbox.messages.read.02.dateTime")).to.equal("2026-10-25T12:00:00");
+		expect(harness.values.get("inbox.read.01.id")).to.equal(263116);
+		expect(harness.values.get("inbox.read.01.dateTime")).to.equal("2026-10-24T12:00:00");
+		expect((harness.objects["inbox.read.01.dateTime"].common as ioBroker.StateCommon).role).to.equal("date");
+		expect(harness.values.get("inbox.read.02.id")).to.equal(263117);
+		expect(harness.values.get("inbox.read.02.dateTime")).to.equal("2026-10-25T12:00:00");
 	});
 
 	it("creates timetable summary objects at the same IDs it writes", async () => {
