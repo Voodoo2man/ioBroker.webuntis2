@@ -291,10 +291,10 @@ class WebuntisNext extends utils.Adapter {
 	}
 
 	private async onStateChange(id: string, state: ioBroker.State | null | undefined): Promise<void> {
-		if (!state || state.val !== true || this.unloaded) {
+		if (!state || this.unloaded) {
 			return;
 		}
-		if (id === "info.refresh" || id === `${this.namespace}.info.refresh`) {
+		if (state.val === true && (id === "info.refresh" || id === `${this.namespace}.info.refresh`)) {
 			try {
 				await this.refreshAll();
 			} finally {
@@ -308,15 +308,134 @@ class WebuntisNext extends utils.Adapter {
 			return;
 		}
 		const localId = id.startsWith(`${this.namespace}.`) ? id.slice(this.namespace.length + 1) : id;
-		const match = /^inbox\.messages\.unread\.([a-zA-Z0-9_-]+)\.markRead$/.exec(localId);
-		if (!match) {
+		if (state.val === true) {
+			const markReadMatch = /^inbox\.unread\.([a-zA-Z0-9_-]+)\.markRead$/.exec(localId);
+			if (markReadMatch) {
+				return this.enqueueInboxMutation(() => this.markInboxMessageRead(markReadMatch[1]));
+			}
+		}
+		if (state.val === true) {
+			const markUnreadMatch = /^inbox\.read\.([a-zA-Z0-9_-]+)\.markAsUnread$/.exec(localId);
+			if (markUnreadMatch) {
+				return this.enqueueInboxMutation(() => this.markInboxMessageUnread(markUnreadMatch[1]));
+			}
+		}
+	}
+
+	private async markInboxMessageUnread(readSlot: string): Promise<void> {
+		const sourcePath = `inbox.read.${readSlot}`;
+		const sourceId = await this.getStateAsync(`${sourcePath}.id`);
+		const readInWebUntis = await this.getStateAsync(`${sourcePath}.readInWebUntis`);
+		if (readInWebUntis?.val !== false) {
+			await this.setStateAsync(`${sourcePath}.markAsUnread`, false, true);
 			return;
 		}
-		return this.enqueueInboxMutation(() => this.markInboxMessageRead(match[1]));
+
+		const fields: Array<[string, string, "string" | "number" | "boolean"]> = [
+			["id", "Message ID", typeof sourceId?.val === "number" ? "number" : "string"],
+			["dateTime", "Date and time", "string"],
+			["sender", "Sender", "string"],
+			["subject", "Subject", "string"],
+			["content", "Content", "string"],
+			["contentIsPreview", "Content is preview", "boolean"],
+			["hasAttachments", "Has attachments", "boolean"],
+		];
+		const unreadRows = await this.getObjectListAsync({
+			startkey: `${this.namespace}.inbox.unread.`,
+			endkey: `${this.namespace}.inbox.unread.\uffff`,
+		});
+		const usedSlots = new Set(
+			(unreadRows.rows || [])
+				.map(row => /^inbox\.unread\.(\d+)\./.exec(row.id.replace(`${this.namespace}.`, ""))?.[1])
+				.filter((slot): slot is string => slot !== undefined),
+		);
+		let index = 1;
+		while (usedSlots.has(String(index).padStart(2, "0"))) {
+			index++;
+		}
+		const targetPath = `inbox.unread.${String(index).padStart(2, "0")}`;
+		const message: Record<string, ioBroker.StateValue> = {};
+		for (const [field] of fields) {
+			const value = await this.getStateAsync(`${sourcePath}.${field}`);
+			if (value?.val !== undefined && value.val !== null) {
+				message[field] = value.val;
+			}
+		}
+		const messageId = sourceId?.val ?? readSlot;
+		const subject = typeof message.subject === "string" ? message.subject : `Message ${messageId}`;
+		await this.ensureTranslatedObject(
+			targetPath,
+			{
+				type: "channel",
+				common: { name: subject },
+				native: { messageId, locallyRead: false, [WebuntisNext.generatedLessonNameKey]: subject },
+			},
+			subject,
+			true,
+		);
+		await this.ensureTranslatedObject(
+			`${targetPath}.markRead`,
+			{
+				type: "state",
+				common: {
+					name: { en: "Mark as read", de: "Als gelesen markieren" },
+					type: "boolean",
+					role: "button",
+					read: false,
+					write: true,
+					def: false,
+				},
+				native: {},
+			},
+			"Mark as read",
+		);
+		for (const [field, name, type] of fields) {
+			const value = message[field];
+			if (value === undefined) {
+				continue;
+			}
+			let role = "text";
+			if (field === "dateTime") {
+				role = "date";
+			} else if (type === "boolean") {
+				role = "indicator";
+			} else if (type === "number") {
+				role = "value";
+			}
+			await this.writeSimpleState(
+				`${targetPath}.${field}`,
+				value as string | number | boolean,
+				name,
+				type,
+				role,
+				type === "boolean" ? false : type === "number" ? 0 : "",
+			);
+		}
+		await this.writeSimpleState(`${targetPath}.read`, false, "Read", "boolean", "indicator", false);
+		await this.writeSimpleState(
+			`${targetPath}.readInWebUntis`,
+			false,
+			"Read in WebUntis",
+			"boolean",
+			"indicator",
+			false,
+		);
+		await this.delObjectAsync(sourcePath, { recursive: true });
+		const remainingReadRows = await this.getObjectListAsync({
+			startkey: `${this.namespace}.inbox.read.`,
+			endkey: `${this.namespace}.inbox.read.\uffff`,
+		});
+		const remainingReadSlots = new Set(
+			(remainingReadRows.rows || [])
+				.map(row => /^inbox\.read\.(\d+)\./.exec(row.id.replace(`${this.namespace}.`, ""))?.[1])
+				.filter((slot): slot is string => slot !== undefined),
+		);
+		await setStateChangedOrInitialize(this, "inbox.read.count", remainingReadSlots.size);
+		await setStateChangedOrInitialize(this, "inbox.unread.count", usedSlots.size + 1);
 	}
 
 	private async markInboxMessageRead(messageId: string): Promise<void> {
-		const sourcePath = `inbox.messages.unread.${messageId}`;
+		const sourcePath = `inbox.unread.${messageId}`;
 		const sourceId = await this.getStateAsync(`${sourcePath}.id`);
 		const fields: Array<[string, string, "string" | "number" | "boolean"]> = [
 			["id", "Message ID", typeof sourceId?.val === "number" ? "number" : "string"],
@@ -327,15 +446,14 @@ class WebuntisNext extends utils.Adapter {
 			["contentIsPreview", "Content is preview", "boolean"],
 			["hasAttachments", "Has attachments", "boolean"],
 			["readInWebUntis", "Read in WebUntis", "boolean"],
-			["readLocally", "Read locally", "boolean"],
 		];
 		const channelRows = await this.getObjectListAsync({
-			startkey: `${this.namespace}.inbox.messages.read.`,
-			endkey: `${this.namespace}.inbox.messages.read.\uffff`,
+			startkey: `${this.namespace}.inbox.read.`,
+			endkey: `${this.namespace}.inbox.read.\uffff`,
 		});
 		const existingSlots = new Set<string>();
 		for (const row of channelRows.rows || []) {
-			const match = /^inbox\.messages\.read\.([^.]+)\./.exec(row.id.replace(`${this.namespace}.`, ""));
+			const match = /^inbox\.read\.([^.]+)\./.exec(row.id.replace(`${this.namespace}.`, ""));
 			if (match) {
 				existingSlots.add(match[1]);
 			}
@@ -344,11 +462,14 @@ class WebuntisNext extends utils.Adapter {
 		for (const slot of existingSlots) {
 			const entry: Record<string, ioBroker.StateValue> = {};
 			for (const [field] of fields) {
-				const current = await this.getStateAsync(`inbox.messages.read.${slot}.${field}`);
+				const current = await this.getStateAsync(`inbox.read.${slot}.${field}`);
 				if (current?.val !== undefined && current.val !== null) {
 					entry[field] = current.val;
 				}
 			}
+			const legacyLocalRead = await this.getStateAsync(`inbox.read.${slot}.readLocally`);
+			const channel = await this.getObjectAsync(`inbox.read.${slot}`);
+			entry.locallyRead = channel?.native?.locallyRead === true || legacyLocalRead?.val === true;
 			if (entry.id !== undefined && entry.id !== sourceId?.val) {
 				readMessages.push(entry);
 			}
@@ -363,16 +484,16 @@ class WebuntisNext extends utils.Adapter {
 		}
 		sourceMessage.id = sourceId?.val ?? messageId;
 		sourceMessage.read = true;
-		sourceMessage.readLocally = true;
+		sourceMessage.locallyRead = true;
 		readMessages.push(sourceMessage);
 		readMessages.sort((left, right) => String(left.dateTime ?? "").localeCompare(String(right.dateTime ?? "")));
 		for (const slot of existingSlots) {
-			await this.delObjectAsync(`inbox.messages.read.${slot}`, { recursive: true });
+			await this.delObjectAsync(`inbox.read.${slot}`, { recursive: true });
 		}
 		for (let index = 0; index < readMessages.length; index++) {
 			const entry = readMessages[index];
 			const slot = String(index + 1).padStart(2, "0");
-			const targetPath = `inbox.messages.read.${slot}`;
+			const targetPath = `inbox.read.${slot}`;
 			const entryId = entry.id ?? messageId;
 			const entrySubject = typeof entry.subject === "string" ? entry.subject : `Message ${entryId}`;
 			await this.ensureTranslatedObject(
@@ -380,10 +501,30 @@ class WebuntisNext extends utils.Adapter {
 				{
 					type: "channel",
 					common: { name: entrySubject },
-					native: { messageId: entryId, [WebuntisNext.generatedLessonNameKey]: entrySubject },
+					native: {
+						messageId: entryId,
+						locallyRead: entry.locallyRead === true,
+						[WebuntisNext.generatedLessonNameKey]: entrySubject,
+					},
 				},
 				"Read message",
 				true,
+			);
+			await this.ensureTranslatedObject(
+				`${targetPath}.markAsUnread`,
+				{
+					type: "state",
+					common: {
+						name: { en: "Mark as unread", de: "Als ungelesen markieren" },
+						type: "boolean",
+						role: "button",
+						read: false,
+						write: true,
+						def: false,
+					},
+					native: {},
+				},
+				"Mark as unread",
 			);
 			for (const [field, name, type] of fields) {
 				const value = entry[field];
@@ -417,20 +558,19 @@ class WebuntisNext extends utils.Adapter {
 				false,
 			);
 		}
-		await setStateChangedOrInitialize(this, "inbox.messages.read.count", readMessages.length);
+		await setStateChangedOrInitialize(this, "inbox.read.count", readMessages.length);
 		await this.setStateAsync(`${sourcePath}.markRead`, false, true);
 		await this.delObjectAsync(sourcePath, { recursive: true });
-		const unreadState = await this.getStateAsync("inbox.messages.unread.unread");
-		if (typeof unreadState?.val === "string") {
-			try {
-				const unreadMessages = JSON.parse(unreadState.val) as WebUntisInboxMessage[];
-				const remaining = unreadMessages.filter(message => String(message.id) !== String(sourceId?.val));
-				await setStateChangedOrInitialize(this, "inbox.messages.unread.unread", JSON.stringify(remaining));
-				await setStateChangedOrInitialize(this, "inbox.messages.unread.unreadCount", remaining.length);
-			} catch {
-				this.log.warn("Could not update the inbox unread summary after marking a message as read");
-			}
-		}
+		const unreadRows = await this.getObjectListAsync({
+			startkey: `${this.namespace}.inbox.unread.`,
+			endkey: `${this.namespace}.inbox.unread.\uffff`,
+		});
+		const remainingUnreadSlots = new Set(
+			(unreadRows.rows || [])
+				.map(row => /^inbox\.unread\.(\d+)\./.exec(row.id.replace(`${this.namespace}.`, ""))?.[1])
+				.filter((slot): slot is string => slot !== undefined),
+		);
+		await setStateChangedOrInitialize(this, "inbox.unread.count", remainingUnreadSlots.size);
 	}
 
 	private logHttpDiagnostic(diagnostic: WebUntisHttpDiagnostic): void {
@@ -555,7 +695,8 @@ class WebuntisNext extends utils.Adapter {
 	}
 
 	private async subscribeInboxMessageActions(): Promise<void> {
-		await this.subscribeStatesAsync("inbox.messages.unread.*.markRead");
+		await this.subscribeStatesAsync("inbox.unread.*.markRead");
+		await this.subscribeStatesAsync("inbox.read.*.markAsUnread");
 	}
 
 	private async refreshAll(): Promise<void> {
@@ -617,6 +758,19 @@ class WebuntisNext extends utils.Adapter {
 			return;
 		}
 		await this.setState("info.lastUpdate", new Date().toISOString(), true);
+		try {
+			const unreadMessages = await this.webUntis.loadUnreadMessages(this.config);
+			await this.writeUnreadMessages(unreadMessages);
+			this.lastMessageWarningAt = 0;
+		} catch (error) {
+			const warningIntervalMs = 30 * 60 * 1000;
+			if (Date.now() - this.lastMessageWarningAt >= warningIntervalMs) {
+				const code = error instanceof WebUntisError ? error.code : "UNEXPECTED_RESPONSE";
+				const detail = error instanceof Error ? ` (${error.message})` : "";
+				this.log.warn(`WebUntis messages refresh failed: ${code}${detail}; previous message data was kept`);
+				this.lastMessageWarningAt = Date.now();
+			}
+		}
 		try {
 			await cleanupLegacyNamespace(this, "messages");
 			await this.ensureStudentsRoot();
@@ -720,19 +874,6 @@ class WebuntisNext extends utils.Adapter {
 				this.log.warn("WebUntis holidays are not available; previous holiday values were preserved");
 			}
 			try {
-				const unreadMessages = await this.webUntis.loadUnreadMessages(this.config);
-				await this.writeUnreadMessages(unreadMessages);
-				this.lastMessageWarningAt = 0;
-			} catch (error) {
-				const warningIntervalMs = 30 * 60 * 1000;
-				if (Date.now() - this.lastMessageWarningAt >= warningIntervalMs) {
-					const code = error instanceof WebUntisError ? error.code : "UNEXPECTED_RESPONSE";
-					const detail = error instanceof Error ? ` (${error.message})` : "";
-					this.log.warn(`WebUntis messages refresh failed: ${code}${detail}; previous message data was kept`);
-					this.lastMessageWarningAt = Date.now();
-				}
-			}
-			try {
 				const exams = await this.loadUpcomingExamsWithRetry(now);
 				if (this.unloaded) {
 					return;
@@ -830,17 +971,12 @@ class WebuntisNext extends utils.Adapter {
 			"Messages",
 		);
 		await this.ensureTranslatedObject(
-			"inbox.messages",
-			{ type: "channel", common: { name: translatedName("inbox") }, native: {} },
-			"Messages",
-		);
-		await this.ensureTranslatedObject(
-			"inbox.messages.unread",
+			"inbox.unread",
 			{ type: "channel", common: { name: { en: "Unread", de: "Ungelesen" } }, native: {} },
 			"Unread",
 		);
 		await this.ensureTranslatedObject(
-			"inbox.messages.unread.unreadCount",
+			"inbox.unread.count",
 			{
 				type: "state",
 				common: {
@@ -856,28 +992,12 @@ class WebuntisNext extends utils.Adapter {
 			"Unread message count",
 		);
 		await this.ensureTranslatedObject(
-			"inbox.messages.unread.unread",
-			{
-				type: "state",
-				common: {
-					name: translatedName("unreadMessages"),
-					type: "string",
-					role: "json",
-					read: true,
-					write: false,
-					def: "[]",
-				},
-				native: {},
-			},
-			"Unread messages",
-		);
-		await this.ensureTranslatedObject(
-			"inbox.messages.read",
+			"inbox.read",
 			{ type: "channel", common: { name: { en: "Read", de: "Gelesen" } }, native: {} },
 			"Read",
 		);
 		await this.ensureTranslatedObject(
-			"inbox.messages.read.count",
+			"inbox.read.count",
 			{
 				type: "state",
 				common: {
@@ -893,13 +1013,17 @@ class WebuntisNext extends utils.Adapter {
 			"Read message count",
 		);
 		const legacyCount = await this.getStateAsync("info.inbox.unreadCount");
-		const legacyMessages = await this.getStateAsync("info.inbox.unread");
 		const oldCount = await this.getStateAsync("inbox.unreadCount");
-		const oldMessages = await this.getStateAsync("inbox.unread");
-		await this.initializeRootState("inbox.messages.unread.unreadCount", oldCount?.val ?? legacyCount?.val ?? 0);
-		await this.initializeRootState("inbox.messages.unread.unread", oldMessages?.val ?? legacyMessages?.val ?? "[]");
+		const previousUnreadCount = await this.getStateAsync("inbox.messages.unread.count");
+		const previousReadCount = await this.getStateAsync("inbox.messages.read.count");
+		await this.initializeRootState(
+			"inbox.unread.count",
+			previousUnreadCount?.val ?? oldCount?.val ?? legacyCount?.val ?? 0,
+		);
+		await this.initializeRootState("inbox.read.count", previousReadCount?.val ?? 0);
+		await this.delObjectAsync("inbox.messages.unread.unread");
 		await this.delObjectAsync("inbox.unreadCount");
-		await this.delObjectAsync("inbox.unread");
+		await this.delObjectAsync("info.inbox.unread");
 	}
 
 	private async initializeRootState(id: string, defaultValue: ioBroker.StateValue): Promise<void> {
@@ -915,35 +1039,41 @@ class WebuntisNext extends utils.Adapter {
 		const sortedMessages = [...messages].sort((left, right) => left.dateTime.localeCompare(right.dateTime));
 		const unreadMessages: WebUntisInboxMessage[] = [];
 		const locallyReadIds = new Set<string>();
-		const existingRead = await this.getObjectListAsync({
-			startkey: `${this.namespace}.inbox.messages.read.`,
-			endkey: `${this.namespace}.inbox.messages.read.\uffff`,
-		});
-		for (const row of existingRead.rows || []) {
+		const existingReadRows = await Promise.all(
+			["inbox.read.", "inbox.messages.read."].map(async path => {
+				const result = await this.getObjectListAsync({
+					startkey: `${this.namespace}.${path}`,
+					endkey: `${this.namespace}.${path}\uffff`,
+				});
+				return result.rows || [];
+			}),
+		);
+		for (const row of existingReadRows.flat()) {
 			const relativePath = row.id.replace(`${this.namespace}.`, "");
-			if (!/^inbox\.messages\.read\.[^.]+\.id$/.test(relativePath)) {
+			if (!/^inbox\.(?:messages\.)?read\.[^.]+\.id$/.test(relativePath)) {
 				continue;
 			}
 			const messageId = await this.getStateAsync(relativePath);
-			const readLocally = await this.getStateAsync(relativePath.replace(/\.id$/, ".readLocally"));
-			if (messageId?.val !== undefined && readLocally?.val === true) {
+			const parentPath = relativePath.replace(/\.id$/, "");
+			const readLocally = await this.getStateAsync(`${parentPath}.readLocally`);
+			const channel = await this.getObjectAsync(parentPath);
+			if (messageId?.val !== undefined && (channel?.native?.locallyRead === true || readLocally?.val === true)) {
 				locallyReadIds.add(String(messageId.val));
 			}
 		}
 		for (const message of sortedMessages) {
-			const locallyRead = locallyReadIds.has(String(message.id));
+			const locallyRead = !message.readInWebUntis && locallyReadIds.has(String(message.id));
 			if (!message.readInWebUntis && !locallyRead) {
 				unreadMessages.push(message);
 			}
 		}
-		await setStateChangedOrInitialize(this, "inbox.messages.unread.unreadCount", unreadMessages.length);
-		await setStateChangedOrInitialize(this, "inbox.messages.unread.unread", JSON.stringify(unreadMessages));
-		const messageRoot = "inbox.messages";
+		await setStateChangedOrInitialize(this, "inbox.unread.count", unreadMessages.length);
+		const messageRoot = "inbox";
 		const expected = new Set<string>();
 		const slots: Record<"read" | "unread", number> = { read: 0, unread: 0 };
 		for (const message of sortedMessages) {
 			this.ensureActive();
-			const locallyRead = locallyReadIds.has(String(message.id));
+			const locallyRead = !message.readInWebUntis && locallyReadIds.has(String(message.id));
 			const group = locallyRead || message.readInWebUntis ? "read" : "unread";
 			const slot = String(++slots[group]).padStart(2, "0");
 			const messagePath = `${messageRoot}.${group}.${slot}`;
@@ -955,12 +1085,17 @@ class WebuntisNext extends utils.Adapter {
 					common: { name: message.subject || `Message ${message.id}` },
 					native: {
 						messageId: message.id,
+						locallyRead,
 						[WebuntisNext.generatedLessonNameKey]: message.subject || `Message ${message.id}`,
 					},
 				},
 				message.subject || `Message ${message.id}`,
 				true,
 			);
+			await this.extendObjectAsync(messagePath, { native: { locallyRead } });
+			if (await this.getObjectAsync(`${messagePath}.readLocally`)) {
+				await this.delObjectAsync(`${messagePath}.readLocally`);
+			}
 			if (!message.readInWebUntis && !locallyRead) {
 				await this.ensureTranslatedObject(
 					`${messagePath}.markRead`,
@@ -979,14 +1114,23 @@ class WebuntisNext extends utils.Adapter {
 					"Mark as read",
 				);
 			}
-			await this.writeSimpleState(
+			await this.ensureTranslatedObject(
 				`${messagePath}.read`,
-				locallyRead || message.readInWebUntis,
+				{
+					type: "state",
+					common: {
+						name: translatedName("effectiveRead"),
+						type: "boolean",
+						role: "indicator",
+						read: true,
+						write: false,
+						def: false,
+					},
+					native: {},
+				},
 				"Read",
-				"boolean",
-				"indicator",
-				false,
 			);
+			await setStateChangedOrInitialize(this, `${messagePath}.read`, locallyRead || message.readInWebUntis);
 			await this.writeSimpleState(
 				`${messagePath}.readInWebUntis`,
 				message.readInWebUntis,
@@ -995,14 +1139,24 @@ class WebuntisNext extends utils.Adapter {
 				"indicator",
 				false,
 			);
-			await this.writeSimpleState(
-				`${messagePath}.readLocally`,
-				locallyRead,
-				"Read locally",
-				"boolean",
-				"indicator",
-				false,
-			);
+			if (group === "read") {
+				await this.ensureTranslatedObject(
+					`${messagePath}.markAsUnread`,
+					{
+						type: "state",
+						common: {
+							name: { en: "Mark as unread", de: "Als ungelesen markieren" },
+							type: "boolean",
+							role: "button",
+							read: false,
+							write: true,
+							def: false,
+						},
+						native: {},
+					},
+					"Mark as unread",
+				);
+			}
 			const fields: Array<[string, string, "string" | "number" | "boolean", string | number | boolean]> = [
 				["id", "Message ID", typeof message.id === "number" ? "number" : "string", message.id],
 				["dateTime", "Date and time", "string", message.dateTime],
@@ -1029,7 +1183,7 @@ class WebuntisNext extends utils.Adapter {
 				await this.writeSimpleState(`${messagePath}.${field}`, value, name, type, role, defaultValue);
 			}
 		}
-		await setStateChangedOrInitialize(this, "inbox.messages.read.count", slots.read);
+		await setStateChangedOrInitialize(this, "inbox.read.count", slots.read);
 		const existing = await this.getObjectListAsync({
 			startkey: `${this.namespace}.${messageRoot}.`,
 			endkey: `${this.namespace}.${messageRoot}.\uffff`,
@@ -1040,7 +1194,9 @@ class WebuntisNext extends utils.Adapter {
 			const parts = relativeId.split(".");
 			if (
 				(parts[0] === "read" && parts[1] === "count") ||
-				(parts[0] === "unread" && (parts[1] === "unreadCount" || parts[1] === "unread"))
+				(parts[0] === "unread" && parts[1] === "count") ||
+				(parts[0] === "messages" && parts[1] === "read" && parts[2] === "count") ||
+				(parts[0] === "messages" && parts[1] === "unread" && parts[2] === "count")
 			) {
 				continue;
 			}
@@ -1053,6 +1209,7 @@ class WebuntisNext extends utils.Adapter {
 			this.ensureActive();
 			await this.delObjectAsync(`${messageRoot}.${messagePath}`, { recursive: true });
 		}
+		await this.delObjectAsync("inbox.messages", { recursive: true });
 	}
 
 	private async writeUpcomingExams(
