@@ -91,9 +91,13 @@ subject, content, and an attachment indicator. The adapter retrieves full conten
 endpoint permits it and otherwise uses the available preview; the
 `contentIsPreview` property distinguishes the two.
 
-For messages that WebUntis still reports as unread, set `readLocally` to `false`
-in `inbox.read` to move them back to `inbox.unread`. Messages already read in
-WebUntis remain in `inbox.read` even if `readLocally` is set to `false`.
+The `Read (local or WebUntis)` state is the effective status and is `true` when
+a message was marked read locally or WebUntis reports it as read.
+`readInWebUntis` contains only the status reported by WebUntis.
+
+Press `markAsUnread` on a message in `inbox.read` to move it back to
+`inbox.unread` when WebUntis still reports it as unread. Messages already read
+in WebUntis remain in `inbox.read`.
 
 The `info.refresh` button runs the complete startup refresh immediately:
 timetable, messages, exams, holidays, cleanup, and derived current/next lesson
@@ -168,9 +172,7 @@ and include only relevant, non-sensitive log messages when asking for help.
 ### **WORK IN PROGRESS**
 
 - (Voodoo2man) Moved read and unread messages directly under inbox, renamed the unread count state to inbox.unread.count, and removed the redundant JSON state.
-- (Voodoo2man) Allowed locally read messages to be returned to unread when WebUntis still reports them as unread.
-- (Voodoo2man) Disabled the local read toggle for messages already read in WebUntis.
-- (Voodoo2man) Kept inbox message updates independent from timetable refresh failures.
+- (Voodoo2man) Kept inbox refresh independent of timetable failures and replaced the local read toggle with a mark-as-unread button.
 
 ### 0.2.0 (2026-10-25)
 

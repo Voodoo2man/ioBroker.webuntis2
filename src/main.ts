@@ -314,8 +314,8 @@ class WebuntisNext extends utils.Adapter {
 				return this.enqueueInboxMutation(() => this.markInboxMessageRead(markReadMatch[1]));
 			}
 		}
-		if (state.val === false) {
-			const markUnreadMatch = /^inbox\.read\.([a-zA-Z0-9_-]+)\.readLocally$/.exec(localId);
+		if (state.val === true) {
+			const markUnreadMatch = /^inbox\.read\.([a-zA-Z0-9_-]+)\.markAsUnread$/.exec(localId);
 			if (markUnreadMatch) {
 				return this.enqueueInboxMutation(() => this.markInboxMessageUnread(markUnreadMatch[1]));
 			}
@@ -327,7 +327,7 @@ class WebuntisNext extends utils.Adapter {
 		const sourceId = await this.getStateAsync(`${sourcePath}.id`);
 		const readInWebUntis = await this.getStateAsync(`${sourcePath}.readInWebUntis`);
 		if (readInWebUntis?.val !== false) {
-			await this.setStateAsync(`${sourcePath}.readLocally`, false, true);
+			await this.setStateAsync(`${sourcePath}.markAsUnread`, false, true);
 			return;
 		}
 
@@ -368,7 +368,7 @@ class WebuntisNext extends utils.Adapter {
 			{
 				type: "channel",
 				common: { name: subject },
-				native: { messageId, [WebuntisNext.generatedLessonNameKey]: subject },
+				native: { messageId, locallyRead: false, [WebuntisNext.generatedLessonNameKey]: subject },
 			},
 			subject,
 			true,
@@ -420,7 +420,6 @@ class WebuntisNext extends utils.Adapter {
 			"indicator",
 			false,
 		);
-		await this.writeSimpleState(`${targetPath}.readLocally`, false, "Read locally", "boolean", "indicator", false);
 		await this.delObjectAsync(sourcePath, { recursive: true });
 		const remainingReadRows = await this.getObjectListAsync({
 			startkey: `${this.namespace}.inbox.read.`,
@@ -447,7 +446,6 @@ class WebuntisNext extends utils.Adapter {
 			["contentIsPreview", "Content is preview", "boolean"],
 			["hasAttachments", "Has attachments", "boolean"],
 			["readInWebUntis", "Read in WebUntis", "boolean"],
-			["readLocally", "Read locally", "boolean"],
 		];
 		const channelRows = await this.getObjectListAsync({
 			startkey: `${this.namespace}.inbox.read.`,
@@ -469,6 +467,9 @@ class WebuntisNext extends utils.Adapter {
 					entry[field] = current.val;
 				}
 			}
+			const legacyLocalRead = await this.getStateAsync(`inbox.read.${slot}.readLocally`);
+			const channel = await this.getObjectAsync(`inbox.read.${slot}`);
+			entry.locallyRead = channel?.native?.locallyRead === true || legacyLocalRead?.val === true;
 			if (entry.id !== undefined && entry.id !== sourceId?.val) {
 				readMessages.push(entry);
 			}
@@ -483,7 +484,7 @@ class WebuntisNext extends utils.Adapter {
 		}
 		sourceMessage.id = sourceId?.val ?? messageId;
 		sourceMessage.read = true;
-		sourceMessage.readLocally = true;
+		sourceMessage.locallyRead = true;
 		readMessages.push(sourceMessage);
 		readMessages.sort((left, right) => String(left.dateTime ?? "").localeCompare(String(right.dateTime ?? "")));
 		for (const slot of existingSlots) {
@@ -500,17 +501,34 @@ class WebuntisNext extends utils.Adapter {
 				{
 					type: "channel",
 					common: { name: entrySubject },
-					native: { messageId: entryId, [WebuntisNext.generatedLessonNameKey]: entrySubject },
+					native: {
+						messageId: entryId,
+						locallyRead: entry.locallyRead === true,
+						[WebuntisNext.generatedLessonNameKey]: entrySubject,
+					},
 				},
 				"Read message",
 				true,
 			);
+			await this.ensureTranslatedObject(
+				`${targetPath}.markAsUnread`,
+				{
+					type: "state",
+					common: {
+						name: { en: "Mark as unread", de: "Als ungelesen markieren" },
+						type: "boolean",
+						role: "button",
+						read: false,
+						write: true,
+						def: false,
+					},
+					native: {},
+				},
+				"Mark as unread",
+			);
 			for (const [field, name, type] of fields) {
 				const value = entry[field];
 				if (value === undefined || value === null) {
-					continue;
-				}
-				if (field === "readLocally") {
 					continue;
 				}
 				const role =
@@ -530,23 +548,6 @@ class WebuntisNext extends utils.Adapter {
 					type === "boolean" ? false : type === "number" ? 0 : "",
 				);
 			}
-			await this.ensureTranslatedObject(
-				`${targetPath}.readLocally`,
-				{
-					type: "state",
-					common: {
-						name: translatedStateName("Read locally"),
-						type: "boolean",
-						role: "indicator",
-						read: true,
-						write: true,
-						def: false,
-					},
-					native: {},
-				},
-				"Read locally",
-			);
-			await setStateChangedOrInitialize(this, `${targetPath}.readLocally`, entry.readLocally === true);
 			await this.writeSimpleState(`${targetPath}.read`, true, "Read", "boolean", "indicator", false);
 			await this.writeSimpleState(
 				`${targetPath}.readInWebUntis`,
@@ -695,7 +696,7 @@ class WebuntisNext extends utils.Adapter {
 
 	private async subscribeInboxMessageActions(): Promise<void> {
 		await this.subscribeStatesAsync("inbox.unread.*.markRead");
-		await this.subscribeStatesAsync("inbox.read.*.readLocally");
+		await this.subscribeStatesAsync("inbox.read.*.markAsUnread");
 	}
 
 	private async refreshAll(): Promise<void> {
@@ -1053,8 +1054,10 @@ class WebuntisNext extends utils.Adapter {
 				continue;
 			}
 			const messageId = await this.getStateAsync(relativePath);
-			const readLocally = await this.getStateAsync(relativePath.replace(/\.id$/, ".readLocally"));
-			if (messageId?.val !== undefined && readLocally?.val === true) {
+			const parentPath = relativePath.replace(/\.id$/, "");
+			const readLocally = await this.getStateAsync(`${parentPath}.readLocally`);
+			const channel = await this.getObjectAsync(parentPath);
+			if (messageId?.val !== undefined && (channel?.native?.locallyRead === true || readLocally?.val === true)) {
 				locallyReadIds.add(String(messageId.val));
 			}
 		}
@@ -1082,12 +1085,17 @@ class WebuntisNext extends utils.Adapter {
 					common: { name: message.subject || `Message ${message.id}` },
 					native: {
 						messageId: message.id,
+						locallyRead,
 						[WebuntisNext.generatedLessonNameKey]: message.subject || `Message ${message.id}`,
 					},
 				},
 				message.subject || `Message ${message.id}`,
 				true,
 			);
+			await this.extendObjectAsync(messagePath, { native: { locallyRead } });
+			if (await this.getObjectAsync(`${messagePath}.readLocally`)) {
+				await this.delObjectAsync(`${messagePath}.readLocally`);
+			}
 			if (!message.readInWebUntis && !locallyRead) {
 				await this.ensureTranslatedObject(
 					`${messagePath}.markRead`,
@@ -1106,14 +1114,23 @@ class WebuntisNext extends utils.Adapter {
 					"Mark as read",
 				);
 			}
-			await this.writeSimpleState(
+			await this.ensureTranslatedObject(
 				`${messagePath}.read`,
-				locallyRead || message.readInWebUntis,
+				{
+					type: "state",
+					common: {
+						name: translatedName("effectiveRead"),
+						type: "boolean",
+						role: "indicator",
+						read: true,
+						write: false,
+						def: false,
+					},
+					native: {},
+				},
 				"Read",
-				"boolean",
-				"indicator",
-				false,
 			);
+			await setStateChangedOrInitialize(this, `${messagePath}.read`, locallyRead || message.readInWebUntis);
 			await this.writeSimpleState(
 				`${messagePath}.readInWebUntis`,
 				message.readInWebUntis,
@@ -1122,23 +1139,24 @@ class WebuntisNext extends utils.Adapter {
 				"indicator",
 				false,
 			);
-			await this.ensureTranslatedObject(
-				`${messagePath}.readLocally`,
-				{
-					type: "state",
-					common: {
-						name: translatedStateName("Read locally"),
-						type: "boolean",
-						role: "indicator",
-						read: true,
-						write: group === "read",
-						def: false,
+			if (group === "read") {
+				await this.ensureTranslatedObject(
+					`${messagePath}.markAsUnread`,
+					{
+						type: "state",
+						common: {
+							name: { en: "Mark as unread", de: "Als ungelesen markieren" },
+							type: "boolean",
+							role: "button",
+							read: false,
+							write: true,
+							def: false,
+						},
+						native: {},
 					},
-					native: {},
-				},
-				"Read locally",
-			);
-			await setStateChangedOrInitialize(this, `${messagePath}.readLocally`, locallyRead);
+					"Mark as unread",
+				);
+			}
 			const fields: Array<[string, string, "string" | "number" | "boolean", string | number | boolean]> = [
 				["id", "Message ID", typeof message.id === "number" ? "number" : "string", message.id],
 				["dateTime", "Date and time", "string", message.dateTime],

@@ -147,6 +147,15 @@ function makeAdapterHarness(
 			objects[id] = object;
 		},
 		getObjectAsync: async (id: string) => (objects[id] as ioBroker.Object | undefined) ?? null,
+		extendObjectAsync: async (id: string, patch: ioBroker.PartialObject) => {
+			const existing = objects[id] as ioBroker.Object | undefined;
+			objects[id] = {
+				...existing,
+				...patch,
+				common: { ...existing?.common, ...patch.common },
+				native: { ...existing?.native, ...patch.native },
+			} as ioBroker.SettableObject;
+		},
 		getObjectListAsync: async ({ startkey }: { startkey: string }) => ({
 			rows: [...allObjectRows, ...Object.keys(objects).map(id => ({ id: `webuntis2.0.${id}` }))].filter(
 				row =>
@@ -225,7 +234,7 @@ describe("upcoming exams adapter states", () => {
 		const harness = makeAdapterHarness(async () => []);
 		await harness.methods.subscribeInboxMessageActions();
 
-		expect(harness.subscriptions).to.deep.equal(["inbox.unread.*.markRead", "inbox.read.*.readLocally"]);
+		expect(harness.subscriptions).to.deep.equal(["inbox.unread.*.markRead", "inbox.read.*.markAsUnread"]);
 	});
 
 	it("writes inbox messages even when the timetable refresh fails", async () => {
@@ -712,7 +721,16 @@ describe("upcoming exams adapter states", () => {
 		expect(harness.objects["inbox.read.01"].type).to.equal("channel");
 		expect(harness.values.get("inbox.read.01.read")).to.equal(true);
 		expect(harness.values.get("inbox.read.01.readInWebUntis")).to.equal(true);
-		expect((harness.objects["inbox.read.01.readLocally"].common as ioBroker.StateCommon).write).to.equal(true);
+		expect(harness.objects["inbox.read.01.read"]?.common?.name).to.include({
+			en: "Read (local or WebUntis)",
+			de: "Gelesen (lokal oder WebUntis)",
+		});
+		expect(harness.objects["inbox.read.01.markAsUnread"].common).to.include({
+			type: "boolean",
+			role: "button",
+			read: false,
+			write: true,
+		});
 		expect(harness.values.get("inbox.read.count")).to.equal(1);
 		expect(harness.values.get("inbox.unread.count")).to.equal(0);
 	});
@@ -731,17 +749,17 @@ describe("upcoming exams adapter states", () => {
 		};
 
 		await harness.methods.writeUnreadMessages([message] as never[]);
-		expect(harness.values.get("inbox.read.01.readLocally")).to.equal(false);
+		expect(harness.objects["inbox.read.01.readLocally"]).to.equal(undefined);
 
 		await harness.methods.writeUnreadMessages([{ ...message, readInWebUntis: false }] as never[]);
 
 		expect(harness.values.get("inbox.unread.count")).to.equal(1);
 		expect(harness.values.get("inbox.unread.01.read")).to.equal(false);
-		expect(harness.values.get("inbox.unread.01.readLocally")).to.equal(false);
+		expect(harness.objects["inbox.unread.01.readLocally"]).to.equal(undefined);
 		expect(harness.values.get("inbox.read.count")).to.equal(0);
 	});
 
-	it("moves a locally read message back to unread when readLocally is set to false", async () => {
+	it("moves a locally read message back to unread when markAsUnread is pressed", async () => {
 		const harness = makeAdapterHarness(async () => [], [], [], false, true);
 		const message = {
 			id: 791,
@@ -756,15 +774,17 @@ describe("upcoming exams adapter states", () => {
 
 		await harness.methods.writeUnreadMessages([message] as never[]);
 		await harness.methods.onStateChange("inbox.unread.01.markRead", { val: true, ack: false } as ioBroker.State);
-		expect((harness.objects["inbox.read.01.readLocally"].common as ioBroker.StateCommon).write).to.equal(true);
+		expect((harness.objects["inbox.read.01.markAsUnread"].common as ioBroker.StateCommon).role).to.equal("button");
+		expect(harness.objects["inbox.read.01"].native).to.include({ locallyRead: true });
 
-		await harness.methods.onStateChange("inbox.read.01.readLocally", { val: false, ack: false } as ioBroker.State);
+		await harness.methods.onStateChange("inbox.read.01.markAsUnread", { val: true, ack: false } as ioBroker.State);
 
 		expect(harness.objects["inbox.unread.01"].type).to.equal("channel");
 		expect(harness.values.get("inbox.unread.01.id")).to.equal(message.id);
 		expect(harness.values.get("inbox.unread.01.subject")).to.equal(message.subject);
 		expect(harness.values.get("inbox.unread.01.read")).to.equal(false);
-		expect(harness.values.get("inbox.unread.01.readLocally")).to.equal(false);
+		expect(harness.objects["inbox.unread.01.readLocally"]).to.equal(undefined);
+		expect(harness.objects["inbox.unread.01"].native).to.include({ locallyRead: false });
 		expect(harness.objects["inbox.read.01"]).to.equal(undefined);
 		expect(harness.values.get("inbox.unread.count")).to.equal(1);
 		expect(harness.values.get("inbox.read.count")).to.equal(0);
@@ -786,11 +806,11 @@ describe("upcoming exams adapter states", () => {
 		await harness.methods.writeUnreadMessages([message] as never[]);
 		harness.values.set("inbox.read.01.readLocally", true);
 
-		await harness.methods.onStateChange("inbox.read.01.readLocally", { val: false, ack: false } as ioBroker.State);
+		await harness.methods.onStateChange("inbox.read.01.markAsUnread", { val: true, ack: false } as ioBroker.State);
 
 		expect(harness.objects["inbox.read.01"].type).to.equal("channel");
 		expect(harness.objects["inbox.unread.01"]).to.equal(undefined);
-		expect(harness.values.get("inbox.read.01.readLocally")).to.equal(false);
+		expect(harness.values.get("inbox.read.01.markAsUnread")).to.equal(false);
 		expect(harness.values.get("inbox.read.count")).to.equal(1);
 		expect(harness.values.get("inbox.unread.count")).to.equal(0);
 	});
@@ -844,7 +864,7 @@ describe("upcoming exams adapter states", () => {
 		expect(readObjectName("dateTime").de).to.equal("Datum und Uhrzeit");
 		expect(readObjectName("hasAttachments").de).to.equal("Hat Anhänge");
 		expect(readObjectName("id").de).to.equal("Mitteilungs-ID");
-		expect(readObjectName("read").de).to.equal("Gelesen");
+		expect(readObjectName("read").de).to.equal("Gelesen (lokal oder WebUntis)");
 		expect(readObjectName("readInWebUntis").de).to.equal("In WebUntis gelesen");
 		expect(readObjectName("sender").de).to.equal("Absender");
 		expect(readObjectName("subject").de).to.equal("Fach");
