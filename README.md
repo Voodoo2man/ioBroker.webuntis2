@@ -145,7 +145,7 @@ successful data.
 
 ## Requirements and notes
 
-- Node.js 24 or newer, js-controller 7.2.2 or newer, and Admin 8.2.0 or newer are required.
+- Node.js 22.19 or newer, js-controller 7.2.2 or newer, and Admin 8.2.0 or newer are required.
 - A WebUntis account with access to the selected school is required.
 - Username-and-password login is supported.
 - QR-code, Microsoft 365, SAML, and OAuth login are not supported.
@@ -168,6 +168,10 @@ and include only relevant, non-sensitive log messages when asking for help.
 [![Donate](https://camo.githubusercontent.com/ef8c60305542390406855547e32850909812a73c4abada236de22a6dc88b313f/68747470733a2f2f7777772e70617970616c6f626a656374732e636f6d2f64655f44452f44452f692f62746e2f62746e5f646f6e61746543435f4c472e676966)](https://www.paypal.com/donate/?hosted_button_id=3RJQGSJNRSHUJ)
 
 ## Changelog
+### **WORK IN PROGRESS**
+
+- (Voodoo2man) Added support for Node.js 22.19 and newer while retaining Node.js 24 and 26 CI coverage.
+
 ### 0.2.1 (2026-10-28)
 
 - (Voodoo2man) Moved read and unread messages directly under inbox, renamed the unread count state to inbox.unread.count, and removed the redundant JSON state.
