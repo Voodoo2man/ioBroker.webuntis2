@@ -171,6 +171,7 @@ and include only relevant, non-sensitive log messages when asking for help.
 ### **WORK IN PROGRESS**
 
 - (Voodoo2man) Added support for Node.js 22.19 and newer while retaining Node.js 24 and 26 CI coverage.
+- (Voodoo2man) Resolved the reported `qs` and `minimatch` development-dependency alerts.
 
 ### 0.2.1 (2026-10-28)
 
