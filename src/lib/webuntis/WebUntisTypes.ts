@@ -99,6 +99,8 @@ export type WebUntisErrorCode =
 	| "HTML_RESPONSE"
 	| "REDIRECTED"
 	| "SESSION_EXPIRED"
+	| "FORBIDDEN"
+	| "MODULE_UNAVAILABLE"
 	| "API_REQUEST"
 	| "UNEXPECTED_RESPONSE";
 
@@ -200,6 +202,75 @@ export interface WebUntisInboxMessage {
 	content: string;
 	contentIsPreview: boolean;
 	hasAttachments: boolean;
+}
+
+export interface WebUntisMessageOfDay {
+	id: string;
+	subject: string;
+	text: string;
+	hasAttachments: boolean;
+}
+
+export interface WebUntisStudentIdentity {
+	id: number;
+	name: string;
+}
+
+export interface WebUntisSchoolYear {
+	id: number;
+	name: string;
+	startDate: string;
+	endDate: string;
+}
+
+export type WebUntisHomeworkStatus = boolean | "unknown";
+
+export interface WebUntisHomework {
+	id: string | number;
+	date?: string;
+	dueDate?: string;
+	text?: string;
+	remark?: string;
+	attachments?: unknown[];
+	lessonId?: number;
+	studentId?: number;
+	subject?: string;
+	teacher?: string;
+	status: WebUntisHomeworkStatus;
+}
+
+export interface WebUntisAbsence {
+	id: number;
+	studentId: number;
+	startDate: string;
+	endDate: string;
+	startTime?: number;
+	endTime?: number;
+	reason?: string;
+	text?: string;
+	createDate?: number;
+	lastUpdate?: number;
+	createdUser?: string;
+	updatedUser?: string;
+	reasonId?: number;
+	interruptions?: unknown;
+	canEdit?: boolean;
+	studentName?: string;
+	excuseId?: number;
+	excuseUserId?: number;
+	excuseUsername?: string;
+	isExcused?: boolean;
+	excuseStatus: string;
+	excuseText?: string;
+	excuseDate?: string;
+}
+
+export interface WebUntisAbsenceResponse {
+	absences: WebUntisAbsence[];
+	absenceReasons: unknown;
+	excuseStatuses: unknown;
+	showAbsenceReasonChange?: boolean;
+	showCreateAbsence?: boolean;
 }
 
 export interface TimetableQuery {

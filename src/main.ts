@@ -25,13 +25,121 @@ import {
 } from "./lib/webuntis/Timetable";
 import { WebUntisError } from "./lib/webuntis/WebUntisErrors";
 import { WebUntisService, type WebUntisConnectionConfig } from "./lib/webuntis/WebUntisService";
-import type { WebUntisHttpDiagnostic, WebUntisInboxMessage } from "./lib/webuntis/WebUntisTypes";
+import type {
+	WebUntisAbsence,
+	WebUntisHomework,
+	WebUntisHttpDiagnostic,
+	WebUntisInboxMessage,
+	WebUntisMessageOfDay,
+	WebUntisStudentIdentity,
+} from "./lib/webuntis/WebUntisTypes";
 
 const TIMETABLE_INTERVAL_MS = 5 * 60 * 1000;
 const CURRENT_NEXT_INTERVAL_MS = 60 * 1000;
 const EXAMS_MAX_ATTEMPTS = 3;
 const TIMETABLE_GROUPS = ["today", "tomorrow", "week"] as const;
+type AdapterStateDefinition = {
+	type: "string" | "number" | "boolean";
+	role: string;
+	name: ioBroker.Translated;
+	def: string | number | boolean | null;
+	unit?: string;
+};
+const HOMEWORK_STATE_DEFINITIONS: Record<
+	| "id"
+	| "lessonId"
+	| "subject"
+	| "teacher"
+	| "date"
+	| "dueDate"
+	| "text"
+	| "remark"
+	| "completed"
+	| "completedKnown"
+	| "hasAttachments",
+	AdapterStateDefinition
+> = {
+	id: { type: "string", role: "text", name: translatedName("homeworkId"), def: "" },
+	lessonId: { type: "string", role: "text", name: translatedName("lessonId"), def: "" },
+	subject: { type: "string", role: "text", name: translatedName("subject"), def: "" },
+	teacher: { type: "string", role: "text", name: translatedName("teacher"), def: "" },
+	date: { type: "string", role: "date", name: translatedName("date"), def: "" },
+	dueDate: { type: "string", role: "date", name: translatedName("dueDate"), def: "" },
+	text: { type: "string", role: "text", name: translatedName("homeworkText"), def: "" },
+	remark: { type: "string", role: "text", name: translatedName("remark"), def: "" },
+	completed: { type: "boolean", role: "indicator", name: translatedName("completed"), def: null },
+	completedKnown: { type: "boolean", role: "indicator", name: translatedName("completedKnown"), def: false },
+	hasAttachments: { type: "boolean", role: "indicator", name: translatedName("hasAttachments"), def: false },
+};
+const ABSENCE_STATE_DEFINITIONS: Record<
+	| "startDate"
+	| "endDate"
+	| "startTime"
+	| "endTime"
+	| "reason"
+	| "excuseStatus"
+	| "excuseStatusKnown"
+	| "excuseText"
+	| "isExcused",
+	AdapterStateDefinition
+> = {
+	startDate: { type: "string", role: "date", name: translatedName("startDate"), def: "" },
+	endDate: { type: "string", role: "date", name: translatedName("endDate"), def: "" },
+	startTime: { type: "string", role: "text", name: translatedName("absenceStartTime"), def: "" },
+	endTime: { type: "string", role: "text", name: translatedName("absenceEndTime"), def: "" },
+	reason: { type: "string", role: "text", name: translatedName("reason"), def: "" },
+	excuseStatus: { type: "string", role: "text", name: translatedName("excuseStatus"), def: "unknown" },
+	excuseStatusKnown: {
+		type: "boolean",
+		role: "indicator",
+		name: translatedName("excuseStatusKnown"),
+		def: false,
+	},
+	excuseText: { type: "string", role: "text", name: translatedName("excuseText"), def: "" },
+	isExcused: { type: "boolean", role: "indicator", name: translatedName("isExcused"), def: null },
+};
+const ABSENCE_STATE_ALLOWED_IDS = new Set(Object.keys(ABSENCE_STATE_DEFINITIONS));
+const ABSENCE_JSON_STATE_DEFINITION: AdapterStateDefinition = {
+	type: "string",
+	role: "json",
+	name: translatedName("absencesJson"),
+	def: "[]",
+};
+const NEWS_OF_DAY_STATE_DEFINITIONS: Record<
+	"date" | "count" | "json" | "id" | "subject" | "text" | "hasAttachments",
+	{
+		type: "string" | "number" | "boolean";
+		role: string;
+		name: ioBroker.Translated;
+		def: string | number | boolean;
+	}
+> = {
+	date: { type: "string", role: "date", name: translatedName("date"), def: "" },
+	count: { type: "number", role: "value", name: translatedName("messageCount"), def: 0 },
+	json: { type: "string", role: "json", name: translatedName("messagesJson"), def: "[]" },
+	id: { type: "string", role: "text", name: translatedName("messageId"), def: "" },
+	subject: { type: "string", role: "text", name: translatedName("subject"), def: "" },
+	text: { type: "string", role: "text", name: translatedName("messageText"), def: "" },
+	hasAttachments: { type: "boolean", role: "indicator", name: translatedName("hasAttachments"), def: false },
+};
 type TimetableGroup = (typeof TIMETABLE_GROUPS)[number];
+
+function absenceExcusedValue(absence: WebUntisAbsence): boolean | undefined {
+	if (absence.isExcused !== undefined) {
+		return absence.isExcused;
+	}
+	const status = absence.excuseStatus
+		?.trim()
+		.toLocaleLowerCase()
+		.replace(/[ _-]+/g, "");
+	if (status === "excused") {
+		return true;
+	}
+	if (status === "unexcused" || status === "notexcused") {
+		return false;
+	}
+	return undefined;
+}
 
 function studentChannelIds(students: Array<{ id: number; name: string }>): Map<number, string> {
 	const normalize = (name: string): string =>
@@ -173,7 +281,11 @@ class WebuntisNext extends utils.Adapter {
 	private inboxMutationQueue: Promise<void> = Promise.resolve();
 	private refreshMutationQueue: Promise<void> = Promise.resolve();
 	private lastMessageWarningAt = 0;
+	private lastNewsOfDayWarningAt = 0;
+	private lastHomeworkWarningAt = 0;
+	private lastAbsencesWarningAt = 0;
 	private lastExamsWarningAt = 0;
+	private knownStudentIdentities?: Array<{ id: number; name: string }>;
 
 	private async ensureTranslatedObject(
 		id: string,
@@ -684,7 +796,9 @@ class WebuntisNext extends utils.Adapter {
 		);
 		await this.ensureStudentsRoot();
 		await this.ensureInboxRoot();
+		await this.ensureNewsOfDayRoot();
 		await this.ensureHolidaysRoot();
+		await this.cleanupObsoleteStructure();
 		await this.setState("info.connection", false, true);
 		if (!this.hasConnectionConfig()) {
 			return;
@@ -709,8 +823,8 @@ class WebuntisNext extends utils.Adapter {
 		}
 		await this.ensureStudentsRoot();
 		await this.ensureInboxRoot();
+		await this.ensureNewsOfDayRoot();
 		await this.ensureHolidaysRoot();
-		await this.cleanupObsoleteStructure();
 		await this.updateTimetableLocked();
 		await this.updateCurrentNextStatesLocked();
 	}
@@ -758,6 +872,25 @@ class WebuntisNext extends utils.Adapter {
 			return;
 		}
 		await this.setState("info.lastUpdate", new Date().toISOString(), true);
+		const refreshNow = new Date();
+		try {
+			const now = new Date();
+			const messages = await this.webUntis.loadMessagesOfDay(this.config, now);
+			if (!this.unloaded) {
+				await this.writeMessagesOfDay(messages, now);
+			}
+			this.lastNewsOfDayWarningAt = 0;
+		} catch (error) {
+			const warningIntervalMs = 30 * 60 * 1000;
+			if (!this.unloaded && Date.now() - this.lastNewsOfDayWarningAt >= warningIntervalMs) {
+				const code = error instanceof WebUntisError ? error.code : "UNEXPECTED_RESPONSE";
+				const detail = error instanceof Error ? ` (${error.message})` : "";
+				this.log.warn(
+					`WebUntis messages-of-day refresh failed: ${code}${detail}; previous message data was kept`,
+				);
+				this.lastNewsOfDayWarningAt = Date.now();
+			}
+		}
 		try {
 			const unreadMessages = await this.webUntis.loadUnreadMessages(this.config);
 			await this.writeUnreadMessages(unreadMessages);
@@ -775,7 +908,7 @@ class WebuntisNext extends utils.Adapter {
 			await cleanupLegacyNamespace(this, "messages");
 			await this.ensureStudentsRoot();
 			await this.ensureHolidaysRoot();
-			const now = new Date();
+			const now = refreshNow;
 			const data = await this.webUntis.loadTimetable(this.config, now);
 			if (this.unloaded) {
 				return;
@@ -788,6 +921,7 @@ class WebuntisNext extends utils.Adapter {
 					? [{ id: data.studentId, name: `Student ${data.studentId}`, timetable: data }]
 					: [];
 			const childChannelIds = studentChannelIds(students);
+			this.knownStudentIdentities = students.map(({ id, name }) => ({ id, name }));
 			this.todayLessons = students[0]?.timetable.today ?? data.today;
 			this.hasTimetableSnapshot = true;
 			let updated = 0;
@@ -914,6 +1048,234 @@ class WebuntisNext extends utils.Adapter {
 			const detail = error instanceof Error ? ` (${error.message})` : "";
 			this.log.warn(`Timetable update failed: ${code}${detail}; existing timetable data was kept`);
 		}
+		if (!this.unloaded) {
+			await this.updateHomeworkAndAbsences();
+		}
+	}
+
+	private async updateHomeworkAndAbsences(): Promise<void> {
+		if (this.unloaded || !this.hasConnectionConfig()) {
+			return;
+		}
+		const warningIntervalMs = 30 * 60 * 1000;
+		const identities = this.knownStudentIdentities?.length
+			? this.knownStudentIdentities
+			: await this.loadStudentIdentitiesForOptionalRefresh();
+		if (!identities) {
+			return;
+		}
+		const channelIds = studentChannelIds(identities);
+		for (const student of identities) {
+			const studentRoot = `students.${channelIds.get(student.id)!}`;
+			await this.ensureTranslatedObject(
+				studentRoot,
+				{
+					type: "channel",
+					common: { name: student.name || `Student ${student.id}` },
+					native: { studentId: student.id },
+				},
+				student.name || `Student ${student.id}`,
+			);
+			await this.ensureTranslatedObject(`${studentRoot}.absences`, {
+				type: "channel",
+				common: { name: translatedName("absences") },
+				native: {},
+			});
+		}
+		let schoolYear: Awaited<ReturnType<WebUntisService["loadCurrentSchoolYear"]>>;
+		try {
+			schoolYear = await this.webUntis.loadCurrentSchoolYear(this.config);
+		} catch (error) {
+			this.logOptionalRefreshFailure("homework and absences", error, "lastHomeworkWarningAt", warningIntervalMs);
+			this.logOptionalRefreshFailure("homework and absences", error, "lastAbsencesWarningAt", warningIntervalMs);
+			return;
+		}
+		const startDate = Number(schoolYear.startDate.replace(/-/g, ""));
+		const endDate = Number(schoolYear.endDate.replace(/-/g, ""));
+		if (!Number.isSafeInteger(startDate) || !Number.isSafeInteger(endDate) || startDate > endDate) {
+			return;
+		}
+
+		try {
+			const homeworks = await this.webUntis.loadHomework(this.config, startDate, endDate, schoolYear);
+			if (this.unloaded) {
+				return;
+			}
+			const grouped = new Map(identities.map(student => [student.id, [] as WebUntisHomework[]]));
+			const unassigned: WebUntisHomework[] = [];
+			for (const homework of homeworks) {
+				const studentId = homework.studentId ?? (identities.length === 1 ? identities[0].id : undefined);
+				if (studentId !== undefined && grouped.has(studentId)) {
+					grouped.get(studentId)!.push(homework);
+				} else {
+					unassigned.push(homework);
+				}
+			}
+			const homeworkName = translatedName("homework");
+			await this.ensureTranslatedObject("homework", {
+				type: "channel",
+				common: { name: homeworkName },
+				native: {},
+			});
+			for (const student of identities) {
+				const studentRoot = `students.${channelIds.get(student.id)!}`;
+				const records = grouped.get(student.id) ?? [];
+				records.sort(
+					(a, b) =>
+						(a.dueDate ?? a.date ?? "9999-12-31").localeCompare(b.dueDate ?? b.date ?? "9999-12-31") ||
+						String(a.id).localeCompare(String(b.id)),
+				);
+				const root = `${studentRoot}.homework`;
+				await this.writeNumberedRecords(
+					root,
+					records.map(homework => this.homeworkStateValues(homework)),
+					HOMEWORK_STATE_DEFINITIONS,
+					homeworkName,
+				);
+				await this.writeCountState(`${root}.count`, translatedName("homeworkCount"), records.length);
+				await this.writeCountState(
+					`${root}.openCount`,
+					translatedName("openHomeworkCount"),
+					records.filter(item => item.status === false).length,
+				);
+				await this.writeCountState(
+					`${root}.completedCount`,
+					translatedName("completedHomeworkCount"),
+					records.filter(item => item.status === true).length,
+				);
+				await this.writeCountState(
+					`${root}.unknownCount`,
+					translatedName("unknownCount"),
+					records.filter(item => item.status === "unknown").length,
+				);
+			}
+			unassigned.sort(
+				(a, b) =>
+					(a.dueDate ?? a.date ?? "9999-12-31").localeCompare(b.dueDate ?? b.date ?? "9999-12-31") ||
+					String(a.id).localeCompare(String(b.id)),
+			);
+			await this.writeNumberedRecords(
+				"homework.unassigned",
+				unassigned.map(homework => this.homeworkStateValues(homework)),
+				HOMEWORK_STATE_DEFINITIONS,
+				homeworkName,
+			);
+			await this.writeCountState("homework.unassigned.count", translatedName("homeworkCount"), unassigned.length);
+			await this.writeCountState(
+				"homework.unassigned.openCount",
+				translatedName("openHomeworkCount"),
+				unassigned.filter(item => item.status === false).length,
+			);
+			await this.writeCountState(
+				"homework.unassigned.completedCount",
+				translatedName("completedHomeworkCount"),
+				unassigned.filter(item => item.status === true).length,
+			);
+			await this.writeCountState(
+				"homework.unassigned.unknownCount",
+				translatedName("unknownCount"),
+				unassigned.filter(item => item.status === "unknown").length,
+			);
+			this.lastHomeworkWarningAt = 0;
+		} catch (error) {
+			this.logOptionalRefreshFailure("homework", error, "lastHomeworkWarningAt", warningIntervalMs);
+		}
+
+		let absencesFailed = false;
+		for (const student of identities) {
+			if (this.unloaded) {
+				return;
+			}
+			try {
+				const channelId = channelIds.get(student.id)!;
+				const root = `students.${channelId}.absences`;
+				const absenceResponse = await this.webUntis.loadAbsences(
+					this.config,
+					student.id,
+					startDate,
+					endDate,
+					schoolYear,
+					identities.map(identity => identity.id),
+				);
+				if (this.unloaded) {
+					return;
+				}
+				const absences = absenceResponse.absences;
+				const sortedAbsences = absences
+					.slice()
+					.sort((a, b) => a.startDate.localeCompare(b.startDate) || a.id - b.id);
+				const records = sortedAbsences.map(absence => this.absenceStateValues(absence));
+				await this.writeNumberedRecords(root, records, ABSENCE_STATE_DEFINITIONS, translatedName("absences"));
+				await this.writeTypedState(`${root}.json`, JSON.stringify(records), ABSENCE_JSON_STATE_DEFINITION);
+			} catch (error) {
+				absencesFailed = true;
+				this.logOptionalRefreshFailure("absences", error, "lastAbsencesWarningAt", warningIntervalMs);
+			}
+		}
+		if (!absencesFailed) {
+			this.lastAbsencesWarningAt = 0;
+		}
+	}
+
+	private async loadStudentIdentitiesForOptionalRefresh(): Promise<WebUntisStudentIdentity[] | undefined> {
+		try {
+			const students = await this.webUntis.loadStudentIdentities(this.config);
+			if (!this.unloaded) {
+				this.knownStudentIdentities = students;
+			}
+			return students;
+		} catch (error) {
+			this.logOptionalRefreshFailure("student identity lookup", error, "lastAbsencesWarningAt", 30 * 60 * 1000);
+			return undefined;
+		}
+	}
+
+	private homeworkStateValues(homework: WebUntisHomework): Record<string, ioBroker.StateValue> {
+		return {
+			id: String(homework.id),
+			lessonId: homework.lessonId === undefined ? "" : String(homework.lessonId),
+			subject: homework.subject ?? "",
+			teacher: homework.teacher ?? "",
+			date: homework.date ?? "",
+			dueDate: homework.dueDate ?? "",
+			text: homework.text ?? "",
+			remark: homework.remark ?? "",
+			completed: homework.status === "unknown" ? null : homework.status,
+			completedKnown: homework.status !== "unknown",
+			hasAttachments: (homework.attachments?.length ?? 0) > 0,
+		};
+	}
+
+	private absenceStateValues(absence: WebUntisAbsence): Record<string, ioBroker.StateValue> {
+		const isExcused = absenceExcusedValue(absence);
+		const excuseStatus =
+			absence.excuseStatus || (isExcused === undefined ? "unknown" : isExcused ? "excused" : "unexcused");
+		return {
+			startDate: absence.startDate,
+			endDate: absence.endDate,
+			startTime: absence.startTime === undefined ? "" : String(absence.startTime),
+			endTime: absence.endTime === undefined ? "" : String(absence.endTime),
+			reason: absence.reason ?? "",
+			excuseStatus,
+			excuseStatusKnown: isExcused !== undefined,
+			excuseText: absence.excuseText ?? "",
+			isExcused: isExcused === undefined ? null : isExcused,
+		};
+	}
+
+	private logOptionalRefreshFailure(
+		area: string,
+		error: unknown,
+		warningKey: "lastHomeworkWarningAt" | "lastAbsencesWarningAt",
+		warningIntervalMs: number,
+	): void {
+		const lastWarning = this[warningKey];
+		if (this.unloaded || Date.now() - lastWarning < warningIntervalMs) {
+			return;
+		}
+		const code = error instanceof WebUntisError ? error.code : "UNEXPECTED_RESPONSE";
+		this.log.warn(`WebUntis ${area} refresh failed: ${code}; previous data was kept`);
+		this[warningKey] = Date.now();
 	}
 
 	private async loadUpcomingExamsWithRetry(now: Date): Promise<UpcomingExam[]> {
@@ -961,6 +1323,145 @@ class WebuntisNext extends utils.Adapter {
 					await this.delObjectAsync(`students.${studentId}`, { recursive: true });
 				}
 			}
+		}
+	}
+
+	private async ensureNewsOfDayRoot(): Promise<void> {
+		await this.ensureTranslatedObject(
+			"newsOfDay",
+			{ type: "channel", common: { name: translatedName("newsOfDay") }, native: {} },
+			"Messages of the day",
+		);
+		await this.ensureTranslatedObject(
+			"newsOfDay.today",
+			{ type: "channel", common: { name: translatedName("today") }, native: {} },
+			"Today",
+		);
+	}
+
+	private async writeMessagesOfDay(messages: WebUntisMessageOfDay[], today: Date): Promise<void> {
+		this.ensureActive();
+		const todayPath = "newsOfDay.today";
+		await this.writeNewsOfDayState(`${todayPath}.date`, this.timetableDate(today));
+		await this.writeNewsOfDayState(`${todayPath}.count`, messages.length);
+		await this.writeNewsOfDayState(`${todayPath}.json`, JSON.stringify(messages));
+
+		const expected = new Set(messages.map((_, index) => String(index + 1).padStart(2, "0")));
+		const existing = await this.getObjectListAsync({
+			startkey: `${this.namespace}.${todayPath}.`,
+			endkey: `${this.namespace}.${todayPath}.\uffff`,
+		});
+		const stale = new Set<string>();
+		for (const object of existing.rows || []) {
+			const remainder = object.id.replace(`${this.namespace}.${todayPath}.`, "");
+			const slot = remainder.split(".")[0];
+			if (/^\d+$/.test(slot) && !expected.has(slot)) {
+				stale.add(slot);
+			}
+		}
+		for (const [index, message] of messages.entries()) {
+			this.ensureActive();
+			const messagePath = `${todayPath}.${String(index + 1).padStart(2, "0")}`;
+			await this.ensureTranslatedObject(
+				messagePath,
+				{ type: "channel", common: { name: translatedName("message") }, native: {} },
+				"Message",
+			);
+			for (const [field, value] of Object.entries({
+				id: message.id,
+				subject: message.subject,
+				text: message.text,
+				hasAttachments: message.hasAttachments,
+			})) {
+				await this.writeNewsOfDayState(`${messagePath}.${field}`, value);
+			}
+		}
+		for (const slot of stale) {
+			await this.delObjectAsync(`${todayPath}.${slot}`, { recursive: true });
+		}
+	}
+
+	private async writeNewsOfDayState(id: string, value: string | number | boolean): Promise<void> {
+		this.ensureActive();
+		const definition =
+			NEWS_OF_DAY_STATE_DEFINITIONS[id.split(".").at(-1) as keyof typeof NEWS_OF_DAY_STATE_DEFINITIONS];
+		if (!definition) {
+			throw new Error(`Unknown messages-of-day state: ${id}`);
+		}
+		await this.writeTypedState(id, value, definition);
+	}
+
+	private async writeTypedState(
+		id: string,
+		value: ioBroker.StateValue,
+		definition: AdapterStateDefinition,
+	): Promise<void> {
+		this.ensureActive();
+		await this.ensureTranslatedObject(id, {
+			type: "state",
+			common: {
+				name: definition.name,
+				type: definition.type,
+				role: definition.role,
+				read: true,
+				write: false,
+				def: definition.def,
+				...(definition.unit ? { unit: definition.unit } : {}),
+			},
+			native: {},
+		});
+		this.ensureActive();
+		await setStateChangedOrInitialize(this, id, value);
+	}
+
+	private async writeCountState(id: string, name: ioBroker.Translated, value: number): Promise<void> {
+		await this.writeTypedState(id, value, { type: "number", role: "value", name, def: 0 });
+	}
+
+	private async writeNumberedRecords(
+		root: string,
+		records: Array<Record<string, ioBroker.StateValue>>,
+		definitions: Record<string, AdapterStateDefinition>,
+		channelName: ioBroker.Translated,
+	): Promise<void> {
+		this.ensureActive();
+		await this.ensureTranslatedObject(root, {
+			type: "channel",
+			common: { name: channelName },
+			native: {},
+		});
+		const expected = new Set(records.map((_, index) => String(index + 1).padStart(2, "0")));
+		const existing = await this.getObjectListAsync({
+			startkey: `${this.namespace}.${root}.`,
+			endkey: `${this.namespace}.${root}.\uffff`,
+		});
+		const stale = new Set<string>();
+		for (const object of existing.rows || []) {
+			const remainder = object.id.replace(`${this.namespace}.${root}.`, "");
+			const slot = remainder.split(".")[0];
+			if (/^\d+$/.test(slot) && slot !== "0" && !expected.has(slot)) {
+				stale.add(slot);
+			}
+		}
+		for (const [index, record] of records.entries()) {
+			this.ensureActive();
+			const slot = String(index + 1).padStart(2, "0");
+			const channelId = `${root}.${slot}`;
+			await this.ensureTranslatedObject(channelId, {
+				type: "channel",
+				common: { name: channelName },
+				native: {},
+			});
+			for (const [field, value] of Object.entries(record)) {
+				const definition = definitions[field];
+				if (definition) {
+					await this.writeTypedState(`${channelId}.${field}`, value, definition);
+				}
+			}
+		}
+		for (const slot of stale) {
+			this.ensureActive();
+			await this.delObjectAsync(`${root}.${slot}`, { recursive: true });
 		}
 	}
 
@@ -1605,6 +2106,47 @@ class WebuntisNext extends utils.Adapter {
 			for (const object of existing.rows || []) {
 				if (/\.(?:dateTimestamp|startDateTimestamp|endDateTimestamp)$/.test(object.id)) {
 					await this.delObjectAsync(object.id.slice(this.namespace.length + 1));
+				}
+			}
+		}
+		await this.cleanupAbsenceStructure();
+	}
+
+	private async cleanupAbsenceStructure(): Promise<void> {
+		const existing = await this.getObjectListAsync({
+			startkey: `${this.namespace}.students.`,
+			endkey: `${this.namespace}.students.\uffff`,
+		});
+		const roots = new Set<string>();
+		for (const object of existing.rows || []) {
+			const match = object.id.slice(this.namespace.length + 1).match(/^(students\..+?\.absences)(?:\.|$)/);
+			if (match) {
+				roots.add(match[1]);
+			}
+		}
+		for (const relativeRoot of roots) {
+			const root = `${this.namespace}.${relativeRoot}`;
+			const objects = await this.getObjectListAsync({ startkey: `${root}.`, endkey: `${root}.\uffff` });
+			const rows = (objects.rows || []).slice().sort((a, b) => a.id.length - b.id.length);
+			const removed = new Set<string>();
+			for (const object of rows) {
+				if (Array.from(removed).some(id => object.id.startsWith(`${id}.`))) {
+					continue;
+				}
+				const remainder = object.id.slice(root.length + 1);
+				const parts = remainder.split(".");
+				const isJsonState = remainder === "json" && object.value.type === "state";
+				const isEntryChannel =
+					parts.length === 1 && /^\d{2}$/.test(parts[0]) && object.value.type === "channel";
+				const isEntryState =
+					parts.length === 2 &&
+					/^\d{2}$/.test(parts[0]) &&
+					ABSENCE_STATE_ALLOWED_IDS.has(parts[1]) &&
+					object.value.type === "state";
+				if (!isJsonState && !isEntryChannel && !isEntryState) {
+					const relativeId = object.id.slice(this.namespace.length + 1);
+					await this.delObjectAsync(relativeId, { recursive: true });
+					removed.add(object.id);
 				}
 			}
 		}

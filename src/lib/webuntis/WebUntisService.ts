@@ -13,8 +13,13 @@ import type {
 	WebUntisConnectionConfig,
 	WebUntisHttpDiagnostic,
 	WebUntisInboxMessage,
+	WebUntisMessageOfDay,
 	WebUntisPeriod,
 	WebUntisSession,
+	WebUntisAbsenceResponse,
+	WebUntisHomework,
+	WebUntisSchoolYear,
+	WebUntisStudentIdentity,
 } from "./WebUntisTypes";
 
 const MASTERDATA_TTL_MS = 6 * 60 * 60 * 1000;
@@ -26,6 +31,38 @@ interface MasterDataCache {
 	fetchedAt: number;
 	retryAfter: number;
 	loading?: Promise<TimetableMasterData>;
+}
+
+function validDateNumber(value: number): boolean {
+	if (!Number.isSafeInteger(value)) {
+		return false;
+	}
+	const text = String(value);
+	if (!/^\d{8}$/.test(text)) {
+		return false;
+	}
+	const date = new Date(Date.UTC(Number(text.slice(0, 4)), Number(text.slice(4, 6)) - 1, Number(text.slice(6, 8))));
+	return (
+		date.getUTCFullYear() === Number(text.slice(0, 4)) &&
+		date.getUTCMonth() === Number(text.slice(4, 6)) - 1 &&
+		date.getUTCDate() === Number(text.slice(6, 8))
+	);
+}
+
+function boundedDateRange(
+	startDate: number,
+	endDate: number,
+	schoolYear: WebUntisSchoolYear,
+): { startDate: number; endDate: number } {
+	if (!validDateNumber(startDate) || !validDateNumber(endDate) || startDate > endDate) {
+		throw new WebUntisError("INVALID_CONFIG", "Invalid homework or absence date range");
+	}
+	const start = Math.max(startDate, Number(schoolYear.startDate.replace(/-/g, "")));
+	const end = Math.min(endDate, Number(schoolYear.endDate.replace(/-/g, "")));
+	if (start > end) {
+		throw new WebUntisError("API_REQUEST", "Requested date range is outside the active WebUntis school year");
+	}
+	return { startDate: start, endDate: end };
 }
 
 /**
@@ -85,6 +122,105 @@ export class WebUntisService {
 			this.session = undefined;
 			this.sessionKey = undefined;
 			return this.loadTimetableWithSession(config, now);
+		}
+	}
+
+	public loadStudentIdentities(config: WebUntisConnectionConfig): Promise<WebUntisStudentIdentity[]> {
+		return this.withSessionRetry(config, (client, session) => this.getStudentIdentities(client, session));
+	}
+
+	public loadCurrentSchoolYear(config: WebUntisConnectionConfig): Promise<WebUntisSchoolYear> {
+		return this.withSessionRetry(config, (client, session) => client.getCurrentSchoolyear(session));
+	}
+
+	public loadHomework(
+		config: WebUntisConnectionConfig,
+		startDate: number,
+		endDate: number,
+		schoolYear?: WebUntisSchoolYear,
+	): Promise<WebUntisHomework[]> {
+		return this.withSessionRetry(config, async (client, session) => {
+			const activeSchoolYear = schoolYear ?? (await client.getCurrentSchoolyear(session));
+			const range = boundedDateRange(startDate, endDate, activeSchoolYear);
+			return client.getHomeworks(session, range.startDate, range.endDate);
+		});
+	}
+
+	public loadAbsences(
+		config: WebUntisConnectionConfig,
+		studentId: number,
+		startDate: number,
+		endDate: number,
+		schoolYear?: WebUntisSchoolYear,
+		verifiedStudentIds?: readonly number[],
+	): Promise<WebUntisAbsenceResponse> {
+		return this.withSessionRetry(config, async (client, session) => {
+			const studentIds =
+				verifiedStudentIds ?? (await this.getStudentIdentities(client, session)).map(student => student.id);
+			if (!studentIds.includes(studentId)) {
+				throw new WebUntisError("API_REQUEST", "Requested student is not linked to the WebUntis account");
+			}
+			const activeSchoolYear = schoolYear ?? (await client.getCurrentSchoolyear(session));
+			const range = boundedDateRange(startDate, endDate, activeSchoolYear);
+			return client.getAbsences(session, studentId, range.startDate, range.endDate);
+		});
+	}
+
+	private async getStudentIdentities(
+		client: WebUntisClient,
+		session: WebUntisSession,
+	): Promise<WebUntisStudentIdentity[]> {
+		if (session.personType === 5) {
+			if (!Number.isSafeInteger(session.personId) || session.personId <= 0) {
+				throw new WebUntisError("INVALID_RESPONSE", "Invalid WebUntis student session identity");
+			}
+			return [{ id: session.personId, name: "" }];
+		}
+		if (session.personType === 12) {
+			return client.getLinkedStudents(session);
+		}
+		throw new WebUntisError("API_REQUEST", "Student identity is unavailable for this WebUntis account");
+	}
+
+	private async withSessionRetry<T>(
+		config: WebUntisConnectionConfig,
+		operation: (client: WebUntisClient, session: WebUntisSession) => Promise<T>,
+	): Promise<T> {
+		let context = await this.getSession(config);
+		try {
+			return await operation(context.client, context.session);
+		} catch (error) {
+			if (error instanceof WebUntisError && error.code === "SESSION_EXPIRED") {
+				this.sessionClient = undefined;
+				this.session = undefined;
+				this.sessionKey = undefined;
+				context = await this.getSession(config);
+				return operation(context.client, context.session);
+			}
+			if (error instanceof WebUntisError) {
+				throw error;
+			}
+			throw new WebUntisError(classifyWebUntisError(error), "WebUntis request failed", { cause: error });
+		}
+	}
+
+	public async loadMessagesOfDay(
+		config: WebUntisConnectionConfig,
+		date = new Date(),
+	): Promise<WebUntisMessageOfDay[]> {
+		const webUntisDate = date.getFullYear() * 10000 + (date.getMonth() + 1) * 100 + date.getDate();
+		let { client, session } = await this.getSession(config);
+		try {
+			return await client.getMessagesOfDay(session, webUntisDate);
+		} catch (error) {
+			if (!(error instanceof WebUntisError) || error.code !== "SESSION_EXPIRED") {
+				throw error;
+			}
+			this.sessionClient = undefined;
+			this.session = undefined;
+			this.sessionKey = undefined;
+			({ client, session } = await this.getSession(config));
+			return client.getMessagesOfDay(session, webUntisDate);
 		}
 	}
 

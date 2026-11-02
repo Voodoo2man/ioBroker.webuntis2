@@ -1,6 +1,7 @@
 /* eslint-disable jsdoc/no-blank-blocks, jsdoc/require-param */
 
 import { normalizeGuardianTimetableExams } from "./Exams";
+import { normalizeLessons, resolveTimetableReferences, type TimetableMasterData } from "./Timetable";
 import type { HolidayEntry } from "./Holidays";
 import { WebUntisError } from "./WebUntisErrors";
 import type {
@@ -8,8 +9,11 @@ import type {
 	WebUntisConnectionConfig,
 	WebUntisHttpDiagnostic,
 	WebUntisInboxMessage,
+	WebUntisMessageOfDay,
 	WebUntisPeriod,
 	WebUntisSession,
+	WebUntisAbsenceResponse,
+	WebUntisHomework,
 } from "./WebUntisTypes";
 
 const REQUEST_TIMEOUT_MS = 10_000;
@@ -23,6 +27,14 @@ export function localDateString(date: Date): string {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
 	return typeof value === "object" && value !== null;
+}
+
+function isOptionalString(value: unknown): value is string | null | undefined {
+	return value == null || typeof value === "string";
+}
+
+function isNullableString(value: unknown): value is string | null {
+	return value === null || typeof value === "string";
 }
 
 function guardianTimetableResponseShape(value: unknown): string {
@@ -112,6 +124,54 @@ interface ParentExamContext {
 
 function positiveSafeId(value: unknown): number | undefined {
 	return typeof value === "number" && Number.isSafeInteger(value) && value > 0 ? value : undefined;
+}
+
+function webUntisDate(value: unknown): string | undefined {
+	const text = typeof value === "number" && Number.isSafeInteger(value) ? String(value) : value;
+	const match = typeof text === "string" ? /^(\d{4})-?(\d{2})-?(\d{2})$/.exec(text) : null;
+	if (!match) {
+		return undefined;
+	}
+	const [, yearText, monthText, dayText] = match;
+	const year = Number(yearText);
+	const month = Number(monthText);
+	const day = Number(dayText);
+	const date = new Date(Date.UTC(year, month - 1, day));
+	if (date.getUTCFullYear() !== year || date.getUTCMonth() !== month - 1 || date.getUTCDate() !== day) {
+		return undefined;
+	}
+	return `${yearText}-${monthText}-${dayText}`;
+}
+
+function webUntisDateNumber(value: unknown): number | undefined {
+	const date = webUntisDate(value);
+	return date ? Number(date.replace(/-/g, "")) : undefined;
+}
+
+function homeworkStudentId(value: unknown): number | undefined {
+	if (!isRecord(value) || value.studentId == null) {
+		return undefined;
+	}
+	const studentId = positiveSafeId(value.studentId);
+	if (studentId === undefined) {
+		throw new WebUntisError("INVALID_RESPONSE", "Invalid WebUntis homework student identity");
+	}
+	return studentId;
+}
+
+function plainText(value: string): string {
+	return value
+		.replace(/<script\b[^>]*>[\s\S]*?<\/script\s*>/gi, " ")
+		.replace(/<style\b[^>]*>[\s\S]*?<\/style\s*>/gi, " ")
+		.replace(/<[^>]*>/g, " ")
+		.replace(/&nbsp;|&#160;/gi, " ")
+		.replace(/&amp;/gi, "&")
+		.replace(/&lt;/gi, "<")
+		.replace(/&gt;/gi, ">")
+		.replace(/&quot;/gi, '"')
+		.replace(/&#39;|&apos;/gi, "'")
+		.replace(/[ \t]+/g, " ")
+		.trim();
 }
 
 function safeHeaderId(value: unknown): string | undefined {
@@ -530,6 +590,300 @@ export class WebUntisClient {
 	 */
 	public async getHolidays(session: WebUntisSession): Promise<HolidayEntry[]> {
 		return this.request<HolidayEntry[]>("getHolidays", {}, session);
+	}
+
+	/**
+	 *
+	 */
+	public async getCurrentSchoolyear(
+		session: WebUntisSession,
+	): Promise<{ id: number; name: string; startDate: string; endDate: string }> {
+		const result = await this.request<unknown>("getCurrentSchoolyear", {}, session, isRecord);
+		if (
+			!isRecord(result) ||
+			positiveSafeId(result.id) === undefined ||
+			typeof result.name !== "string" ||
+			!result.name.trim()
+		) {
+			throw new WebUntisError("INVALID_RESPONSE", "Invalid WebUntis current school-year response");
+		}
+		const startDate = webUntisDate(result.startDate);
+		const endDate = webUntisDate(result.endDate);
+		if (!startDate || !endDate || startDate > endDate) {
+			throw new WebUntisError("INVALID_RESPONSE", "Invalid WebUntis current school-year date range");
+		}
+		return { id: result.id as number, name: result.name, startDate, endDate };
+	}
+
+	/**
+	 *
+	 */
+	public async getHomeworks(
+		session: WebUntisSession,
+		startDate: number,
+		endDate: number,
+	): Promise<WebUntisHomework[]> {
+		if (
+			webUntisDateNumber(startDate) !== startDate ||
+			webUntisDateNumber(endDate) !== endDate ||
+			startDate > endDate
+		) {
+			throw new WebUntisError("INVALID_RESPONSE", "Invalid WebUntis homework date range");
+		}
+		const token = await this.getRestToken(session, "homework");
+		const payload = await this.restRequest(
+			`/api/homeworks/lessons?startDate=${startDate}&endDate=${endDate}`,
+			session,
+			token,
+			"getHomeworks",
+		);
+		if (!isRecord(payload) || !isRecord(payload.data)) {
+			throw new WebUntisError("INVALID_RESPONSE", "Invalid WebUntis homework response envelope");
+		}
+		const homeworks = payload.data.homeworks;
+		const lessons = payload.data.lessons ?? [];
+		const teachers = payload.data.teachers ?? [];
+		if (
+			!Array.isArray(homeworks) ||
+			!Array.isArray(lessons) ||
+			!Array.isArray(teachers) ||
+			!homeworks.every(isRecord) ||
+			!lessons.every(isRecord) ||
+			!teachers.every(isRecord)
+		) {
+			throw new WebUntisError("INVALID_RESPONSE", "Invalid WebUntis homework response entries");
+		}
+		const lessonById = new Map<number, Record<string, unknown>>();
+		for (const lesson of lessons) {
+			const id = positiveSafeId(lesson.id);
+			if (id === undefined || lessonById.has(id)) {
+				throw new WebUntisError("INVALID_RESPONSE", "Invalid WebUntis homework lesson identity");
+			}
+			lessonById.set(id, lesson);
+		}
+		const masterData: TimetableMasterData = {
+			subjects: [],
+			teachers: teachers,
+			rooms: [],
+			klassen: [],
+		};
+		return homeworks.map(homework => {
+			const id =
+				typeof homework.id === "string" && homework.id.trim() ? homework.id : positiveSafeId(homework.id);
+			const date = homework.date == null ? undefined : webUntisDate(homework.date);
+			const dueDate = homework.dueDate == null ? undefined : webUntisDate(homework.dueDate);
+			const lessonId = homework.lessonId == null ? undefined : positiveSafeId(homework.lessonId);
+			const status = homework.completed;
+			if (
+				id === undefined ||
+				(!date && !dueDate) ||
+				(homework.date != null && !date) ||
+				(homework.dueDate != null && !dueDate) ||
+				(homework.lessonId != null && lessonId === undefined) ||
+				(status != null && typeof status !== "boolean") ||
+				(homework.text != null && typeof homework.text !== "string") ||
+				(homework.remark != null && typeof homework.remark !== "string") ||
+				(homework.attachments != null && !Array.isArray(homework.attachments))
+			) {
+				throw new WebUntisError("INVALID_RESPONSE", "Invalid WebUntis homework entry");
+			}
+			const lesson = lessonId === undefined ? undefined : lessonById.get(lessonId);
+			const normalizedLesson = lesson
+				? normalizeLessons(resolveTimetableReferences([lesson], masterData))[0]
+				: undefined;
+			const studentId = homeworkStudentId(homework) ?? homeworkStudentId(lesson);
+			return {
+				id,
+				...(date ? { date } : {}),
+				...(dueDate ? { dueDate } : {}),
+				...(typeof homework.text === "string" ? { text: plainText(homework.text) } : {}),
+				...(typeof homework.remark === "string" ? { remark: plainText(homework.remark) } : {}),
+				...(Array.isArray(homework.attachments) ? { attachments: homework.attachments } : {}),
+				...(lessonId !== undefined ? { lessonId } : {}),
+				...(studentId !== undefined ? { studentId } : {}),
+				...(normalizedLesson?.subjectLong || normalizedLesson?.subject
+					? { subject: plainText(normalizedLesson.subjectLong || normalizedLesson.subject) }
+					: {}),
+				...(normalizedLesson?.teacherLong || normalizedLesson?.teacher
+					? { teacher: plainText(normalizedLesson.teacherLong || normalizedLesson.teacher) }
+					: {}),
+				status: typeof status === "boolean" ? status : "unknown",
+			};
+		});
+	}
+
+	/**
+	 *
+	 */
+	public async getAbsences(
+		session: WebUntisSession,
+		studentId: number,
+		startDate: number,
+		endDate: number,
+	): Promise<WebUntisAbsenceResponse> {
+		if (
+			positiveSafeId(studentId) === undefined ||
+			webUntisDateNumber(startDate) !== startDate ||
+			webUntisDateNumber(endDate) !== endDate ||
+			startDate > endDate
+		) {
+			throw new WebUntisError("INVALID_RESPONSE", "Invalid WebUntis absence query");
+		}
+		const token = await this.getRestToken(session, "absences");
+		const payload = await this.restRequest(
+			`/api/classreg/absences/students?startDate=${startDate}&endDate=${endDate}&studentId=${studentId}&excuseStatusId=-1`,
+			session,
+			token,
+			"getAbsences",
+		);
+		if (!isRecord(payload) || !isRecord(payload.data) || !Array.isArray(payload.data.absences)) {
+			throw new WebUntisError("INVALID_RESPONSE", "Invalid WebUntis absences response envelope");
+		}
+		const data = payload.data;
+		const absenceEntries = data.absences;
+		if (!Array.isArray(absenceEntries)) {
+			throw new WebUntisError("INVALID_RESPONSE", "Invalid WebUntis absences response envelope");
+		}
+		for (const flag of ["showAbsenceReasonChange", "showCreateAbsence"]) {
+			if (data[flag] != null && typeof data[flag] !== "boolean") {
+				throw new WebUntisError("INVALID_RESPONSE", "Invalid WebUntis absence response options");
+			}
+		}
+		if (!absenceEntries.every(isRecord)) {
+			throw new WebUntisError("INVALID_RESPONSE", "Invalid WebUntis absence entries");
+		}
+		const absences = absenceEntries.map(absence => {
+			const id = isRecord(absence) ? positiveSafeId(absence.id) : undefined;
+			const actualStart = isRecord(absence) ? webUntisDate(absence.startDate) : undefined;
+			const actualEnd = isRecord(absence) ? webUntisDate(absence.endDate) : undefined;
+			if (
+				!isRecord(absence) ||
+				id === undefined ||
+				!actualStart ||
+				!actualEnd ||
+				actualStart > actualEnd ||
+				(absence.isExcused != null && typeof absence.isExcused !== "boolean") ||
+				!isNullableString(absence.excuseStatus) ||
+				(absence.excuse != null && !isRecord(absence.excuse)) ||
+				["createDate", "lastUpdate"].some(
+					field =>
+						absence[field] != null &&
+						(!Number.isSafeInteger(absence[field]) || (absence[field] as number) < 0),
+				) ||
+				["reasonId", "excuseId", "excuseUserId"].some(
+					field => absence[field] != null && positiveSafeId(absence[field]) === undefined,
+				) ||
+				["createdUser", "updatedUser", "studentName", "excuseUsername"].some(
+					field => absence[field] != null && typeof absence[field] !== "string",
+				) ||
+				(absence.canEdit != null && typeof absence.canEdit !== "boolean")
+			) {
+				throw new WebUntisError("INVALID_RESPONSE", "Invalid WebUntis absence entry");
+			}
+			for (const field of ["startTime", "endTime"]) {
+				if (
+					absence[field] != null &&
+					(typeof absence[field] !== "number" || !Number.isFinite(absence[field]))
+				) {
+					throw new WebUntisError("INVALID_RESPONSE", "Invalid WebUntis absence time");
+				}
+			}
+			const excuse = isRecord(absence.excuse) ? absence.excuse : undefined;
+			const excuseDate =
+				excuse?.excuseDate == null || excuse.excuseDate === 0 ? undefined : webUntisDate(excuse.excuseDate);
+			if (
+				(absence.reason != null && typeof absence.reason !== "string") ||
+				(absence.text != null && typeof absence.text !== "string") ||
+				(excuse?.text != null && typeof excuse.text !== "string") ||
+				(excuse?.excuseDate != null && excuse.excuseDate !== 0 && !excuseDate) ||
+				(excuse?.isExcused != null && typeof excuse.isExcused !== "boolean")
+			) {
+				throw new WebUntisError("INVALID_RESPONSE", "Invalid WebUntis absence description");
+			}
+			const isExcused =
+				typeof absence.isExcused === "boolean"
+					? absence.isExcused
+					: typeof excuse?.isExcused === "boolean"
+						? excuse.isExcused
+						: undefined;
+			const excuseStatus =
+				(typeof absence.excuseStatus === "string" && plainText(absence.excuseStatus)) ||
+				(typeof excuse?.excuseStatus === "string" && plainText(excuse.excuseStatus)) ||
+				(isExcused === true ? "excused" : isExcused === false ? "unexcused" : "unknown");
+			return {
+				id,
+				studentId,
+				startDate: actualStart,
+				endDate: actualEnd,
+				...(typeof absence.startTime === "number" ? { startTime: absence.startTime } : {}),
+				...(typeof absence.endTime === "number" ? { endTime: absence.endTime } : {}),
+				...(typeof absence.reason === "string" ? { reason: plainText(absence.reason) } : {}),
+				...(typeof absence.text === "string" ? { text: plainText(absence.text) } : {}),
+				...(typeof absence.createDate === "number" ? { createDate: absence.createDate } : {}),
+				...(typeof absence.lastUpdate === "number" ? { lastUpdate: absence.lastUpdate } : {}),
+				...(typeof absence.createdUser === "string" ? { createdUser: absence.createdUser } : {}),
+				...(typeof absence.updatedUser === "string" ? { updatedUser: absence.updatedUser } : {}),
+				...(typeof absence.reasonId === "number" ? { reasonId: absence.reasonId } : {}),
+				...(absence.interruptions != null ? { interruptions: absence.interruptions } : {}),
+				...(typeof absence.canEdit === "boolean" ? { canEdit: absence.canEdit } : {}),
+				...(typeof absence.studentName === "string" ? { studentName: plainText(absence.studentName) } : {}),
+				...(typeof absence.excuseId === "number" ? { excuseId: absence.excuseId } : {}),
+				...(typeof absence.excuseUserId === "number" ? { excuseUserId: absence.excuseUserId } : {}),
+				...(typeof absence.excuseUsername === "string" ? { excuseUsername: absence.excuseUsername } : {}),
+				...(isExcused !== undefined ? { isExcused } : {}),
+				excuseStatus,
+				...(typeof excuse?.text === "string" ? { excuseText: plainText(excuse.text) } : {}),
+				...(excuseDate ? { excuseDate } : {}),
+			};
+		});
+		return {
+			absences,
+			absenceReasons: data.absenceReasons ?? [],
+			excuseStatuses: data.excuseStatuses ?? [],
+			...(typeof data.showAbsenceReasonChange === "boolean"
+				? { showAbsenceReasonChange: data.showAbsenceReasonChange }
+				: {}),
+			...(typeof data.showCreateAbsence === "boolean" ? { showCreateAbsence: data.showCreateAbsence } : {}),
+		};
+	}
+
+	/**
+	 *
+	 */
+	public async getMessagesOfDay(session: WebUntisSession, date: number): Promise<WebUntisMessageOfDay[]> {
+		const token = await this.getRestToken(session);
+		const payload = await this.restRequest(
+			`/api/public/news/newsWidgetData?date=${encodeURIComponent(String(date))}`,
+			session,
+			token,
+			"getMessagesOfDay",
+		);
+		if (!isRecord(payload) || !isRecord(payload.data) || !Array.isArray(payload.data.messagesOfDay)) {
+			throw new WebUntisError("INVALID_RESPONSE", "Invalid WebUntis messages-of-day response");
+		}
+		return payload.data.messagesOfDay.map(message => {
+			if (!isRecord(message)) {
+				throw new WebUntisError("INVALID_RESPONSE", "Invalid WebUntis message-of-day entry");
+			}
+			const id = message.id;
+			const subject = message.subject;
+			const text = message.text;
+			const attachments = message.attachments;
+			if (
+				(id != null && typeof id !== "string" && typeof id !== "number") ||
+				!isOptionalString(subject) ||
+				!isOptionalString(text) ||
+				(attachments != null && !Array.isArray(attachments))
+			) {
+				throw new WebUntisError("INVALID_RESPONSE", "Invalid WebUntis message-of-day entry");
+			}
+			return {
+				id: id == null ? "" : String(id),
+				subject: subject == null ? "" : subject,
+				text: text == null ? "" : text,
+				hasAttachments: Array.isArray(attachments) && attachments.length > 0,
+			};
+		});
 	}
 
 	/**
@@ -1008,8 +1362,19 @@ export class WebUntisClient {
 		return [...cookies.values()].join("; ");
 	}
 
-	private async getRestToken(session: WebUntisSession, context: "message" | "exams" = "message"): Promise<string> {
+	private async getRestToken(
+		session: WebUntisSession,
+		context: "message" | "exams" | "homework" | "absences" = "message",
+	): Promise<string> {
 		const url = this.restUrl("/api/token/new");
+		const tokenMethod =
+			context === "exams"
+				? "getExamsToken"
+				: context === "homework"
+					? "getHomeworkToken"
+					: context === "absences"
+						? "getAbsencesToken"
+						: "getMessageToken";
 		const schoolCookies = [...new Set([`_${Buffer.from(this.schoolName).toString("base64")}`, this.schoolName])];
 		for (let index = 0; index < schoolCookies.length; index++) {
 			const schoolCookie = schoolCookies[index];
@@ -1028,7 +1393,7 @@ export class WebUntisClient {
 			this.sessionCookie = cookie.value;
 			const body = await response.text();
 			this.onDiagnostic?.({
-				method: context === "exams" ? "getExamsToken" : "getMessageToken",
+				method: tokenMethod,
 				...(context === "exams"
 					? {
 							authContext: "bearer" as const,
@@ -1210,7 +1575,13 @@ export class WebUntisClient {
 			throw new WebUntisError("SESSION_EXPIRED", "WebUntis session expired while loading messages");
 		}
 		if (!response.ok) {
-			throw new WebUntisError("API_REQUEST", `WebUntis ${method} request failed (HTTP ${response.status})`);
+			const code =
+				response.status === 403
+					? "FORBIDDEN"
+					: response.status === 404 && method === "getAbsences"
+						? "MODULE_UNAVAILABLE"
+						: "API_REQUEST";
+			throw new WebUntisError(code, `WebUntis ${method} request failed (HTTP ${response.status})`);
 		}
 		if (payload === undefined) {
 			throw new WebUntisError("INVALID_RESPONSE", `Invalid WebUntis ${method} response`);
@@ -1402,7 +1773,12 @@ export class WebUntisClient {
 		return person;
 	}
 
-	private async request<T>(method: string, params: unknown, session: WebUntisSession): Promise<T> {
+	private async request<T>(
+		method: string,
+		params: unknown,
+		session: WebUntisSession,
+		validateResult: (value: unknown) => boolean = isPeriodList,
+	): Promise<T> {
 		try {
 			const requestSequence = ++this.requestSequence;
 			const sessionEndpoint = this.endpoint.replace(
@@ -1512,8 +1888,8 @@ export class WebUntisClient {
 					`WebUntis timetable request failed${details.length ? ` (${details.join(": ")})` : ""}`,
 				);
 			}
-			if (!isPeriodList(payload.result)) {
-				throw new WebUntisError("INVALID_RESPONSE", "Invalid WebUntis timetable result");
+			if (!validateResult(payload.result)) {
+				throw new WebUntisError("INVALID_RESPONSE", `Invalid WebUntis ${method} result`);
 			}
 			return payload.result as T;
 		} catch (error) {
