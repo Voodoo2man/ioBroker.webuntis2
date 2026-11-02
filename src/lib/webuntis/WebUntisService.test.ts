@@ -33,6 +33,223 @@ function fetchFor(calls: string[], failingMasterdata = false): typeof fetch {
 }
 
 describe("WebUntis service session and master data caching", () => {
+	it("loads messages of day and reauthenticates only once after session expiry", async () => {
+		let authentications = 0;
+		let messageRequests = 0;
+		const urls: string[] = [];
+		const service = new WebUntisService(undefined, undefined, undefined, async (input, init) => {
+			if (typeof input === "string" || input instanceof URL) {
+				const url = new URL(String(input));
+				urls.push(url.href);
+				if (url.pathname.endsWith("/api/token/new")) return new Response("token");
+				if (url.pathname.endsWith("/api/public/news/newsWidgetData")) {
+					messageRequests++;
+					return messageRequests === 1
+						? new Response("expired", { status: 401 })
+						: json({
+								data: { messagesOfDay: [{ id: 7, subject: "Update", text: "Hello", attachments: [] }] },
+							});
+				}
+			}
+			const body = JSON.parse(String(init?.body || "{}")) as { method?: string };
+			if (body.method === "authenticate") {
+				authentications++;
+				return json({
+					result: { sessionId: `session-${authentications}`, personType: 5, personId: 1, klasseId: 2 },
+				});
+			}
+			throw new Error(`Unexpected WebUntis request ${body.method}`);
+		});
+
+		expect(await service.loadMessagesOfDay(config, new Date(2026, 10, 2))).to.deep.equal([
+			{ id: "7", subject: "Update", text: "Hello", hasAttachments: false },
+		]);
+		expect(authentications).to.equal(2);
+		expect(messageRequests).to.equal(2);
+		expect(
+			urls
+				.filter(url => url.includes("newsWidgetData"))
+				.every(url => new URL(url).searchParams.get("date") === "20261102"),
+		).to.equal(true);
+	});
+
+	it("does not reauthenticate messages-of-day requests for non-session errors", async () => {
+		let authentications = 0;
+		const service = new WebUntisService(undefined, undefined, undefined, async (input, init) => {
+			if (typeof input === "string" || input instanceof URL) {
+				const url = new URL(String(input));
+				if (url.pathname.endsWith("/api/token/new")) return new Response("token");
+				if (url.pathname.endsWith("/api/public/news/newsWidgetData"))
+					return new Response("denied", { status: 403 });
+			}
+			const body = JSON.parse(String(init?.body || "{}")) as { method?: string };
+			if (body.method === "authenticate") {
+				authentications++;
+				return json({ result: { sessionId: "session", personType: 5, personId: 1, klasseId: 2 } });
+			}
+			throw new Error(`Unexpected WebUntis request ${body.method}`);
+		});
+		try {
+			await service.loadMessagesOfDay(config, new Date(2026, 10, 2));
+			expect.fail("expected API request failure");
+		} catch (error) {
+			expect(error).to.have.property("code", "FORBIDDEN");
+		}
+		expect(authentications).to.equal(1);
+	});
+
+	it("loads student identity independently from timetable data", async () => {
+		let timetableRequests = 0;
+		const service = new WebUntisService(undefined, undefined, undefined, async (_input, init) => {
+			const body = JSON.parse(String(init?.body || "{}")) as { method?: string };
+			if (body.method === "authenticate") {
+				return json({ result: { sessionId: "student", personType: 5, personId: 77, klasseId: 2 } });
+			}
+			timetableRequests++;
+			throw new Error("Student identity must not require timetable retrieval");
+		});
+		expect(await service.loadStudentIdentities(config)).to.deep.equal([{ id: 77, name: "" }]);
+		expect(timetableRequests).to.equal(0);
+	});
+
+	it("returns verified parent student identities and rejects unlinked absence IDs", async () => {
+		let absenceUrl = "";
+		const service = new WebUntisService(undefined, undefined, undefined, async (input, init) => {
+			if (typeof input === "string" || input instanceof URL) {
+				const url = new URL(String(input));
+				if (url.pathname.endsWith("/api/token/new")) return new Response("token");
+				if (url.pathname.endsWith("/api/rest/view/v1/app/data")) {
+					return json({
+						data: {
+							user: {
+								students: [
+									{ id: 41, displayName: "Child A" },
+									{ id: 42, name: "Child B" },
+								],
+							},
+						},
+					});
+				}
+				if (url.pathname.endsWith("/api/classreg/absences/students")) {
+					absenceUrl = url.href;
+					return json({
+						data: {
+							absences: [],
+							absenceReasons: [],
+							excuseStatuses: null,
+							showAbsenceReasonChange: false,
+							showCreateAbsence: false,
+						},
+					});
+				}
+			}
+			const body = JSON.parse(String(init?.body || "{}")) as { method?: string };
+			if (body.method === "authenticate") {
+				return json({ result: { sessionId: "parent", personType: 12, personId: 900, klasseId: 0 } });
+			}
+			if (body.method === "getCurrentSchoolyear") {
+				return json({ result: { id: 1, name: "2026/27", startDate: 20260831, endDate: 20270731 } });
+			}
+			throw new Error(`Unexpected WebUntis request ${body.method}`);
+		});
+		expect(await service.loadStudentIdentities(config)).to.deep.equal([
+			{ id: 41, name: "Child A" },
+			{ id: 42, name: "Child B" },
+		]);
+		await service.loadAbsences(config, 42, 20260901, 20260930);
+		expect(new URL(absenceUrl).searchParams.get("studentId")).to.equal("42");
+		try {
+			await service.loadAbsences(config, 43, 20260901, 20260930);
+			expect.fail("expected unknown student rejection");
+		} catch (error) {
+			expect(error).to.have.property("code", "API_REQUEST");
+		}
+	});
+
+	it("bounds homework and absence queries to the validated active school year", async () => {
+		const calls: string[] = [];
+		const service = new WebUntisService(undefined, undefined, undefined, async (input, init) => {
+			if (typeof input === "string" || input instanceof URL) {
+				const url = new URL(String(input));
+				calls.push(url.href);
+				if (url.pathname.endsWith("/api/token/new")) return new Response("token");
+				if (url.pathname.endsWith("/api/homeworks/lessons"))
+					return json({ data: { records: [], homeworks: [], teachers: [], lessons: [] } });
+			}
+			const body = JSON.parse(String(init?.body || "{}")) as { method?: string };
+			if (body.method === "authenticate") {
+				return json({ result: { sessionId: "student", personType: 5, personId: 77, klasseId: 2 } });
+			}
+			if (body.method === "getCurrentSchoolyear") {
+				return json({ result: { id: 1, name: "2026/27", startDate: 20260831, endDate: "2027-07-31" } });
+			}
+			throw new Error(`Unexpected WebUntis request ${body.method}`);
+		});
+		expect(await service.loadCurrentSchoolYear(config)).to.deep.equal({
+			id: 1,
+			name: "2026/27",
+			startDate: "2026-08-31",
+			endDate: "2027-07-31",
+		});
+		expect(await service.loadHomework(config, 20260801, 20270815)).to.deep.equal([]);
+		const homeworkUrl = new URL(calls.find(url => url.includes("/api/homeworks/lessons"))!);
+		expect(homeworkUrl.searchParams.get("startDate")).to.equal("20260831");
+		expect(homeworkUrl.searchParams.get("endDate")).to.equal("20270731");
+		try {
+			await service.loadHomework(config, 20250831, 20260731);
+			expect.fail("expected out-of-year scope failure");
+		} catch (error) {
+			expect(error).to.have.property("code", "API_REQUEST");
+		}
+	});
+
+	it("reauthenticates homework once on session expiry and never retries a forbidden request", async () => {
+		let authentications = 0;
+		let schoolyearCalls = 0;
+		let homeworkStatus = 403;
+		const service = new WebUntisService(undefined, undefined, undefined, async (input, init) => {
+			if (typeof input === "string" || input instanceof URL) {
+				const url = new URL(String(input));
+				if (url.pathname.endsWith("/api/token/new")) return new Response("token");
+				if (
+					url.pathname.endsWith("/api/homeworks/lessons") ||
+					url.pathname.endsWith("/api/classreg/absences/students")
+				) {
+					return new Response("denied", { status: homeworkStatus });
+				}
+			}
+			const body = JSON.parse(String(init?.body || "{}")) as { method?: string };
+			if (body.method === "authenticate") {
+				authentications++;
+				return json({
+					result: { sessionId: `session-${authentications}`, personType: 5, personId: 77, klasseId: 2 },
+				});
+			}
+			if (body.method === "getCurrentSchoolyear") {
+				schoolyearCalls++;
+				return schoolyearCalls === 1
+					? json({ error: { code: -8520, message: "expired" } })
+					: json({ result: { id: 1, name: "2026/27", startDate: 20260831, endDate: 20270731 } });
+			}
+			throw new Error(`Unexpected WebUntis request ${body.method}`);
+		});
+		try {
+			await service.loadHomework(config, 20260901, 20260930);
+			expect.fail("expected forbidden");
+		} catch (error) {
+			expect(error).to.have.property("code", "FORBIDDEN");
+		}
+		expect(authentications).to.equal(2);
+		homeworkStatus = 404;
+		try {
+			await service.loadAbsences(config, 77, 20260901, 20260930);
+			expect.fail("expected missing class-register module");
+		} catch (error) {
+			expect(error).to.have.property("code", "MODULE_UNAVAILABLE");
+		}
+		expect(authentications).to.equal(2);
+	});
+
 	it("loads separate timetables for every child in a parent account", async () => {
 		const timetableElements: Array<{ id: number; type: number }> = [];
 		const service = new WebUntisService(undefined, undefined, undefined, async (input, init) => {

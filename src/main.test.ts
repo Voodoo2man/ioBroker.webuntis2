@@ -12,7 +12,13 @@ import {
 import { WebUntisClient } from "./lib/webuntis/WebUntisClient";
 import { WebUntisError } from "./lib/webuntis/WebUntisErrors";
 import { WebUntisService } from "./lib/webuntis/WebUntisService";
-import type { WebUntisInboxMessage } from "./lib/webuntis/WebUntisTypes";
+import type {
+	WebUntisAbsenceResponse,
+	WebUntisHomework,
+	WebUntisInboxMessage,
+	WebUntisMessageOfDay,
+	WebUntisStudentIdentity,
+} from "./lib/webuntis/WebUntisTypes";
 
 function response(body: unknown, status = 200): Response {
 	return new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
@@ -108,9 +114,16 @@ function makeAdapterHarness(
 		inboxMutationQueue: Promise.resolve(),
 		refreshMutationQueue: Promise.resolve(),
 		lastExamsWarningAt: 0,
+		lastNewsOfDayWarningAt: 0,
 		childTodayLessons: new Map(),
 		namespace: "webuntis2.0",
-		config: { server: "https://example.webuntis.com" },
+		config: {
+			server: "https://example.webuntis.com",
+			schoolName: "Example",
+			schoolId: 1,
+			username: "student",
+			password: "test",
+		},
 		webUntis: {
 			loadTimetable: async () => ({
 				today: [],
@@ -122,7 +135,17 @@ function makeAdapterHarness(
 				children,
 			}),
 			loadUnreadMessages: async () => [],
+			loadMessagesOfDay: async () => [],
 			loadUpcomingExams: examLoader,
+			loadStudentIdentities: async () => children.map(({ id, name }) => ({ id, name })),
+			loadCurrentSchoolYear: async () => ({
+				id: 1,
+				name: "2026/2027",
+				startDate: "2026-09-01",
+				endDate: "2027-07-31",
+			}),
+			loadHomework: async () => [],
+			loadAbsences: async () => ({ absences: [], absenceReasons: [], excuseStatuses: [] }),
 		},
 		log: { warn: (message: string) => warnings.push(message), debug: () => undefined, error: () => undefined },
 		setState: async (id: string, value: ioBroker.StateValue) => {
@@ -217,6 +240,66 @@ const sampleExam = (id: number, startTime: string, displayText: string): Upcomin
 	displayText,
 });
 
+describe("messages of the day adapter states", () => {
+	it("writes the date, count, and ordered message channels", async () => {
+		const harness = makeAdapterHarness(async () => []);
+		const messages: WebUntisMessageOfDay[] = [
+			{ id: "n1", subject: "First", text: "First text", hasAttachments: true },
+			{ id: "n2", subject: "Second", text: "Second text", hasAttachments: false },
+		];
+		const adapter = harness.adapter as {
+			writeMessagesOfDay(messages: WebUntisMessageOfDay[], today: Date): Promise<void>;
+		};
+		await adapter.writeMessagesOfDay(messages, new Date(2026, 10, 1));
+
+		expect(harness.values.get("newsOfDay.today.date")).to.equal("2026-11-01");
+		expect(harness.values.get("newsOfDay.today.count")).to.equal(2);
+		expect(harness.values.get("newsOfDay.today.json")).to.equal(JSON.stringify(messages));
+		expect(harness.objects["newsOfDay.today.json"].common).to.include({ type: "string", role: "json" });
+		expect(harness.values.get("newsOfDay.today.01.id")).to.equal("n1");
+		expect(harness.values.get("newsOfDay.today.01.hasAttachments")).to.equal(true);
+		expect(harness.values.get("newsOfDay.today.02.subject")).to.equal("Second");
+		expect(harness.objects["newsOfDay.today.01"].type).to.equal("channel");
+	});
+
+	it("preserves prior message data after an API failure", async () => {
+		const harness = makeAdapterHarness(async () => []);
+		harness.values.set("newsOfDay.today.count", 1);
+		harness.values.set("newsOfDay.today.01.text", "previous message");
+		const webUntis = (harness.adapter as { webUntis: object }).webUntis as {
+			loadMessagesOfDay: () => Promise<WebUntisMessageOfDay[]>;
+		};
+		webUntis.loadMessagesOfDay = async () => {
+			throw new Error("news request failed");
+		};
+
+		await harness.methods.updateTimetable();
+
+		expect(harness.values.get("newsOfDay.today.count")).to.equal(1);
+		expect(harness.values.get("newsOfDay.today.01.text")).to.equal("previous message");
+		expect(harness.warnings.some(warning => warning.includes("messages-of-day refresh failed"))).to.equal(true);
+	});
+
+	it("clears prior numbered channels after a successful empty response", async () => {
+		const harness = makeAdapterHarness(async () => []);
+		const adapter = harness.adapter as {
+			writeMessagesOfDay(messages: WebUntisMessageOfDay[], today: Date): Promise<void>;
+		};
+		harness.values.set("newsOfDay.today.01.text", "old");
+		harness.objects["newsOfDay.today.01"] = { type: "channel", common: { name: "Message" }, native: {} };
+		harness.objects["newsOfDay.today.01.text"] = {
+			type: "state",
+			common: { name: "Text", type: "string", role: "text", read: true, write: false },
+			native: {},
+		};
+		await adapter.writeMessagesOfDay([], new Date(2026, 10, 1));
+
+		expect(harness.values.get("newsOfDay.today.count")).to.equal(0);
+		expect(harness.values.get("newsOfDay.today.json")).to.equal("[]");
+		expect(harness.deleted).to.deep.equal(["newsOfDay.today.01"]);
+	});
+});
+
 describe("upcoming exams adapter states", () => {
 	it("triggers a full refresh for local and qualified IDs regardless of ack", async () => {
 		const harness = makeAdapterHarness(async () => []);
@@ -279,7 +362,7 @@ describe("upcoming exams adapter states", () => {
 
 		await harness.methods.refreshAll();
 
-		expect(steps).to.deep.equal(["students", "inbox", "holidays", "cleanup", "timetable", "current-next"]);
+		expect(steps).to.deep.equal(["students", "inbox", "holidays", "timetable", "current-next"]);
 	});
 
 	it("serializes full refreshes and scheduled timetable updates", async () => {
@@ -1641,6 +1724,227 @@ describe("WebUntis username/password authentication", () => {
 		} catch (error) {
 			expect((error as WebUntisError).code).to.equal("TIMEOUT");
 		}
+	});
+});
+
+describe("homework and absence adapter states", () => {
+	function setup(): {
+		harness: ReturnType<typeof makeAdapterHarness>;
+		adapter: {
+			knownStudentIdentities?: WebUntisStudentIdentity[];
+			updateHomeworkAndAbsences(): Promise<void>;
+			webUntis: {
+				loadHomework: (...args: unknown[]) => Promise<WebUntisHomework[]>;
+				loadAbsences: (...args: unknown[]) => Promise<WebUntisAbsenceResponse>;
+			};
+		};
+	} {
+		const harness = makeAdapterHarness(async () => [], [], []);
+		const adapter = harness.adapter as {
+			knownStudentIdentities?: WebUntisStudentIdentity[];
+			updateHomeworkAndAbsences(): Promise<void>;
+			webUntis: {
+				loadHomework: (...args: unknown[]) => Promise<WebUntisHomework[]>;
+				loadAbsences: (...args: unknown[]) => Promise<WebUntisAbsenceResponse>;
+			};
+		};
+		adapter.knownStudentIdentities = [
+			{ id: 42, name: "Kid A" },
+			{ id: 43, name: "Kid B" },
+		];
+		return { harness, adapter };
+	}
+
+	it("assigns homework without a student ID when there is exactly one known student", async () => {
+		const { harness, adapter } = setup();
+		adapter.knownStudentIdentities = [{ id: 42, name: "Kid A" }];
+		adapter.webUntis.loadHomework = async () => [{ id: 102, text: "Single student homework", status: false }];
+		adapter.webUntis.loadAbsences = async () => ({
+			absences: [],
+			absenceReasons: [],
+			excuseStatuses: [],
+			showAbsenceReasonChange: false,
+			showCreateAbsence: false,
+		});
+
+		await adapter.updateHomeworkAndAbsences();
+
+		expect(harness.values.get("students.kid_a.homework.count")).to.equal(1);
+		expect(harness.values.get("students.kid_a.homework.01.id")).to.equal("102");
+		expect(harness.values.get("homework.unassigned.count")).to.equal(0);
+	});
+
+	it("keeps homework without a student ID unassigned when multiple students are known", async () => {
+		const { harness, adapter } = setup();
+		adapter.webUntis.loadHomework = async () => [{ id: 103, text: "Ambiguous homework", status: false }];
+		adapter.webUntis.loadAbsences = async () => ({
+			absences: [],
+			absenceReasons: [],
+			excuseStatuses: [],
+			showAbsenceReasonChange: false,
+			showCreateAbsence: false,
+		});
+
+		await adapter.updateHomeworkAndAbsences();
+
+		expect(harness.values.get("students.kid_a.homework.count")).to.equal(0);
+		expect(harness.values.get("students.kid_b.homework.count")).to.equal(0);
+		expect(harness.values.get("homework.unassigned.count")).to.equal(1);
+		expect(harness.values.get("homework.unassigned.01.id")).to.equal("103");
+	});
+
+	it("keeps homework and absences separate for each student and preserves unknown statuses", async () => {
+		const { harness, adapter } = setup();
+		adapter.webUntis.loadHomework = async () => [
+			{
+				id: 100,
+				lessonId: 200,
+				dueDate: "2026-10-04",
+				text: "Finish the exercise",
+				status: false,
+				studentId: 42,
+				attachments: [],
+			},
+			{
+				id: 101,
+				dueDate: "2026-10-05",
+				text: "Shared account item",
+				status: "unknown",
+			},
+		];
+		adapter.webUntis.loadAbsences = async (_config, studentId) =>
+			studentId === 42
+				? {
+						absences: [
+							{
+								id: 1,
+								studentId: 42,
+								startDate: "2026-10-01",
+								endDate: "2026-10-02",
+								startTime: 800,
+								endTime: 900,
+								reason: "Illness",
+								excuseStatus: "unknown",
+								createDate: 1790870400000,
+								reasonId: 9,
+								interruptions: [{ start: 800, end: 900 }],
+								canEdit: true,
+							},
+						],
+						absenceReasons: [{ id: 9, name: "Illness" }],
+						excuseStatuses: [{ id: 1, name: "Pending" }],
+						showAbsenceReasonChange: true,
+						showCreateAbsence: false,
+					}
+				: {
+						absences: [
+							{
+								id: 2,
+								studentId: 43,
+								startDate: "2026-10-03",
+								endDate: "2026-10-03",
+								isExcused: true,
+								excuseStatus: "excused",
+								excuseText: "Received",
+								excuseDate: "2026-10-04",
+								excuseId: 14,
+								excuseUserId: 3,
+								excuseUsername: "office",
+							},
+						],
+						absenceReasons: [],
+						excuseStatuses: [],
+						showAbsenceReasonChange: false,
+						showCreateAbsence: true,
+					};
+
+		await adapter.updateHomeworkAndAbsences();
+
+		expect(harness.values.get("students.kid_a.homework.count")).to.equal(1);
+		expect(harness.values.get("students.kid_a.homework.openCount")).to.equal(1);
+		expect(harness.values.get("students.kid_a.homework.01.text")).to.equal("Finish the exercise");
+		expect(harness.values.get("students.kid_b.homework.count")).to.equal(0);
+		expect(harness.values.get("homework.unassigned.01.id")).to.equal("101");
+		expect(harness.values.get("students.kid_a.absences.01.isExcused")).to.equal(null);
+		expect(harness.values.get("students.kid_a.absences.01.excuseStatusKnown")).to.equal(false);
+		expect(harness.values.get("students.kid_b.absences.01.excuseStatus")).to.equal("excused");
+		expect(harness.values.get("students.kid_b.absences.01.excuseText")).to.equal("Received");
+		expect(JSON.parse(harness.values.get("students.kid_a.absences.json") as string)).to.deep.equal([
+			{
+				startDate: "2026-10-01",
+				endDate: "2026-10-02",
+				startTime: "800",
+				endTime: "900",
+				reason: "Illness",
+				excuseStatus: "unknown",
+				excuseStatusKnown: false,
+				excuseText: "",
+				isExcused: null,
+			},
+		]);
+		expect(Object.keys(JSON.parse(harness.values.get("students.kid_a.absences.json") as string)[0])).to.have.length(
+			9,
+		);
+	});
+
+	it("preserves normalized absence data on failed refreshes and clears it after a successful empty response", async () => {
+		const { harness, adapter } = setup();
+		harness.values.set("students.kid_a.absences.json", '[{"reason":"previous reason"}]');
+		harness.values.set("students.kid_a.absences.01.reason", "previous reason");
+		adapter.webUntis.loadHomework = async () => [];
+		adapter.webUntis.loadAbsences = async (_config, studentId) => {
+			if (studentId === 42) {
+				throw new Error("Invalid WebUntis absence entry");
+			}
+			return {
+				absences: [],
+				absenceReasons: [],
+				excuseStatuses: [],
+				showAbsenceReasonChange: false,
+				showCreateAbsence: false,
+			};
+		};
+
+		await adapter.updateHomeworkAndAbsences();
+
+		expect(harness.values.get("students.kid_a.absences.json")).to.equal('[{"reason":"previous reason"}]');
+		expect(harness.values.get("students.kid_a.absences.01.reason")).to.equal("previous reason");
+		expect(harness.values.get("students.kid_b.absences.json")).to.equal("[]");
+	});
+
+	it("preserves prior data on failed requests and removes stale records after successful empty responses", async () => {
+		const { harness, adapter } = setup();
+		harness.values.set("students.kid_a.homework.count", 1);
+		harness.values.set("students.kid_a.homework.01.text", "previous");
+		harness.objects["students.kid_a.homework.02"] = { type: "channel", common: { name: "Homework" }, native: {} };
+		harness.objects["students.kid_a.absences.02"] = { type: "channel", common: { name: "Absence" }, native: {} };
+		harness.values.set("students.kid_b.absences.json", '[{"reason":"previous reason"}]');
+		harness.values.set("students.kid_b.absences.01.reason", "previous reason");
+		harness.objects["students.kid_b.absences.02"] = { type: "channel", common: { name: "Absence" }, native: {} };
+		adapter.webUntis.loadHomework = async () => {
+			throw new Error("request failed");
+		};
+		adapter.webUntis.loadAbsences = async (_config, studentId) =>
+			studentId === 42
+				? {
+						absences: [],
+						absenceReasons: [],
+						excuseStatuses: [],
+						showAbsenceReasonChange: false,
+						showCreateAbsence: false,
+					}
+				: Promise.reject(new Error("permission denied"));
+
+		await adapter.updateHomeworkAndAbsences();
+
+		expect(harness.values.get("students.kid_a.homework.count")).to.equal(1);
+		expect(harness.values.get("students.kid_a.homework.01.text")).to.equal("previous");
+		expect(harness.objects["students.kid_a.absences"].type).to.equal("channel");
+		expect(harness.deleted).to.include("students.kid_a.absences.02");
+		expect(harness.objects["students.kid_b.absences"].type).to.equal("channel");
+		expect(harness.values.get("students.kid_b.absences.json")).to.equal('[{"reason":"previous reason"}]');
+		expect(harness.values.get("students.kid_b.absences.01.reason")).to.equal("previous reason");
+		expect(harness.deleted).not.to.include("students.kid_b.absences.02");
 	});
 });
 
