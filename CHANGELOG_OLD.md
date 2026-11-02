@@ -1,4 +1,9 @@
 # Changelog
+## 0.1.9 (2026-10-15)
+
+- (Voodoo2man) Improved timetable data and reliability with comparisons, long names, and automatic re-authentication for expired sessions
+- (Voodoo2man) Added an inbox for unread messages.
+
 ## 0.1.8 (2026-10-14)
 
 - (Voodoo2man) Updated dynamic lesson names, migrated metadata for existing objects, and repaired legacy i18n names.

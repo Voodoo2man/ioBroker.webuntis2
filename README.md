@@ -212,8 +212,7 @@ and include only relevant, non-sensitive log messages when asking for help.
 [![Donate](https://camo.githubusercontent.com/ef8c60305542390406855547e32850909812a73c4abada236de22a6dc88b313f/68747470733a2f2f7777772e70617970616c6f626a656374732e636f6d2f64655f44452f44452f692f62746e2f62746e5f646f6e61746543435f4c472e676966)](https://www.paypal.com/donate/?hosted_button_id=3RJQGSJNRSHUJ)
 
 ## Changelog
-
-### **WORK IN PROGRESS**
+### 0.3.0 (2026-11-02)
 
 - (Voodoo2man) Added messages of the day
 - (Voodoo2man) Added homework data
@@ -243,11 +242,6 @@ and include only relevant, non-sensitive log messages when asking for help.
 ### 0.1.10 (2026-10-18)
 
 - (Voodoo2man) Improved configuration feedback, holiday names, and connection status; reduced routine login log messages; verified Node.js 26 compatibility; and migrated Dependabot auto-merging to the `pull_request` event.
-
-### 0.1.9 (2026-10-15)
-
-- (Voodoo2man) Improved timetable data and reliability with comparisons, long names, and automatic re-authentication for expired sessions
-- (Voodoo2man) Added an inbox for unread messages.
 
 For earlier releases, see [CHANGELOG_OLD.md](CHANGELOG_OLD.md).
 

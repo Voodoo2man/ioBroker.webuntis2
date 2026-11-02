@@ -1,9 +1,22 @@
 {
   "common": {
     "name": "webuntis2",
-    "version": "0.2.2",
+    "version": "0.3.0",
     "nogit": true,
     "news": {
+      "0.3.0": {
+        "en": "Added messages of the day\nAdded homework data\nAdded absence records",
+        "de": "Tagesnachrichten hinzugefügt\nHausaufgabendaten hinzugefügt\nFehlzeiteneinträge hinzugefügt",
+        "ru": "Добавлены сообщения дня\nДобавлены данные домашних заданий\nДобавлены записи об отсутствии",
+        "pt": "Mensagens do dia adicionadas\nDados de trabalhos de casa adicionados\nRegistos de ausências adicionados",
+        "nl": "Berichten van de dag toegevoegd\nHuiswerkgegevens toegevoegd\nVerzuimgegevens toegevoegd",
+        "fr": "Messages du jour ajoutés\nDonnées de devoirs ajoutées\nDonnées d'absence ajoutées",
+        "it": "Aggiunti i messaggi del giorno\nAggiunti i dati dei compiti\nAggiunti i dati sulle assenze",
+        "es": "Se añadieron los mensajes del día\nSe añadieron los datos de las tareas\nSe añadieron los registros de ausencias",
+        "pl": "Dodano wiadomości dnia\nDodano dane pracy domowej\nDodano rekordy nieobecności",
+        "uk": "Додані повідомлення дня\nДодані дані домашнього завдання\nДодані записи про відсутність",
+        "zh-cn": "添加了当天的消息\n添加了作业数据\n增加了缺勤记录"
+      },
       "0.2.2": {
         "en": "Added support for Node.js 22.19 and newer. Fixed the reported `qs` and `minimatch` development-dependency alerts.",
         "de": "Unterstützung für Node.js 22.19 und neuer hinzugefügt. Die gemeldeten Warnungen zu den Entwicklungsabhängigkeiten `qs` und `minimatch` wurden behoben.",
@@ -81,19 +94,6 @@
         "pl": "Zaktualizowano dynamiczne nazwy lekcji, zmigrowano metadane istniejących obiektów i naprawiono stare nazwy i18n",
         "uk": "Оновлено динамічні назви уроків, перенесено метадані наявних об’єктів і виправлено старі назви i18n",
         "zh-cn": "更新动态课程名称、迁移现有对象元数据并修复旧版 i18n 名称"
-      },
-      "0.1.7": {
-        "en": "Improved ioBroker compliance, object translations, shutdown handling and state updates",
-        "de": "ioBroker-Konformität, Objektübersetzungen, Beenden des Adapters und Statusaktualisierungen verbessert",
-        "ru": "Улучшены совместимость с ioBroker, переводы объектов, завершение работы и обновление состояний",
-        "pt": "Melhoradas a compatibilidade com o ioBroker, as traduções dos objetos, o encerramento e as atualizações dos estados",
-        "nl": "ioBroker-compatibiliteit, objectvertalingen, afsluiten en statusupdates verbeterd",
-        "fr": "Amélioration de la compatibilité ioBroker, des traductions d’objets, de l’arrêt et des mises à jour d’états",
-        "it": "Migliorate la compatibilità con ioBroker, le traduzioni degli oggetti, l'arresto e gli aggiornamenti degli stati",
-        "es": "Mejoradas la compatibilidad con ioBroker, las traducciones de objetos, el apagado y las actualizaciones de estados",
-        "pl": "Ulepszono zgodność z ioBroker, tłumaczenia obiektów, zamykanie adaptera i aktualizacje stanów",
-        "uk": "Покращено сумісність з ioBroker, переклади об’єктів, завершення роботи та оновлення станів",
-        "zh-cn": "改进了 ioBroker 兼容性、对象翻译、关闭处理和状态更新"
       }
     },
     "titleLang": {
