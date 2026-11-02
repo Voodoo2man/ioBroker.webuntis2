@@ -1,9 +1,22 @@
 {
   "common": {
     "name": "webuntis2",
-    "version": "0.2.1",
+    "version": "0.2.2",
     "nogit": true,
     "news": {
+      "0.2.2": {
+        "en": "Added support for Node.js 22.19 and newer. Fixed the reported `qs` and `minimatch` development-dependency alerts.",
+        "de": "Unterstützung für Node.js 22.19 und neuer hinzugefügt. Die gemeldeten Warnungen zu den Entwicklungsabhängigkeiten `qs` und `minimatch` wurden behoben.",
+        "ru": "Добавлена поддержка Node.js 22.19 и более новых версий. Устранены выявленные предупреждения о зависимостях разработки `qs` и `minimatch`.",
+        "pt": "Foi adicionado suporte ao Node.js 22.19 e versões posteriores. Foram corrigidos os alertas reportados sobre as dependências de desenvolvimento `qs` e `minimatch`.",
+        "nl": "Ondersteuning voor Node.js 22.19 en hoger toegevoegd. De gemelde waarschuwingen voor de ontwikkelingsafhankelijkheden `qs` en `minimatch` zijn verholpen.",
+        "fr": "Ajout de la prise en charge de Node.js 22.19 et des versions ultérieures. Correction des alertes signalées concernant les dépendances de développement `qs` et `minimatch`.",
+        "it": "Aggiunto il supporto per Node.js 22.19 e versioni successive. Corretti gli avvisi segnalati sulle dipendenze di sviluppo `qs` e `minimatch`.",
+        "es": "Se añadió compatibilidad con Node.js 22.19 y versiones posteriores. Se corrigieron las alertas reportadas sobre las dependencias de desarrollo `qs` y `minimatch`.",
+        "pl": "Dodano obsługę Node.js 22.19 i nowszych wersji. Usunięto zgłoszone alerty dotyczące zależności deweloperskich `qs` i `minimatch`.",
+        "uk": "Додано підтримку Node.js 22.19 і новіших версій. Усунено повідомлені попередження щодо залежностей розробки `qs` і `minimatch`.",
+        "zh-cn": "新增对 Node.js 22.19 及更高版本的支持。修复了报告的 `qs` 和 `minimatch` 开发依赖警报。"
+      },
       "0.2.1": {
         "en": "Moved read and unread messages directly under inbox, renamed the unread count state to inbox.unread.count, and removed the redundant JSON state.\nKept inbox refresh independent of timetable failures and replaced the local read toggle with a mark-as-unread button.",
         "de": "Gelesene und ungelesene Nachrichten direkt in den Posteingang verschoben, in inbox.unread.count umbenannt und überflüssigen JSON-Status entfernt.\nDer Posteingang wurde unabhängig von Stundenplanfehlern aktualisiert und durch „Als ungelesen markieren“ ersetzt.",
@@ -81,19 +94,6 @@
         "pl": "Ulepszono zgodność z ioBroker, tłumaczenia obiektów, zamykanie adaptera i aktualizacje stanów",
         "uk": "Покращено сумісність з ioBroker, переклади об’єктів, завершення роботи та оновлення станів",
         "zh-cn": "改进了 ioBroker 兼容性、对象翻译、关闭处理和状态更新"
-      },
-      "0.1.6": {
-        "en": "Improved Admin setup, school search feedback and mobile layout",
-        "de": "Admin-Einrichtung, Rückmeldungen bei der Schulsuche und mobile Darstellung verbessert",
-        "ru": "Улучшены настройка в Admin, обратная связь при поиске школ и мобильная компоновка",
-        "pt": "Melhoradas a configuração no Admin, as mensagens da pesquisa de escolas e a disposição móvel",
-        "nl": "Admin-configuratie, feedback bij het zoeken naar scholen en mobiele weergave verbeterd",
-        "fr": "Amélioration de la configuration Admin, des retours de recherche d’écoles et de l’affichage mobile",
-        "it": "Migliorate la configurazione Admin, le indicazioni della ricerca delle scuole e la visualizzazione mobile",
-        "es": "Mejoradas la configuración en Admin, las respuestas de búsqueda de escuelas y la vista móvil",
-        "pl": "Ulepszono konfigurację w Admin, komunikaty wyszukiwania szkół i układ mobilny",
-        "uk": "Покращено налаштування в Admin, відгук під час пошуку шкіл і мобільне компонування",
-        "zh-cn": "改进了 Admin 配置、学校搜索反馈和移动端布局"
       }
     },
     "titleLang": {

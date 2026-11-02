@@ -1,4 +1,8 @@
 # Changelog
+## 0.1.8 (2026-10-14)
+
+- (Voodoo2man) Updated dynamic lesson names, migrated metadata for existing objects, and repaired legacy i18n names.
+
 ## 0.1.7 (2026-10-14)
 
 - (Voodoo2man) Improved ioBroker compliance, multilingual object names, shutdown handling, and state updates.
