@@ -276,9 +276,10 @@ class WebuntisNext extends utils.Adapter {
 	private readonly webUntis: WebUntisService;
 	private timetableTimer?: ioBroker.Timeout;
 	private currentNextTimer?: ioBroker.Timeout;
-	private todayLessons: TimetableLesson[] = [];
-	private childTodayLessons = new Map<number, { name: string; channelId: string; lessons: TimetableLesson[] }>();
+	private timetableLessons: TimetableLesson[] = [];
+	private childTimetableLessons = new Map<number, { name: string; channelId: string; lessons: TimetableLesson[] }>();
 	private hasTimetableSnapshot = false;
+	private lastCurrentNextUpdateAt?: number;
 	private unloaded = false;
 	private readonly migratedNames = new Set<string>();
 	private inboxMutationQueue: Promise<void> = Promise.resolve();
@@ -829,7 +830,7 @@ class WebuntisNext extends utils.Adapter {
 		await this.ensureNewsOfDayRoot();
 		await this.ensureHolidaysRoot();
 		await this.updateTimetableLocked();
-		await this.updateCurrentNextStatesLocked();
+		await this.updateCurrentNextStatesLocked(true);
 	}
 
 	private getTimetableRefreshIntervalMs(): number {
@@ -850,12 +851,18 @@ class WebuntisNext extends utils.Adapter {
 		if (this.unloaded) {
 			return;
 		}
+		const intervalMs = this.getTimetableRefreshIntervalMs();
+		const nextUpdate = new Date(Date.now() + intervalMs);
 		this.timetableTimer = this.setTimeout(() => {
 			this.timetableTimer = undefined;
 			void this.updateTimetable()
+				.then(() => this.updateCurrentNextStates())
 				.catch(error => this.log.error(`Unexpected timetable update error: ${error}`))
 				.finally(() => this.scheduleTimetableUpdate());
-		}, this.getTimetableRefreshIntervalMs());
+		}, intervalMs);
+		void this.setState("info.nextUpdate", nextUpdate.toISOString(), true).catch(error =>
+			this.log.warn(`Failed to update the next timetable update time: ${error}`),
+		);
 	}
 
 	private scheduleCurrentNextUpdate(): void {
@@ -939,18 +946,19 @@ class WebuntisNext extends utils.Adapter {
 					: [];
 			const childChannelIds = studentChannelIds(students);
 			this.knownStudentIdentities = students.map(({ id, name }) => ({ id, name }));
-			this.todayLessons = students[0]?.timetable.today ?? data.today;
+			const firstTimetable = students[0]?.timetable ?? data;
+			this.timetableLessons = [...firstTimetable.today, ...firstTimetable.tomorrow];
 			this.hasTimetableSnapshot = true;
 			let updated = 0;
 			let removed = 0;
 			if (students.length) {
-				this.childTodayLessons = new Map(
+				this.childTimetableLessons = new Map(
 					students.map(student => [
 						student.id,
 						{
 							name: student.name,
 							channelId: childChannelIds.get(student.id)!,
-							lessons: student.timetable.today,
+							lessons: [...student.timetable.today, ...student.timetable.tomorrow],
 						},
 					]),
 				);
@@ -984,7 +992,7 @@ class WebuntisNext extends utils.Adapter {
 					}
 				}
 			} else {
-				this.childTodayLessons.clear();
+				this.childTimetableLessons.clear();
 			}
 			const existingChildren = await this.getObjectListAsync({
 				startkey: `${this.namespace}.students.`,
@@ -1052,11 +1060,6 @@ class WebuntisNext extends utils.Adapter {
 			}
 			await this.cleanupLegacyDataRoots(students.length > 0);
 			await this.setState("info.lastSuccessfulUpdate", now.toISOString(), true);
-			await this.setState(
-				"info.nextUpdate",
-				new Date(now.getTime() + this.getTimetableRefreshIntervalMs()).toISOString(),
-				true,
-			);
 			await this.setState("info.connection", true, true);
 			this.log.debug(`Timetable updated: ${updated} lessons updated, ${removed} obsolete lessons removed`);
 		} catch (error) {
@@ -1064,11 +1067,6 @@ class WebuntisNext extends utils.Adapter {
 				return;
 			}
 			await this.setState("info.connection", false, true);
-			await this.setState(
-				"info.nextUpdate",
-				new Date(Date.now() + this.getTimetableRefreshIntervalMs()).toISOString(),
-				true,
-			);
 			const code = error instanceof WebUntisError ? error.code : "UNEXPECTED_RESPONSE";
 			const detail = error instanceof Error ? ` (${error.message})` : "";
 			this.log.warn(`Timetable update failed: ${code}${detail}; existing timetable data was kept`);
@@ -2093,20 +2091,25 @@ class WebuntisNext extends utils.Adapter {
 		return this.enqueueRefreshMutation(() => this.updateCurrentNextStatesLocked());
 	}
 
-	private async updateCurrentNextStatesLocked(): Promise<void> {
+	private async updateCurrentNextStatesLocked(force = false, now = new Date()): Promise<void> {
 		if (this.unloaded || !this.hasTimetableSnapshot) {
 			return;
 		}
-		for (const child of this.childTodayLessons.values()) {
-			await this.writeCurrentNextSummary(
-				child.lessons,
-				new Date(),
-				`students.${child.channelId}.timetable.today`,
-			);
+		const nowMs = now.getTime();
+		if (
+			!force &&
+			this.lastCurrentNextUpdateAt !== undefined &&
+			nowMs - this.lastCurrentNextUpdateAt < this.getCurrentNextRefreshIntervalMs()
+		) {
+			return;
 		}
-		if (this.childTodayLessons.size === 0) {
-			await this.writeCurrentNextSummary(this.todayLessons, new Date(), "timetable.today");
+		for (const child of this.childTimetableLessons.values()) {
+			await this.writeCurrentNextSummary(child.lessons, now, `students.${child.channelId}.timetable.today`);
 		}
+		if (this.childTimetableLessons.size === 0) {
+			await this.writeCurrentNextSummary(this.timetableLessons, now, "timetable.today");
+		}
+		this.lastCurrentNextUpdateAt = nowMs;
 	}
 
 	private async cleanupObsoleteStructure(): Promise<void> {
@@ -2219,9 +2222,6 @@ class WebuntisNext extends utils.Adapter {
 			}
 			const result = await this.writeTimetableDay(`${root}.${group}`, lessons, this.timetableDate(day));
 			await this.writeDaySummary(`${root}.${group}`, summarizeTimetable(lessons), lessons);
-			if (group === "today") {
-				await this.writeCurrentNextSummary(lessons, now, `${root}.today`);
-			}
 			removed += result.removed;
 		}
 		return { updated: lessons.length, removed };

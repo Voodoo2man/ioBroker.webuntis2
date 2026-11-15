@@ -12,6 +12,7 @@ import {
 import { WebUntisClient } from "./lib/webuntis/WebUntisClient";
 import { WebUntisError } from "./lib/webuntis/WebUntisErrors";
 import { WebUntisService } from "./lib/webuntis/WebUntisService";
+import type { TimetableLesson } from "./lib/webuntis/Timetable";
 import type {
 	WebUntisAbsenceResponse,
 	WebUntisHomework,
@@ -61,11 +62,13 @@ type AdapterHarness = {
 		writeHolidaySummary(summary: never): Promise<void>;
 		cleanupObsoleteStructure(): Promise<void>;
 		updateCurrentNextStates(): Promise<void>;
+		updateCurrentNextStatesLocked(force?: boolean, now?: Date): Promise<void>;
 		scheduleTimetableUpdate(): void;
 		scheduleCurrentNextUpdate(): void;
 	};
 	values: Map<string, ioBroker.StateValue>;
 	scheduledDelays: number[];
+	scheduledCallbacks: Array<() => void>;
 	deleted: string[];
 	objects: Record<string, ioBroker.SettableObject>;
 	warnings: string[];
@@ -98,6 +101,7 @@ function makeAdapterHarness(
 	const groupWrites: Array<{ group: string; root: string }> = [];
 	const subscriptions: string[] = [];
 	const scheduledDelays: number[] = [];
+	const scheduledCallbacks: Array<() => void> = [];
 	const allObjectRows = [
 		...existingTimestampIds.map(id => ({ id: `webuntis2.0.${id}` })),
 		...existingSlots.flatMap(slot => {
@@ -119,7 +123,7 @@ function makeAdapterHarness(
 		refreshMutationQueue: Promise.resolve(),
 		lastExamsWarningAt: 0,
 		lastNewsOfDayWarningAt: 0,
-		childTodayLessons: new Map(),
+		childTimetableLessons: new Map(),
 		namespace: "webuntis2.0",
 		config: {
 			server: "https://example.webuntis.com",
@@ -170,8 +174,11 @@ function makeAdapterHarness(
 		subscribeStatesAsync: async (pattern: string) => {
 			subscriptions.push(pattern);
 		},
-		setTimeout: (_callback: unknown, delay: number) => {
+		setTimeout: (callback: unknown, delay: number) => {
 			scheduledDelays.push(delay);
+			if (typeof callback === "function") {
+				scheduledCallbacks.push(callback as () => void);
+			}
 			return 1 as unknown as ioBroker.Timeout;
 		},
 		ensureTranslatedObject: async (id: string, object: ioBroker.SettableObject) => {
@@ -233,10 +240,22 @@ function makeAdapterHarness(
 		writeHolidaySummary(summary: never): Promise<void>;
 		cleanupObsoleteStructure(): Promise<void>;
 		updateCurrentNextStates(): Promise<void>;
+		updateCurrentNextStatesLocked(force?: boolean, now?: Date): Promise<void>;
 		scheduleTimetableUpdate(): void;
 		scheduleCurrentNextUpdate(): void;
 	};
-	return { adapter, methods, values, deleted, objects, warnings, groupWrites, subscriptions, scheduledDelays };
+	return {
+		adapter,
+		methods,
+		values,
+		deleted,
+		objects,
+		warnings,
+		groupWrites,
+		subscriptions,
+		scheduledDelays,
+		scheduledCallbacks,
+	};
 }
 
 const sampleExam = (id: number, startTime: string, displayText: string): UpcomingExam => ({
@@ -367,12 +386,13 @@ describe("upcoming exams adapter states", () => {
 			ensureHolidaysRoot: async () => void steps.push("holidays"),
 			cleanupObsoleteStructure: async () => void steps.push("cleanup"),
 			updateTimetableLocked: async () => void steps.push("timetable"),
-			updateCurrentNextStatesLocked: async () => void steps.push("current-next"),
+			updateCurrentNextStatesLocked: async (force = false) =>
+				void steps.push(force ? "current-next-forced" : "current-next"),
 		});
 
 		await harness.methods.refreshAll();
 
-		expect(steps).to.deep.equal(["students", "inbox", "holidays", "timetable", "current-next"]);
+		expect(steps).to.deep.equal(["students", "inbox", "holidays", "timetable", "current-next-forced"]);
 	});
 
 	it("uses configured refresh intervals and enforces the minimums when scheduling", () => {
@@ -396,6 +416,61 @@ describe("upcoming exams adapter states", () => {
 		legacy.methods.scheduleTimetableUpdate();
 		legacy.methods.scheduleCurrentNextUpdate();
 		expect(legacy.scheduledDelays).to.deep.equal([5 * 60_000, 60_000]);
+	});
+
+	it("keeps scheduled full-refresh current/next updates on the configured cadence", async () => {
+		const harness = makeAdapterHarness(async () => []);
+		const summaries: Date[] = [];
+		const adapter = harness.adapter as { lastCurrentNextUpdateAt?: number };
+		Object.assign(adapter, {
+			config: { timetableRefreshIntervalMinutes: 5, currentNextRefreshIntervalMinutes: 10 },
+			hasTimetableSnapshot: true,
+			timetableLessons: [],
+			lastCurrentNextUpdateAt: Date.now(),
+			updateTimetableLocked: async () => undefined,
+			writeCurrentNextSummary: async (_lessons: never[], now: Date) => summaries.push(now),
+		});
+		harness.methods.scheduleTimetableUpdate();
+
+		const waitForNextTimer = async (expectedCount: number): Promise<void> => {
+			for (let attempt = 0; harness.scheduledCallbacks.length < expectedCount && attempt < 10; attempt++) {
+				await new Promise<void>(resolve => globalThis.setTimeout(resolve, 0));
+			}
+		};
+
+		harness.scheduledCallbacks[0]();
+		await waitForNextTimer(2);
+		expect(summaries).to.have.length(0);
+
+		adapter.lastCurrentNextUpdateAt = Date.now() - 11 * 60_000;
+		harness.scheduledCallbacks[1]();
+		await waitForNextTimer(3);
+		expect(summaries).to.have.length(1);
+		expect(harness.scheduledDelays).to.deep.equal([5 * 60_000, 5 * 60_000, 5 * 60_000]);
+	});
+
+	it("preserves the active full-refresh deadline after a manual refresh", async () => {
+		const harness = makeAdapterHarness(async () => []);
+		const start = Date.now();
+		harness.methods.scheduleTimetableUpdate();
+		const deadline = harness.values.get("info.nextUpdate");
+
+		expect(harness.scheduledDelays).to.deep.equal([5 * 60_000]);
+		expect(Date.parse(String(deadline))).to.be.within(start + 5 * 60_000 - 1000, start + 5 * 60_000 + 1000);
+
+		Object.assign(harness.adapter, {
+			ensureStudentsRoot: async () => undefined,
+			ensureInboxRoot: async () => undefined,
+			ensureNewsOfDayRoot: async () => undefined,
+			ensureHolidaysRoot: async () => undefined,
+			updateTimetableLocked: async () => undefined,
+			updateCurrentNextStatesLocked: async () => undefined,
+		});
+		await harness.methods.refreshAll();
+
+		expect(harness.values.get("info.nextUpdate")).to.equal(deadline);
+		expect(harness.scheduledDelays).to.deep.equal([5 * 60_000]);
+		expect(harness.scheduledCallbacks).to.have.length(1);
 	});
 
 	it("serializes full refreshes and scheduled timetable updates", async () => {
@@ -434,14 +509,77 @@ describe("upcoming exams adapter states", () => {
 		expect(maximumActiveUpdates).to.equal(1);
 	});
 
+	it("uses the cached tomorrow timetable after midnight for current lesson states", async () => {
+		const now = new Date(2026, 8, 11, 8, 15);
+		const dateKey = (date: Date): string =>
+			`${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+		const lessonFor = (id: string, date: string, subject: string): TimetableLesson => ({
+			id,
+			date,
+			startTime: "08:00",
+			endTime: "09:00",
+			subject,
+			subjectLong: subject,
+			teacher: "Teacher",
+			teacherLong: "Teacher",
+			room: "R1",
+			roomLong: "Room 1",
+			class: "5A",
+			classLong: "Class 5A",
+			lessonId: 1,
+			periodId: 1,
+			status: "Lesson",
+			changed: false,
+			cancelled: false,
+			substitution: "",
+			originalTeacher: "",
+			originalTeacherLong: "",
+			originalRoom: "",
+			originalRoomLong: "",
+			originalSubject: "",
+			originalSubjectLong: "",
+		});
+		const yesterday = new Date(now);
+		yesterday.setDate(yesterday.getDate() - 1);
+		const oldTodayLesson = lessonFor("old-today", dateKey(yesterday), "Old subject");
+		const cachedTomorrowLesson = lessonFor("cached-tomorrow", dateKey(now), "Mathematics");
+
+		for (const withChild of [false, true]) {
+			const childTimetable = {
+				today: [oldTodayLesson],
+				tomorrow: [cachedTomorrowLesson],
+				week: [oldTodayLesson, cachedTomorrowLesson],
+			};
+			const children = withChild ? [{ id: 42, name: "Ada", timetable: childTimetable }] : undefined;
+			const harness = makeAdapterHarness(async () => []);
+			const webUntis = (harness.adapter as { webUntis: WebUntisService }).webUntis;
+			webUntis.loadTimetable = async () => ({
+				today: childTimetable.today,
+				tomorrow: childTimetable.tomorrow,
+				week: childTimetable.week,
+				holidays: null,
+				personType: withChild ? 12 : 5,
+				...(children ? { children } : {}),
+			});
+
+			await harness.methods.updateTimetable();
+			await harness.methods.updateCurrentNextStatesLocked(false, now);
+
+			const root = withChild ? "students.ada.timetable.today" : "timetable.today";
+			expect(harness.values.get(`${root}.currentSubject`)).to.equal("Mathematics");
+			expect(harness.values.get(`${root}.schoolRunning`)).to.equal(true);
+		}
+	});
+
 	it("refreshes current and next lesson states for accounts without students", async () => {
 		const harness = makeAdapterHarness(async () => []);
-		const todayLessons = [{ id: "teacher-lesson" }] as never[];
+		const timetableLessons = [{ id: "teacher-lesson" }] as never[];
 		const summaries: Array<{ lessons: never[]; path: string }> = [];
 		Object.assign(harness.adapter, {
 			hasTimetableSnapshot: true,
-			todayLessons,
-			childTodayLessons: new Map(),
+			timetableLessons,
+			childTimetableLessons: new Map(),
+			lastCurrentNextUpdateAt: undefined,
 			writeCurrentNextSummary: async (lessons: never[], _now: Date, path: string) => {
 				summaries.push({ lessons, path });
 			},
@@ -449,7 +587,7 @@ describe("upcoming exams adapter states", () => {
 
 		await harness.methods.updateCurrentNextStates();
 
-		expect(summaries).to.deep.equal([{ lessons: todayLessons, path: "timetable.today" }]);
+		expect(summaries).to.deep.equal([{ lessons: timetableLessons, path: "timetable.today" }]);
 	});
 
 	it("removes legacy units from calendar date objects", async () => {
