@@ -2,6 +2,7 @@
 
 import { expect } from "chai";
 import { removeStaleLessonStates } from "./lib/LessonStateCleanup";
+import { MAX_TIMETABLE_REFRESH_INTERVAL_MINUTES } from "./lib/RefreshIntervals";
 import type { UpcomingExam } from "./lib/webuntis/Exams";
 import {
 	mergeSchoolSelection,
@@ -69,6 +70,8 @@ type AdapterHarness = {
 	values: Map<string, ioBroker.StateValue>;
 	scheduledDelays: number[];
 	scheduledCallbacks: Array<() => void>;
+	scheduledTimerHandles: ioBroker.Timeout[];
+	clearedTimers: ioBroker.Timeout[];
 	deleted: string[];
 	objects: Record<string, ioBroker.SettableObject>;
 	warnings: string[];
@@ -102,6 +105,9 @@ function makeAdapterHarness(
 	const subscriptions: string[] = [];
 	const scheduledDelays: number[] = [];
 	const scheduledCallbacks: Array<() => void> = [];
+	const scheduledTimerHandles: ioBroker.Timeout[] = [];
+	const clearedTimers: ioBroker.Timeout[] = [];
+	let nextTimerHandle = 0;
 	const allObjectRows = [
 		...existingTimestampIds.map(id => ({ id: `webuntis2.0.${id}` })),
 		...existingSlots.flatMap(slot => {
@@ -121,6 +127,7 @@ function makeAdapterHarness(
 		delay: async () => undefined,
 		inboxMutationQueue: Promise.resolve(),
 		refreshMutationQueue: Promise.resolve(),
+		currentNextTimerGeneration: 0,
 		lastExamsWarningAt: 0,
 		lastNewsOfDayWarningAt: 0,
 		childTimetableLessons: new Map(),
@@ -179,7 +186,12 @@ function makeAdapterHarness(
 			if (typeof callback === "function") {
 				scheduledCallbacks.push(callback as () => void);
 			}
-			return 1 as unknown as ioBroker.Timeout;
+			const timer = ++nextTimerHandle as unknown as ioBroker.Timeout;
+			scheduledTimerHandles.push(timer);
+			return timer;
+		},
+		clearTimeout: (timer: ioBroker.Timeout) => {
+			clearedTimers.push(timer);
 		},
 		ensureTranslatedObject: async (id: string, object: ioBroker.SettableObject) => {
 			objects[id] = object;
@@ -255,6 +267,8 @@ function makeAdapterHarness(
 		subscriptions,
 		scheduledDelays,
 		scheduledCallbacks,
+		scheduledTimerHandles,
+		clearedTimers,
 	};
 }
 
@@ -395,10 +409,45 @@ describe("upcoming exams adapter states", () => {
 		expect(steps).to.deep.equal(["students", "inbox", "holidays", "timetable", "current-next-forced"]);
 	});
 
+	it("replaces the startup current/next timer after manual refresh and ignores stale callbacks", async () => {
+		const harness = makeAdapterHarness(async () => []);
+		let forcedUpdate = false;
+		let scheduledUpdates = 0;
+		Object.assign(harness.adapter, {
+			ensureStudentsRoot: async () => undefined,
+			ensureInboxRoot: async () => undefined,
+			ensureNewsOfDayRoot: async () => undefined,
+			ensureHolidaysRoot: async () => undefined,
+			updateTimetableLocked: async () => undefined,
+			updateCurrentNextStatesLocked: async (force = false) => {
+				forcedUpdate = force;
+			},
+			updateCurrentNextStates: async () => void (scheduledUpdates += 1),
+		});
+		harness.methods.scheduleCurrentNextUpdate();
+
+		await harness.methods.onStateChange("info.refresh", { val: true, ack: false } as ioBroker.State);
+
+		expect(forcedUpdate).to.equal(true);
+		expect(harness.clearedTimers).to.deep.equal([harness.scheduledTimerHandles[0]]);
+		expect(harness.scheduledDelays).to.deep.equal([60_000, 60_000]);
+		expect(harness.scheduledCallbacks).to.have.length(2);
+
+		harness.scheduledCallbacks[0]();
+		expect(scheduledUpdates).to.equal(0);
+		expect(harness.scheduledCallbacks).to.have.length(2);
+
+		harness.scheduledCallbacks[1]();
+		await new Promise<void>(resolve => globalThis.setTimeout(resolve, 0));
+		expect(scheduledUpdates).to.equal(1);
+		expect(harness.scheduledCallbacks).to.have.length(3);
+	});
+
 	it("uses configured refresh intervals and enforces the minimums when scheduling", () => {
 		const configured = makeAdapterHarness(async () => []);
 		Object.assign(configured.adapter, {
 			config: { timetableRefreshIntervalMinutes: 12, currentNextRefreshIntervalMinutes: 3 },
+			timetableSnapshotAt: new Date(),
 		});
 		configured.methods.scheduleTimetableUpdate();
 		configured.methods.scheduleCurrentNextUpdate();
@@ -407,6 +456,7 @@ describe("upcoming exams adapter states", () => {
 		const belowMinimum = makeAdapterHarness(async () => []);
 		Object.assign(belowMinimum.adapter, {
 			config: { timetableRefreshIntervalMinutes: 4, currentNextRefreshIntervalMinutes: 0 },
+			timetableSnapshotAt: new Date(),
 		});
 		belowMinimum.methods.scheduleTimetableUpdate();
 		belowMinimum.methods.scheduleCurrentNextUpdate();
@@ -416,6 +466,80 @@ describe("upcoming exams adapter states", () => {
 		legacy.methods.scheduleTimetableUpdate();
 		legacy.methods.scheduleCurrentNextUpdate();
 		expect(legacy.scheduledDelays).to.deep.equal([5 * 60_000, 60_000]);
+
+		const overLimit = makeAdapterHarness(async () => []);
+		Object.assign(overLimit.adapter, {
+			config: { timetableRefreshIntervalMinutes: MAX_TIMETABLE_REFRESH_INTERVAL_MINUTES + 1 },
+			timetableSnapshotAt: new Date(),
+		});
+		overLimit.methods.scheduleTimetableUpdate();
+		expect(overLimit.scheduledDelays).to.deep.equal([5 * 60_000]);
+	});
+
+	it("retries the full timetable after five minutes when no snapshot exists", () => {
+		const harness = makeAdapterHarness(async () => []);
+		const now = new Date(2026, 10, 15, 12, 0).getTime();
+		const originalNow = Date.now;
+		Date.now = () => now;
+		try {
+			Object.assign(harness.adapter, {
+				config: { timetableRefreshIntervalMinutes: MAX_TIMETABLE_REFRESH_INTERVAL_MINUTES },
+			});
+			harness.methods.scheduleTimetableUpdate();
+
+			expect(harness.scheduledDelays).to.deep.equal([5 * 60_000]);
+			expect(Date.parse(String(harness.values.get("info.nextUpdate")))).to.equal(now + 5 * 60_000);
+		} finally {
+			Date.now = originalNow;
+		}
+	});
+
+	it("schedules before the cached week expires after an overnight full refresh", () => {
+		const harness = makeAdapterHarness(async () => []);
+		const refreshStartedAt = new Date(2026, 10, 16, 23, 30);
+		const refreshCompletedAt = new Date(2026, 10, 17, 0, 30);
+		const cacheDeadline = new Date(refreshStartedAt);
+		cacheDeadline.setHours(0, 0, 0, 0);
+		cacheDeadline.setDate(cacheDeadline.getDate() + 6);
+		const cacheExpiry = new Date(cacheDeadline);
+		cacheExpiry.setDate(cacheExpiry.getDate() + 1);
+		const originalNow = Date.now;
+		Date.now = () => refreshCompletedAt.getTime();
+		try {
+			Object.assign(harness.adapter, {
+				config: { timetableRefreshIntervalMinutes: MAX_TIMETABLE_REFRESH_INTERVAL_MINUTES },
+				timetableSnapshotAt: refreshStartedAt,
+			});
+			harness.methods.scheduleTimetableUpdate();
+
+			expect(harness.scheduledDelays).to.deep.equal([cacheDeadline.getTime() - refreshCompletedAt.getTime()]);
+			expect(Date.parse(String(harness.values.get("info.nextUpdate")))).to.equal(cacheDeadline.getTime());
+			expect(Date.parse(String(harness.values.get("info.nextUpdate")))).to.be.lessThan(cacheExpiry.getTime());
+		} finally {
+			Date.now = originalNow;
+		}
+	});
+
+	it("uses a five-minute retry floor after the cached week deadline", () => {
+		const harness = makeAdapterHarness(async () => []);
+		const refreshStartedAt = new Date(2026, 10, 9, 23, 30);
+		const refreshCompletedAt = new Date(2026, 10, 16, 0, 1);
+		const originalNow = Date.now;
+		Date.now = () => refreshCompletedAt.getTime();
+		try {
+			Object.assign(harness.adapter, {
+				config: { timetableRefreshIntervalMinutes: MAX_TIMETABLE_REFRESH_INTERVAL_MINUTES },
+				timetableSnapshotAt: refreshStartedAt,
+			});
+			harness.methods.scheduleTimetableUpdate();
+
+			expect(harness.scheduledDelays).to.deep.equal([5 * 60_000]);
+			expect(Date.parse(String(harness.values.get("info.nextUpdate")))).to.equal(
+				refreshCompletedAt.getTime() + 5 * 60_000,
+			);
+		} finally {
+			Date.now = originalNow;
+		}
 	});
 
 	it("keeps scheduled full-refresh current/next updates on the configured cadence", async () => {
@@ -567,6 +691,61 @@ describe("upcoming exams adapter states", () => {
 
 			const root = withChild ? "students.ada.timetable.today" : "timetable.today";
 			expect(harness.values.get(`${root}.currentSubject`)).to.equal("Mathematics");
+			expect(harness.values.get(`${root}.schoolRunning`)).to.equal(true);
+		}
+	});
+
+	it("uses Wednesday from Monday's cached week for single and parent child timetables", async () => {
+		const lessonFor = (id: string, date: string, subject: string): TimetableLesson => ({
+			id,
+			date,
+			startTime: "08:00",
+			endTime: "09:00",
+			subject,
+			subjectLong: subject,
+			teacher: "Teacher",
+			teacherLong: "Teacher",
+			room: "R1",
+			roomLong: "Room 1",
+			class: "5A",
+			classLong: "Class 5A",
+			lessonId: 1,
+			periodId: 1,
+			status: "Lesson",
+			changed: false,
+			cancelled: false,
+			substitution: "",
+			originalTeacher: "",
+			originalTeacherLong: "",
+			originalRoom: "",
+			originalRoomLong: "",
+			originalSubject: "",
+			originalSubjectLong: "",
+		});
+		const monday = lessonFor("monday", "2026-11-16", "Monday subject");
+		const tuesday = lessonFor("tuesday", "2026-11-17", "Tuesday subject");
+		const wednesday = lessonFor("wednesday", "2026-11-18", "Wednesday subject");
+		const weekTimetable = { today: [monday], tomorrow: [tuesday], week: [monday, tuesday, wednesday] };
+		const wednesdayMorning = new Date(2026, 10, 18, 8, 15);
+
+		for (const withChild of [false, true]) {
+			const children = withChild ? [{ id: 42, name: "Ada", timetable: weekTimetable }] : undefined;
+			const harness = makeAdapterHarness(async () => []);
+			const webUntis = (harness.adapter as { webUntis: WebUntisService }).webUntis;
+			webUntis.loadTimetable = async () => ({
+				today: withChild ? [] : weekTimetable.today,
+				tomorrow: withChild ? [] : weekTimetable.tomorrow,
+				week: withChild ? [] : weekTimetable.week,
+				holidays: null,
+				personType: withChild ? 12 : 5,
+				...(withChild ? { children } : { studentId: 42 }),
+			});
+
+			await harness.methods.updateTimetable();
+			await harness.methods.updateCurrentNextStatesLocked(false, wednesdayMorning);
+
+			const root = withChild ? "students.ada.timetable.today" : "students.42.timetable.today";
+			expect(harness.values.get(`${root}.currentSubject`)).to.equal("Wednesday subject");
 			expect(harness.values.get(`${root}.schoolRunning`)).to.equal(true);
 		}
 	});

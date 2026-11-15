@@ -26,6 +26,7 @@ import {
 	DEFAULT_TIMETABLE_REFRESH_INTERVAL_MINUTES,
 	getRefreshIntervalMs,
 	MAX_REFRESH_INTERVAL_MINUTES,
+	MAX_TIMETABLE_REFRESH_INTERVAL_MINUTES,
 } from "../../../src/lib/RefreshIntervals";
 import { rankSchoolResults } from "../../../src/lib/webuntis/SchoolDiscovery";
 import type { SchoolSearchResult } from "../../../src/lib/webuntis/WebUntisTypes";
@@ -237,6 +238,7 @@ class Settings extends React.Component<SettingsProps, SettingsState> {
 		help: string,
 		defaultValue: number,
 		minimum: number,
+		maximum = MAX_REFRESH_INTERVAL_MINUTES,
 	): React.JSX.Element {
 		const configuredValue = this.props.native[key];
 		return (
@@ -247,12 +249,15 @@ class Settings extends React.Component<SettingsProps, SettingsState> {
 				label={this.translate(label)}
 				helperText={this.translate(help)}
 				value={configuredValue ?? defaultValue}
-				inputProps={{ min: minimum, max: MAX_REFRESH_INTERVAL_MINUTES, step: 1 }}
+				inputProps={{ min: minimum, max: maximum, step: 1 }}
 				onChange={event =>
 					this.props.onChange(key, event.target.value === "" ? "" : Number(event.target.value))
 				}
 				onBlur={event =>
-					this.props.onChange(key, getRefreshIntervalMs(Number(event.target.value), defaultValue) / 60_000)
+					this.props.onChange(
+						key,
+						getRefreshIntervalMs(Number(event.target.value), defaultValue, maximum) / 60_000,
+					)
 				}
 			/>
 		);
@@ -525,6 +530,7 @@ class Settings extends React.Component<SettingsProps, SettingsState> {
 							"timetableRefreshIntervalHelp",
 							DEFAULT_TIMETABLE_REFRESH_INTERVAL_MINUTES,
 							DEFAULT_TIMETABLE_REFRESH_INTERVAL_MINUTES,
+							MAX_TIMETABLE_REFRESH_INTERVAL_MINUTES,
 						)}
 						{this.renderNumberField(
 							"currentNextRefreshInterval",

@@ -16,6 +16,7 @@ import {
 	DEFAULT_CURRENT_NEXT_REFRESH_INTERVAL_MINUTES,
 	DEFAULT_TIMETABLE_REFRESH_INTERVAL_MINUTES,
 	getRefreshIntervalMs,
+	MAX_TIMETABLE_REFRESH_INTERVAL_MINUTES,
 } from "./lib/RefreshIntervals";
 import { deriveCurrentNextLesson, type CurrentNextLessonSummary } from "./lib/webuntis/CurrentNextLesson";
 import type { UpcomingExam } from "./lib/webuntis/Exams";
@@ -276,6 +277,8 @@ class WebuntisNext extends utils.Adapter {
 	private readonly webUntis: WebUntisService;
 	private timetableTimer?: ioBroker.Timeout;
 	private currentNextTimer?: ioBroker.Timeout;
+	private currentNextTimerGeneration = 0;
+	private timetableSnapshotAt?: Date;
 	private timetableLessons: TimetableLesson[] = [];
 	private childTimetableLessons = new Map<number, { name: string; channelId: string; lessons: TimetableLesson[] }>();
 	private hasTimetableSnapshot = false;
@@ -413,6 +416,7 @@ class WebuntisNext extends utils.Adapter {
 		if (state.val === true && (id === "info.refresh" || id === `${this.namespace}.info.refresh`)) {
 			try {
 				await this.refreshAll();
+				this.resetCurrentNextUpdateTimer();
 			} finally {
 				if (!this.unloaded) {
 					await this.setStateAsync("info.refresh", false, true);
@@ -837,6 +841,7 @@ class WebuntisNext extends utils.Adapter {
 		return getRefreshIntervalMs(
 			this.config.timetableRefreshIntervalMinutes,
 			DEFAULT_TIMETABLE_REFRESH_INTERVAL_MINUTES,
+			MAX_TIMETABLE_REFRESH_INTERVAL_MINUTES,
 		);
 	}
 
@@ -851,15 +856,28 @@ class WebuntisNext extends utils.Adapter {
 		if (this.unloaded) {
 			return;
 		}
+		const now = Date.now();
 		const intervalMs = this.getTimetableRefreshIntervalMs();
-		const nextUpdate = new Date(Date.now() + intervalMs);
+		let delayMs = DEFAULT_TIMETABLE_REFRESH_INTERVAL_MINUTES * 60_000;
+		if (this.timetableSnapshotAt) {
+			delayMs = intervalMs;
+			const cacheDeadline = new Date(this.timetableSnapshotAt);
+			cacheDeadline.setHours(0, 0, 0, 0);
+			cacheDeadline.setDate(cacheDeadline.getDate() + 6);
+			const timeUntilCacheDeadline = cacheDeadline.getTime() - now;
+			delayMs =
+				timeUntilCacheDeadline <= 0
+					? DEFAULT_TIMETABLE_REFRESH_INTERVAL_MINUTES * 60_000
+					: Math.min(intervalMs, timeUntilCacheDeadline);
+		}
+		const nextUpdate = new Date(now + delayMs);
 		this.timetableTimer = this.setTimeout(() => {
 			this.timetableTimer = undefined;
 			void this.updateTimetable()
 				.then(() => this.updateCurrentNextStates())
 				.catch(error => this.log.error(`Unexpected timetable update error: ${error}`))
 				.finally(() => this.scheduleTimetableUpdate());
-		}, intervalMs);
+		}, delayMs);
 		void this.setState("info.nextUpdate", nextUpdate.toISOString(), true).catch(error =>
 			this.log.warn(`Failed to update the next timetable update time: ${error}`),
 		);
@@ -869,12 +887,28 @@ class WebuntisNext extends utils.Adapter {
 		if (this.unloaded) {
 			return;
 		}
+		const generation = ++this.currentNextTimerGeneration;
+		if (this.currentNextTimer) {
+			this.clearTimeout(this.currentNextTimer);
+			this.currentNextTimer = undefined;
+		}
 		this.currentNextTimer = this.setTimeout(() => {
+			if (generation !== this.currentNextTimerGeneration) {
+				return;
+			}
 			this.currentNextTimer = undefined;
 			void this.updateCurrentNextStates()
 				.catch(error => this.log.error(`Unexpected current/next update error: ${error}`))
-				.finally(() => this.scheduleCurrentNextUpdate());
+				.finally(() => {
+					if (generation === this.currentNextTimerGeneration) {
+						this.scheduleCurrentNextUpdate();
+					}
+				});
 		}, this.getCurrentNextRefreshIntervalMs());
+	}
+
+	private resetCurrentNextUpdateTimer(): void {
+		this.scheduleCurrentNextUpdate();
 	}
 
 	private hasConnectionConfig(): this is { config: WebUntisConnectionConfig } {
@@ -947,7 +981,8 @@ class WebuntisNext extends utils.Adapter {
 			const childChannelIds = studentChannelIds(students);
 			this.knownStudentIdentities = students.map(({ id, name }) => ({ id, name }));
 			const firstTimetable = students[0]?.timetable ?? data;
-			this.timetableLessons = [...firstTimetable.today, ...firstTimetable.tomorrow];
+			this.timetableLessons = [...firstTimetable.week];
+			this.timetableSnapshotAt = new Date(refreshNow);
 			this.hasTimetableSnapshot = true;
 			let updated = 0;
 			let removed = 0;
@@ -958,7 +993,7 @@ class WebuntisNext extends utils.Adapter {
 						{
 							name: student.name,
 							channelId: childChannelIds.get(student.id)!,
-							lessons: [...student.timetable.today, ...student.timetable.tomorrow],
+							lessons: [...student.timetable.week],
 						},
 					]),
 				);
