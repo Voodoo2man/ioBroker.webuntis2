@@ -12,6 +12,11 @@ import {
 	translatedWeekday,
 } from "./lib/ObjectTranslations";
 import { setStateChangedOrInitialize } from "./lib/StateWriter";
+import {
+	DEFAULT_CURRENT_NEXT_REFRESH_INTERVAL_MINUTES,
+	DEFAULT_TIMETABLE_REFRESH_INTERVAL_MINUTES,
+	getRefreshIntervalMs,
+} from "./lib/RefreshIntervals";
 import { deriveCurrentNextLesson, type CurrentNextLessonSummary } from "./lib/webuntis/CurrentNextLesson";
 import type { UpcomingExam } from "./lib/webuntis/Exams";
 import type { HolidaySummary } from "./lib/webuntis/Holidays";
@@ -34,8 +39,6 @@ import type {
 	WebUntisStudentIdentity,
 } from "./lib/webuntis/WebUntisTypes";
 
-const TIMETABLE_INTERVAL_MS = 5 * 60 * 1000;
-const CURRENT_NEXT_INTERVAL_MS = 60 * 1000;
 const EXAMS_MAX_ATTEMPTS = 3;
 const TIMETABLE_GROUPS = ["today", "tomorrow", "week"] as const;
 type AdapterStateDefinition = {
@@ -829,6 +832,20 @@ class WebuntisNext extends utils.Adapter {
 		await this.updateCurrentNextStatesLocked();
 	}
 
+	private getTimetableRefreshIntervalMs(): number {
+		return getRefreshIntervalMs(
+			this.config.timetableRefreshIntervalMinutes,
+			DEFAULT_TIMETABLE_REFRESH_INTERVAL_MINUTES,
+		);
+	}
+
+	private getCurrentNextRefreshIntervalMs(): number {
+		return getRefreshIntervalMs(
+			this.config.currentNextRefreshIntervalMinutes,
+			DEFAULT_CURRENT_NEXT_REFRESH_INTERVAL_MINUTES,
+		);
+	}
+
 	private scheduleTimetableUpdate(): void {
 		if (this.unloaded) {
 			return;
@@ -838,7 +855,7 @@ class WebuntisNext extends utils.Adapter {
 			void this.updateTimetable()
 				.catch(error => this.log.error(`Unexpected timetable update error: ${error}`))
 				.finally(() => this.scheduleTimetableUpdate());
-		}, TIMETABLE_INTERVAL_MS);
+		}, this.getTimetableRefreshIntervalMs());
 	}
 
 	private scheduleCurrentNextUpdate(): void {
@@ -850,7 +867,7 @@ class WebuntisNext extends utils.Adapter {
 			void this.updateCurrentNextStates()
 				.catch(error => this.log.error(`Unexpected current/next update error: ${error}`))
 				.finally(() => this.scheduleCurrentNextUpdate());
-		}, CURRENT_NEXT_INTERVAL_MS);
+		}, this.getCurrentNextRefreshIntervalMs());
 	}
 
 	private hasConnectionConfig(): this is { config: WebUntisConnectionConfig } {
@@ -1035,7 +1052,11 @@ class WebuntisNext extends utils.Adapter {
 			}
 			await this.cleanupLegacyDataRoots(students.length > 0);
 			await this.setState("info.lastSuccessfulUpdate", now.toISOString(), true);
-			await this.setState("info.nextUpdate", new Date(now.getTime() + TIMETABLE_INTERVAL_MS).toISOString(), true);
+			await this.setState(
+				"info.nextUpdate",
+				new Date(now.getTime() + this.getTimetableRefreshIntervalMs()).toISOString(),
+				true,
+			);
 			await this.setState("info.connection", true, true);
 			this.log.debug(`Timetable updated: ${updated} lessons updated, ${removed} obsolete lessons removed`);
 		} catch (error) {
@@ -1043,7 +1064,11 @@ class WebuntisNext extends utils.Adapter {
 				return;
 			}
 			await this.setState("info.connection", false, true);
-			await this.setState("info.nextUpdate", new Date(Date.now() + TIMETABLE_INTERVAL_MS).toISOString(), true);
+			await this.setState(
+				"info.nextUpdate",
+				new Date(Date.now() + this.getTimetableRefreshIntervalMs()).toISOString(),
+				true,
+			);
 			const code = error instanceof WebUntisError ? error.code : "UNEXPECTED_RESPONSE";
 			const detail = error instanceof Error ? ` (${error.message})` : "";
 			this.log.warn(`Timetable update failed: ${code}${detail}; existing timetable data was kept`);

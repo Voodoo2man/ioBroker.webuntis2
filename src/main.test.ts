@@ -61,8 +61,11 @@ type AdapterHarness = {
 		writeHolidaySummary(summary: never): Promise<void>;
 		cleanupObsoleteStructure(): Promise<void>;
 		updateCurrentNextStates(): Promise<void>;
+		scheduleTimetableUpdate(): void;
+		scheduleCurrentNextUpdate(): void;
 	};
 	values: Map<string, ioBroker.StateValue>;
+	scheduledDelays: number[];
 	deleted: string[];
 	objects: Record<string, ioBroker.SettableObject>;
 	warnings: string[];
@@ -94,6 +97,7 @@ function makeAdapterHarness(
 	const warnings: string[] = [];
 	const groupWrites: Array<{ group: string; root: string }> = [];
 	const subscriptions: string[] = [];
+	const scheduledDelays: number[] = [];
 	const allObjectRows = [
 		...existingTimestampIds.map(id => ({ id: `webuntis2.0.${id}` })),
 		...existingSlots.flatMap(slot => {
@@ -166,6 +170,10 @@ function makeAdapterHarness(
 		subscribeStatesAsync: async (pattern: string) => {
 			subscriptions.push(pattern);
 		},
+		setTimeout: (_callback: unknown, delay: number) => {
+			scheduledDelays.push(delay);
+			return 1 as unknown as ioBroker.Timeout;
+		},
 		ensureTranslatedObject: async (id: string, object: ioBroker.SettableObject) => {
 			objects[id] = object;
 		},
@@ -225,8 +233,10 @@ function makeAdapterHarness(
 		writeHolidaySummary(summary: never): Promise<void>;
 		cleanupObsoleteStructure(): Promise<void>;
 		updateCurrentNextStates(): Promise<void>;
+		scheduleTimetableUpdate(): void;
+		scheduleCurrentNextUpdate(): void;
 	};
-	return { adapter, methods, values, deleted, objects, warnings, groupWrites, subscriptions };
+	return { adapter, methods, values, deleted, objects, warnings, groupWrites, subscriptions, scheduledDelays };
 }
 
 const sampleExam = (id: number, startTime: string, displayText: string): UpcomingExam => ({
@@ -363,6 +373,29 @@ describe("upcoming exams adapter states", () => {
 		await harness.methods.refreshAll();
 
 		expect(steps).to.deep.equal(["students", "inbox", "holidays", "timetable", "current-next"]);
+	});
+
+	it("uses configured refresh intervals and enforces the minimums when scheduling", () => {
+		const configured = makeAdapterHarness(async () => []);
+		Object.assign(configured.adapter, {
+			config: { timetableRefreshIntervalMinutes: 12, currentNextRefreshIntervalMinutes: 3 },
+		});
+		configured.methods.scheduleTimetableUpdate();
+		configured.methods.scheduleCurrentNextUpdate();
+		expect(configured.scheduledDelays).to.deep.equal([12 * 60_000, 3 * 60_000]);
+
+		const belowMinimum = makeAdapterHarness(async () => []);
+		Object.assign(belowMinimum.adapter, {
+			config: { timetableRefreshIntervalMinutes: 4, currentNextRefreshIntervalMinutes: 0 },
+		});
+		belowMinimum.methods.scheduleTimetableUpdate();
+		belowMinimum.methods.scheduleCurrentNextUpdate();
+		expect(belowMinimum.scheduledDelays).to.deep.equal([5 * 60_000, 60_000]);
+
+		const legacy = makeAdapterHarness(async () => []);
+		legacy.methods.scheduleTimetableUpdate();
+		legacy.methods.scheduleCurrentNextUpdate();
+		expect(legacy.scheduledDelays).to.deep.equal([5 * 60_000, 60_000]);
 	});
 
 	it("serializes full refreshes and scheduled timetable updates", async () => {

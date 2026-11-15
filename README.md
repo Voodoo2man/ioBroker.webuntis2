@@ -24,8 +24,9 @@ visualizations, notifications, and automations.
 - Homework for reliably identified students, with due dates, completion status, and attachments
 - Student absences and excuse status, including unknown status values
 - Messages of the day, including subject, text, and attachment indicators
-- Timetables, holidays, inbox messages, messages of the day, homework, absences, and exams refresh every five minutes
-- Current and next lesson values refresh every minute
+- Timetables, holidays, inbox messages, messages of the day, homework, absences, and exams refresh every five minutes by default; the interval is
+  configurable in Admin.
+- Current and next lesson values refresh every minute by default; the interval is configurable in Admin.
 
 ## Installation and setup
 
@@ -52,6 +53,13 @@ this complete query-and-result workflow on their own; reproducing it there
 would require a custom component or equivalent custom UI code. React keeps
 these setup interactions together while the adapter remains responsible for
 WebUntis requests and validation.
+
+The Admin configuration also provides `timetableRefreshIntervalMinutes` for the
+full timetable and data refresh, and `currentNextRefreshIntervalMinutes` for
+current/next lesson states. Both accept whole minutes and cannot be set below
+their minimums: 5 minutes for the full refresh and 1 minute for current/next
+lesson states. These are also the defaults; missing legacy settings and invalid
+values safely fall back to them.
 
 ## Data in ioBroker
 
@@ -110,8 +118,9 @@ Messages of the day are available under `newsOfDay.today`. The `date` and
 `count` states identify the date and number of messages. The `json` state at
 `newsOfDay.today.json` contains the complete message list as a JSON array. Each
 message also has a numbered channel (`01`, `02`, ...) with `id`, `subject`,
-`text`, and `hasAttachments` states. The list is refreshed every five minutes and through
-`info.refresh`. A failed request preserves the last successful data, while a
+`text`, and `hasAttachments` states. The list follows the configured full-refresh
+interval (five minutes by default) and is also refreshed through `info.refresh`.
+A failed request preserves the last successful data, while a
 successful empty response sets the count to zero and removes obsolete message
 channels.
 
@@ -214,6 +223,7 @@ and include only relevant, non-sensitive log messages when asking for help.
 ## Changelog
 ### **WORK IN PROGRESS**
 
+- (Voodoo2man) Added configurable refresh intervals for timetable/data updates and current/next lesson states.
 - (Voodoo2man) Updated the testing tooling to @iobroker/testing 6.3.2.
 
 ### 0.3.0 (2026-11-02)

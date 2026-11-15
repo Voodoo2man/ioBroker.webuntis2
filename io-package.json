@@ -172,7 +172,9 @@
     "schoolAddress": "",
     "schoolId": null,
     "username": "",
-    "password": ""
+    "password": "",
+    "timetableRefreshIntervalMinutes": 5,
+    "currentNextRefreshIntervalMinutes": 1
   },
   "encryptedNative": [
     "password"

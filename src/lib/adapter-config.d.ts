@@ -11,6 +11,8 @@ declare global {
 			schoolId: number | null;
 			username: string;
 			password: string;
+			timetableRefreshIntervalMinutes: number;
+			currentNextRefreshIntervalMinutes: number;
 		}
 	}
 }
