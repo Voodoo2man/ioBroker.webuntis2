@@ -282,7 +282,9 @@ class WebuntisNext extends utils.Adapter {
 	private timetableLessons: TimetableLesson[] = [];
 	private childTimetableLessons = new Map<number, { name: string; channelId: string; lessons: TimetableLesson[] }>();
 	private hasTimetableSnapshot = false;
+	private timetableTodayDate?: string;
 	private lastCurrentNextUpdateAt?: number;
+	private lastCurrentNextUpdateDate?: string;
 	private unloaded = false;
 	private readonly migratedNames = new Set<string>();
 	private inboxMutationQueue: Promise<void> = Promise.resolve();
@@ -892,6 +894,10 @@ class WebuntisNext extends utils.Adapter {
 			this.clearTimeout(this.currentNextTimer);
 			this.currentNextTimer = undefined;
 		}
+		const now = Date.now();
+		const nextDay = new Date(now);
+		nextDay.setHours(24, 0, 0, 0);
+		const delayMs = Math.min(this.getCurrentNextRefreshIntervalMs(), nextDay.getTime() - now);
 		this.currentNextTimer = this.setTimeout(() => {
 			if (generation !== this.currentNextTimerGeneration) {
 				return;
@@ -904,7 +910,7 @@ class WebuntisNext extends utils.Adapter {
 						this.scheduleCurrentNextUpdate();
 					}
 				});
-		}, this.getCurrentNextRefreshIntervalMs());
+		}, delayMs);
 	}
 
 	private resetCurrentNextUpdateTimer(): void {
@@ -931,6 +937,7 @@ class WebuntisNext extends utils.Adapter {
 		}
 		await this.setState("info.lastUpdate", new Date().toISOString(), true);
 		const refreshNow = new Date();
+		let timetableGroupWriteStarted = false;
 		try {
 			const now = new Date();
 			const messages = await this.webUntis.loadMessagesOfDay(this.config, now);
@@ -981,22 +988,20 @@ class WebuntisNext extends utils.Adapter {
 			const childChannelIds = studentChannelIds(students);
 			this.knownStudentIdentities = students.map(({ id, name }) => ({ id, name }));
 			const firstTimetable = students[0]?.timetable ?? data;
-			this.timetableLessons = [...firstTimetable.week];
-			this.timetableSnapshotAt = new Date(refreshNow);
-			this.hasTimetableSnapshot = true;
+			const nextTimetableLessons = [...firstTimetable.week];
+			const nextChildTimetableLessons = new Map(
+				students.map(student => [
+					student.id,
+					{
+						name: student.name,
+						channelId: childChannelIds.get(student.id)!,
+						lessons: [...student.timetable.week],
+					},
+				]),
+			);
 			let updated = 0;
 			let removed = 0;
 			if (students.length) {
-				this.childTimetableLessons = new Map(
-					students.map(student => [
-						student.id,
-						{
-							name: student.name,
-							channelId: childChannelIds.get(student.id)!,
-							lessons: [...student.timetable.week],
-						},
-					]),
-				);
 				for (const child of students) {
 					this.ensureActive();
 					const childRoot = `students.${childChannelIds.get(child.id)}`;
@@ -1016,6 +1021,7 @@ class WebuntisNext extends utils.Adapter {
 						"Timetable",
 					);
 					for (const group of TIMETABLE_GROUPS) {
+						timetableGroupWriteStarted = true;
 						const result = await this.writeTimetableGroup(
 							group,
 							child.timetable[group],
@@ -1026,8 +1032,6 @@ class WebuntisNext extends utils.Adapter {
 						removed += result.removed;
 					}
 				}
-			} else {
-				this.childTimetableLessons.clear();
 			}
 			const existingChildren = await this.getObjectListAsync({
 				startkey: `${this.namespace}.students.`,
@@ -1057,11 +1061,17 @@ class WebuntisNext extends utils.Adapter {
 					"Timetable",
 				);
 				for (const group of TIMETABLE_GROUPS) {
+					timetableGroupWriteStarted = true;
 					const result = await this.writeTimetableGroup(group, data[group], now);
 					updated += result.updated;
 					removed += result.removed;
 				}
 			}
+			this.timetableLessons = nextTimetableLessons;
+			this.childTimetableLessons = nextChildTimetableLessons;
+			this.timetableSnapshotAt = new Date(refreshNow);
+			this.hasTimetableSnapshot = true;
+			this.timetableTodayDate = this.timetableDate(now);
 			if (data.holidays) {
 				await this.writeHolidaySummary(data.holidays);
 			} else {
@@ -1101,10 +1111,21 @@ class WebuntisNext extends utils.Adapter {
 			if (this.unloaded) {
 				return;
 			}
-			await this.setState("info.connection", false, true);
 			const code = error instanceof WebUntisError ? error.code : "UNEXPECTED_RESPONSE";
 			const detail = error instanceof Error ? ` (${error.message})` : "";
 			this.log.warn(`Timetable update failed: ${code}${detail}; existing timetable data was kept`);
+			if (this.hasTimetableSnapshot && timetableGroupWriteStarted) {
+				this.timetableTodayDate = undefined;
+				try {
+					await this.updateCurrentNextStatesLocked(true);
+				} catch (recoveryError) {
+					const recoveryDetail = recoveryError instanceof Error ? ` (${recoveryError.message})` : "";
+					this.log.warn(
+						`Failed to restore today's timetable from the last successful snapshot${recoveryDetail}`,
+					);
+				}
+			}
+			await this.setState("info.connection", false, true);
 		}
 		if (!this.unloaded) {
 			await this.updateHomeworkAndAbsences();
@@ -2131,12 +2152,27 @@ class WebuntisNext extends utils.Adapter {
 			return;
 		}
 		const nowMs = now.getTime();
+		const today = this.timetableDate(now);
+		const dateChanged = this.lastCurrentNextUpdateDate !== today;
+		const todayNeedsRefresh = this.timetableTodayDate !== today;
 		if (
 			!force &&
+			!dateChanged &&
+			!todayNeedsRefresh &&
 			this.lastCurrentNextUpdateAt !== undefined &&
 			nowMs - this.lastCurrentNextUpdateAt < this.getCurrentNextRefreshIntervalMs()
 		) {
 			return;
+		}
+		if (todayNeedsRefresh) {
+			for (const child of this.childTimetableLessons.values()) {
+				const lessons = child.lessons.filter(lesson => lesson.date === today);
+				await this.writeTimetableGroup("today", lessons, now, `students.${child.channelId}.timetable`);
+			}
+			if (this.childTimetableLessons.size === 0) {
+				const lessons = this.timetableLessons.filter(lesson => lesson.date === today);
+				await this.writeTimetableGroup("today", lessons, now);
+			}
 		}
 		for (const child of this.childTimetableLessons.values()) {
 			await this.writeCurrentNextSummary(child.lessons, now, `students.${child.channelId}.timetable.today`);
@@ -2144,7 +2180,11 @@ class WebuntisNext extends utils.Adapter {
 		if (this.childTimetableLessons.size === 0) {
 			await this.writeCurrentNextSummary(this.timetableLessons, now, "timetable.today");
 		}
+		if (todayNeedsRefresh) {
+			this.timetableTodayDate = today;
+		}
 		this.lastCurrentNextUpdateAt = nowMs;
+		this.lastCurrentNextUpdateDate = today;
 	}
 
 	private async cleanupObsoleteStructure(): Promise<void> {

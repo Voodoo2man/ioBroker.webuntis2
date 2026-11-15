@@ -61,12 +61,18 @@ limited to 5–8,640 minutes (6 days), and current/next updates have a 1-minute
 minimum. Their defaults are 5 and 1 minute respectively. Missing legacy
 settings and invalid or out-of-range values safely fall back to the defaults.
 If no successful timetable snapshot exists, full refreshes retry after five
-minutes regardless of the configured interval. Automatic current/next updates
+minutes regardless of the configured interval. If a timetable refresh fails
+after partially writing groups, the adapter promptly attempts to restore
+`today` and Current/Next from the retained successful snapshot without another
+WebUntis request. Automatic current/next updates
 follow their own configured interval even when full refreshes are more frequent;
 startup and `info.refresh` update them immediately and restart their timer.
 Current/next calculations select the actual date from the cached weekly timetable.
-The six-day maximum keeps that date
-within the loaded rolling week between full refreshes.
+At each local date boundary, the adapter also refreshes the `today` date, lessons,
+and summary from that cache and recalculates Current/Next immediately, even when
+the configured interval is longer than a day; this requires no additional
+WebUntis request. The six-day maximum keeps that date within the loaded rolling
+week between full refreshes.
 
 ## Data in ioBroker
 
@@ -232,8 +238,8 @@ and include only relevant, non-sensitive log messages when asking for help.
 ### **WORK IN PROGRESS**
 
 - (Voodoo2man) Added configurable refresh intervals with a six-day full-refresh
-  maximum, five-minute retries when no timetable snapshot exists, and aligned
-  current/next lessons and next-update reporting with the cached week and timers.
+  maximum and five-minute retries without a successful snapshot; kept Current/Next,
+  today's timetable views, and next-update reporting aligned with the cached week.
 - (Voodoo2man) Updated the testing tooling to @iobroker/testing 6.3.2.
 
 ### 0.3.0 (2026-11-02)
