@@ -21,6 +21,13 @@ import TextField from "@material-ui/core/TextField";
 import Typography from "@material-ui/core/Typography";
 import { type StyleRules, type Theme, withStyles } from "@material-ui/core/styles";
 import I18n from "@iobroker/adapter-react/i18n";
+import {
+	DEFAULT_CURRENT_NEXT_REFRESH_INTERVAL_MINUTES,
+	DEFAULT_TIMETABLE_REFRESH_INTERVAL_MINUTES,
+	getRefreshIntervalMs,
+	MAX_REFRESH_INTERVAL_MINUTES,
+	MAX_TIMETABLE_REFRESH_INTERVAL_MINUTES,
+} from "../../../src/lib/RefreshIntervals";
 import { rankSchoolResults } from "../../../src/lib/webuntis/SchoolDiscovery";
 import type { SchoolSearchResult } from "../../../src/lib/webuntis/WebUntisTypes";
 
@@ -221,6 +228,37 @@ class Settings extends React.Component<SettingsProps, SettingsState> {
 							}
 						: {}),
 				}}
+			/>
+		);
+	}
+
+	private renderNumberField(
+		label: string,
+		key: string,
+		help: string,
+		defaultValue: number,
+		minimum: number,
+		maximum = MAX_REFRESH_INTERVAL_MINUTES,
+	): React.JSX.Element {
+		const configuredValue = this.props.native[key];
+		return (
+			<TextField
+				fullWidth
+				margin="dense"
+				type="number"
+				label={this.translate(label)}
+				helperText={this.translate(help)}
+				value={configuredValue ?? defaultValue}
+				inputProps={{ min: minimum, max: maximum, step: 1 }}
+				onChange={event =>
+					this.props.onChange(key, event.target.value === "" ? "" : Number(event.target.value))
+				}
+				onBlur={event =>
+					this.props.onChange(
+						key,
+						getRefreshIntervalMs(Number(event.target.value), defaultValue, maximum) / 60_000,
+					)
+				}
 			/>
 		);
 	}
@@ -474,6 +512,33 @@ class Settings extends React.Component<SettingsProps, SettingsState> {
 							</Button>
 							{this.renderStatus(this.state.status, this.props.classes.actionStatus)}
 						</div>
+					</CardContent>
+				</Card>
+
+				<Card className={this.props.classes.card}>
+					<CardHeader title={this.translate("refreshIntervalsCardTitle")} />
+					<CardContent className={this.props.classes.cardContent}>
+						<Typography
+							variant="body2"
+							className={this.props.classes.help}
+						>
+							{this.translate("refreshIntervalsCardHelp")}
+						</Typography>
+						{this.renderNumberField(
+							"timetableRefreshInterval",
+							"timetableRefreshIntervalMinutes",
+							"timetableRefreshIntervalHelp",
+							DEFAULT_TIMETABLE_REFRESH_INTERVAL_MINUTES,
+							DEFAULT_TIMETABLE_REFRESH_INTERVAL_MINUTES,
+							MAX_TIMETABLE_REFRESH_INTERVAL_MINUTES,
+						)}
+						{this.renderNumberField(
+							"currentNextRefreshInterval",
+							"currentNextRefreshIntervalMinutes",
+							"currentNextRefreshIntervalHelp",
+							DEFAULT_CURRENT_NEXT_REFRESH_INTERVAL_MINUTES,
+							DEFAULT_CURRENT_NEXT_REFRESH_INTERVAL_MINUTES,
+						)}
 					</CardContent>
 				</Card>
 			</form>
