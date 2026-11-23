@@ -235,7 +235,7 @@ in a browser first. Then run the connection test in the adapter configuration
 and include only relevant, non-sensitive log messages when asking for help.
 
 <a href="https://www.paypal.com/donate/?hosted_button_id=3RJQGSJNRSHUJ">
-  <img src=".github/Donate.png" alt="Mit PayPal spenden" width="220">
+  <img src=".github/Donate_eng.png" alt="Mit PayPal spenden" width="220">
 </a>
 
 ## Changelog
