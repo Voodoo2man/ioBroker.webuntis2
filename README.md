@@ -250,16 +250,11 @@ and include only relevant, non-sensitive log messages when asking for help.
 </a>
 
 ## Changelog
+### 0.4.0 (2026-11-28)
 
-### **WORK IN PROGRESS**
-
-- (Voodoo2man) Accepted WebUntis' no-reason absence sentinel without rejecting valid absence records.
-- (Voodoo2man) Raised the Admin minimum to the stable 8.3.15 release and logged school-search requests for clearer Admin diagnostics.
-- (Voodoo2man) Added central login credentials and cleared legacy credentials only after the saved configuration authenticated successfully.
-- (Voodoo2man) Added configurable refresh intervals with a six-day full-refresh
-  maximum and five-minute retries without a successful snapshot; kept Current/Next,
-  today's timetable views, and next-update reporting aligned with the cached week.
-- (Voodoo2man) Updated the testing tooling to @iobroker/testing 6.3.2.
+- (Voodoo2man) Moved WebUntis credentials to ioBroker's central credential store and retained legacy values until successful authentication.
+- (Voodoo2man) Improved school search and Admin diagnostics, fixed valid absence handling, and added configurable refresh intervals.
+- (Voodoo2man) Raised the minimum Admin version to stable 8.3.15.
 
 ### 0.3.0 (2026-11-02)
 
@@ -287,10 +282,6 @@ and include only relevant, non-sensitive log messages when asking for help.
 - (Voodoo2man) Added a manual full refresh button
 - (Voodoo2man) Improved timetable details
 - (Voodoo2man) Removed duplicate date states.
-
-### 0.1.10 (2026-10-18)
-
-- (Voodoo2man) Improved configuration feedback, holiday names, and connection status; reduced routine login log messages; verified Node.js 26 compatibility; and migrated Dependabot auto-merging to the `pull_request` event.
 
 For earlier releases, see [CHANGELOG_OLD.md](CHANGELOG_OLD.md).
 

@@ -1,4 +1,8 @@
 # Changelog
+## 0.1.10 (2026-10-18)
+
+- (Voodoo2man) Improved configuration feedback, holiday names, and connection status; reduced routine login log messages; verified Node.js 26 compatibility; and migrated Dependabot auto-merging to the `pull_request` event.
+
 ## 0.1.9 (2026-10-15)
 
 - (Voodoo2man) Improved timetable data and reliability with comparisons, long names, and automatic re-authentication for expired sessions

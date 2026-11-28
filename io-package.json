@@ -1,9 +1,22 @@
 {
   "common": {
     "name": "webuntis2",
-    "version": "0.3.0",
+    "version": "0.4.0",
     "nogit": true,
     "news": {
+      "0.4.0": {
+        "en": "Moved WebUntis credentials to ioBroker's central credential store; legacy values remain until the new credentials authenticate successfully.\nImproved school search and Admin diagnostics, fixed absence handling, and added configurable refresh intervals.\nRaised the minimum Admin version to stable 8.3.15.",
+        "de": "WebUntis-Zugangsdaten in den zentralen Credential-Speicher von ioBroker verschoben; bisherige Zugangsdaten bleiben bis zur erfolgreichen Authentifizierung der neuen Daten erhalten.\nSchulsuche und Admin-Diagnose verbessert, Fehlzeiten korrekt verarbeitet und konfigurierbare Aktualisierungsintervalle ergänzt.\nDie Mindestversion von Admin auf die stabile Version 8.3.15 angehoben.",
+        "ru": "Данные WebUntis перенесены в центральное хранилище учетных данных ioBroker; старые данные сохраняются, пока новые не пройдут успешную аутентификацию.\nУлучшены поиск школ и диагностика Admin, исправлена обработка отсутствий и добавлены настраиваемые интервалы обновления.\nМинимальная версия Admin повышена до стабильной 8.3.15.",
+        "pt": "Credenciais do WebUntis transferidas para o armazenamento central de credenciais do ioBroker; os valores antigos são mantidos até que as novas credenciais sejam autenticadas com sucesso.\nBusca de escolas e diagnóstico do Admin aprimorados, tratamento das faltas corrigido e intervalos de atualização configuráveis adicionados.\nVersão mínima do Admin elevada para a versão estável 8.3.15.",
+        "nl": "WebUntis-inloggegevens verplaatst naar de centrale inloggegevensopslag van ioBroker; oude waarden blijven behouden totdat de nieuwe gegevens succesvol zijn geverifieerd.\nZoeken naar scholen en Admin-diagnose verbeterd, verwerking van afwezigheden gecorrigeerd en instelbare vernieuwingsintervallen toegevoegd.\nDe minimale Admin-versie is verhoogd naar de stabiele versie 8.3.15.",
+        "fr": "Identifiants WebUntis transférés vers le stockage central d'ioBroker ; les anciennes valeurs sont conservées jusqu'à l'authentification réussie des nouveaux identifiants.\nRecherche d'écoles et diagnostics Admin améliorés, traitement des absences corrigé et intervalles d'actualisation configurables ajoutés.\nVersion minimale d'Admin relevée à la version stable 8.3.15.",
+        "it": "Credenziali WebUntis trasferite nell'archivio centrale di ioBroker; i valori precedenti vengono mantenuti finché le nuove credenziali non vengono autenticate correttamente.\nRicerca delle scuole e diagnostica Admin migliorate, gestione delle assenze corretta e intervalli di aggiornamento configurabili aggiunti.\nVersione minima di Admin elevata alla versione stabile 8.3.15.",
+        "es": "Credenciales de WebUntis trasladadas al almacén central de credenciales de ioBroker; los valores anteriores se conservan hasta que las nuevas credenciales se autentiquen correctamente.\nMejoradas la búsqueda de centros y el diagnóstico de Admin, corregido el tratamiento de las ausencias y añadidos intervalos de actualización configurables.\nVersión mínima de Admin elevada a la versión estable 8.3.15.",
+        "pl": "Dane logowania WebUntis przeniesiono do centralnego magazynu danych logowania ioBroker; stare wartości pozostają zachowane do czasu pomyślnego uwierzytelnienia nowych danych.\nUlepszono wyszukiwanie szkół i diagnostykę Admin, poprawiono obsługę nieobecności oraz dodano konfigurowalne interwały odświeżania.\nMinimalną wersję Admin podniesiono do stabilnej wersji 8.3.15.",
+        "uk": "Облікові дані WebUntis перенесено до центрального сховища облікових даних ioBroker; старі значення зберігаються, доки нові облікові дані не буде успішно автентифіковано.\nПокращено пошук шкіл і діагностику Admin, виправлено обробку відсутностей і додано налаштовувані інтервали оновлення.\nМінімальну версію Admin підвищено до стабільної 8.3.15.",
+        "zh-cn": "WebUntis 凭据已迁移至 ioBroker 的中央凭据存储；旧值会保留，直到新凭据成功通过身份验证。\n改进了学校搜索和 Admin 诊断，修正了缺勤处理，并添加了可配置的刷新间隔。\n将 Admin 最低版本提升至稳定版 8.3.15。"
+      },
       "0.3.0": {
         "en": "Added messages of the day\nAdded homework data\nAdded absence records",
         "de": "Tagesnachrichten hinzugefügt\nHausaufgabendaten hinzugefügt\nFehlzeiteneinträge hinzugefügt",
@@ -81,19 +94,6 @@
         "pl": "Ulepszono dane i niezawodność planu lekcji dzięki porównaniom, pełnym nazwom i automatycznemu ponownemu logowaniu po wygaśnięciu sesji; dodano skrzynkę nieprzeczytanych wiadomości WebUntis",
         "uk": "Покращено дані та надійність розкладу: додано порівняння, повні назви й автоматичну повторну автентифікацію після завершення сеансу; додано скриньку непрочитаних повідомлень WebUntis",
         "zh-cn": "改进了课程表数据和可靠性，增加了对比、完整名称和会话过期后的自动重新认证；新增 WebUntis 未读消息收件箱"
-      },
-      "0.1.8": {
-        "en": "Update dynamic lesson names, migrate existing object metadata and repair legacy i18n names",
-        "de": "Dynamische Unterrichtsnamen aktualisiert, bestehende Objektmetadaten migriert und alte i18n-Namen korrigiert",
-        "ru": "Обновлены динамические названия уроков, перенесены метаданные существующих объектов и исправлены старые имена i18n",
-        "pt": "Nomes dinâmicos das aulas atualizados, metadados dos objetos existentes migrados e nomes i18n antigos corrigidos",
-        "nl": "Dynamische lesnamen bijgewerkt, bestaande objectmetadata gemigreerd en oude i18n-namen hersteld",
-        "fr": "Mise à jour des noms de cours dynamiques, migration des métadonnées existantes et correction des anciens noms i18n",
-        "it": "Aggiornati i nomi dinamici delle lezioni, migrati i metadati esistenti e corretti i vecchi nomi i18n",
-        "es": "Actualizados los nombres dinámicos de las clases, migrados los metadatos existentes y corregidos los nombres i18n antiguos",
-        "pl": "Zaktualizowano dynamiczne nazwy lekcji, zmigrowano metadane istniejących obiektów i naprawiono stare nazwy i18n",
-        "uk": "Оновлено динамічні назви уроків, перенесено метадані наявних об’єктів і виправлено старі назви i18n",
-        "zh-cn": "更新动态课程名称、迁移现有对象元数据并修复旧版 i18n 名称"
       }
     },
     "titleLang": {
