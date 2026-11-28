@@ -250,7 +250,7 @@ and include only relevant, non-sensitive log messages when asking for help.
 </a>
 
 ## Changelog
-### **WORK IN PROGRESS**
+### 0.4.1 (2026-11-28)
 
 - (Voodoo2man) Reduced warnings for optional WebUntis permission failures and moved routine school-search logs to debug.
 
@@ -275,17 +275,6 @@ and include only relevant, non-sensitive log messages when asking for help.
 
 - (Voodoo2man) Moved read and unread messages directly under inbox, renamed the unread count state to inbox.unread.count, and removed the redundant JSON state.
 - (Voodoo2man) Kept inbox refresh independent of timetable failures and replaced the local read toggle with a mark-as-unread button.
-
-### 0.2.0 (2026-10-25)
-
-- (Voodoo2man) Raised the minimum Node.js, js-controller, and Admin requirements.
-- (Voodoo2man) Added the Ukrainian Admin translation.
-- (Voodoo2man) Added multi Student support and structure.
-- (Voodoo2man) Added upcoming exams
-- (Voodoo2man) Added read and unread inbox messages
-- (Voodoo2man) Added a manual full refresh button
-- (Voodoo2man) Improved timetable details
-- (Voodoo2man) Removed duplicate date states.
 
 For earlier releases, see [CHANGELOG_OLD.md](CHANGELOG_OLD.md).
 

@@ -1,4 +1,15 @@
 # Changelog
+## 0.2.0 (2026-10-25)
+
+- (Voodoo2man) Raised the minimum Node.js, js-controller, and Admin requirements.
+- (Voodoo2man) Added the Ukrainian Admin translation.
+- (Voodoo2man) Added multi Student support and structure.
+- (Voodoo2man) Added upcoming exams
+- (Voodoo2man) Added read and unread inbox messages
+- (Voodoo2man) Added a manual full refresh button
+- (Voodoo2man) Improved timetable details
+- (Voodoo2man) Removed duplicate date states.
+
 ## 0.1.10 (2026-10-18)
 
 - (Voodoo2man) Improved configuration feedback, holiday names, and connection status; reduced routine login log messages; verified Node.js 26 compatibility; and migrated Dependabot auto-merging to the `pull_request` event.
