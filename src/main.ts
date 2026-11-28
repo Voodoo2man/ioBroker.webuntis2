@@ -1965,12 +1965,19 @@ class WebuntisNext extends utils.Adapter {
 		warningKey: "lastHomeworkWarningAt" | "lastAbsencesWarningAt",
 		warningIntervalMs: number,
 	): void {
-		const lastWarning = this[warningKey];
-		if (this.unloaded || Date.now() - lastWarning < warningIntervalMs) {
+		if (this.unloaded) {
 			return;
 		}
 		const code = error instanceof WebUntisError ? error.code : "UNEXPECTED_RESPONSE";
-		this.log.warn(`WebUntis ${area} refresh failed: ${code}; previous data was kept`);
+		const message = `WebUntis ${area} refresh failed: ${code}; previous data was kept`;
+		if (code === "FORBIDDEN") {
+			this.log.debug(message);
+			return;
+		}
+		if (Date.now() - this[warningKey] < warningIntervalMs) {
+			return;
+		}
+		this.log.warn(message);
 		this[warningKey] = Date.now();
 	}
 
@@ -3127,7 +3134,7 @@ class WebuntisNext extends utils.Adapter {
 
 	private async onMessage(obj: ioBroker.Message): Promise<void> {
 		if (obj?.command === "searchSchools") {
-			this.log.info(`School search request received (callback: ${Boolean(obj.callback)})`);
+			this.log.debug(`School search request received (callback: ${Boolean(obj.callback)})`);
 		}
 		if (this.unloaded || !obj || !obj.command || !obj.callback) {
 			return;
@@ -3148,7 +3155,7 @@ class WebuntisNext extends utils.Adapter {
 				if (this.unloaded) {
 					return;
 				}
-				this.log.info(`School search returned ${results.length} results`);
+				this.log.debug(`School search returned ${results.length} results`);
 				this.sendTo(
 					obj.from,
 					obj.command,
