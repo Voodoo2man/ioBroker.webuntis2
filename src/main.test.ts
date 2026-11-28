@@ -83,6 +83,7 @@ type AdapterHarness = {
 	methods: {
 		updateTimetable(): Promise<void>;
 		updateTimetableLocked(): Promise<void>;
+		updateHomeworkAndAbsences(): Promise<void>;
 		refreshAll(): Promise<void>;
 		ensureInboxRoot(): Promise<void>;
 		subscribeInboxMessageActions(): Promise<void>;
@@ -113,6 +114,7 @@ type AdapterHarness = {
 	warnings: string[];
 	errors: string[];
 	infos: string[];
+	debugs: string[];
 	groupWrites: Array<{ group: string; root: string }>;
 	subscriptions: string[];
 	configUpdates: Array<Record<string, unknown>>;
@@ -145,6 +147,7 @@ function makeAdapterHarness(
 	const warnings: string[] = [];
 	const errors: string[] = [];
 	const infos: string[] = [];
+	const debugs: string[] = [];
 	const groupWrites: Array<{ group: string; root: string }> = [];
 	const subscriptions: string[] = [];
 	const configUpdates: Array<Record<string, unknown>> = [];
@@ -223,7 +226,7 @@ function makeAdapterHarness(
 		},
 		log: {
 			warn: (message: string) => warnings.push(message),
-			debug: () => undefined,
+			debug: (message: string) => debugs.push(message),
 			error: (message: string) => errors.push(message),
 			info: (message: string) => infos.push(message),
 		},
@@ -338,6 +341,7 @@ function makeAdapterHarness(
 	const methods = adapter as unknown as {
 		updateTimetable(): Promise<void>;
 		updateTimetableLocked(): Promise<void>;
+		updateHomeworkAndAbsences(): Promise<void>;
 		refreshAll(): Promise<void>;
 		ensureInboxRoot(): Promise<void>;
 		subscribeInboxMessageActions(): Promise<void>;
@@ -367,6 +371,7 @@ function makeAdapterHarness(
 		warnings,
 		errors,
 		infos,
+		debugs,
 		groupWrites,
 		subscriptions,
 		scheduledDelays,
@@ -3032,8 +3037,53 @@ describe("central credential adapter integration", () => {
 
 		expect(harness.errors).to.deep.equal(["Adapter startup failed: object initialization failed"]);
 		expect(harness.infos).to.include("Adapter startup initialization started");
-		expect(harness.infos).to.include("School search request received (callback: true)");
+		expect(harness.infos).not.to.include("School search request received (callback: true)");
+		expect(harness.infos).not.to.include("School search returned 1 results");
+		expect(harness.debugs).to.include("School search request received (callback: true)");
+		expect(harness.debugs).to.include("School search returned 1 results");
 		expect(harness.messageReplies[0].payload).to.be.an("array").with.length(1);
+	});
+
+	it("logs forbidden optional homework and absence failures at debug and preserves existing data", async () => {
+		const harness = makeAdapterHarness(async () => []);
+		Object.assign(harness.adapter, { knownStudentIdentities: [{ id: 42, name: "Ada" }] });
+		harness.values.set("students.ada.homework.count", 3);
+		harness.values.set("students.ada.absences.json", '[{"reason":"kept"}]');
+		harness.values.set("students.ada.absences.01.reason", "kept");
+		Object.assign((harness.adapter as { webUntis: object }).webUntis, {
+			loadHomework: async () => {
+				throw new WebUntisError("FORBIDDEN", "forbidden");
+			},
+			loadAbsences: async () => {
+				throw new WebUntisError("FORBIDDEN", "forbidden");
+			},
+		});
+
+		await harness.methods.updateHomeworkAndAbsences();
+
+		expect(harness.warnings).to.be.empty;
+		expect(harness.debugs).to.include("WebUntis homework refresh failed: FORBIDDEN; previous data was kept");
+		expect(harness.debugs).to.include("WebUntis absences refresh failed: FORBIDDEN; previous data was kept");
+		expect(harness.values.get("students.ada.homework.count")).to.equal(3);
+		expect(harness.values.get("students.ada.absences.json")).to.equal('[{"reason":"kept"}]');
+		expect(harness.values.get("students.ada.absences.01.reason")).to.equal("kept");
+	});
+
+	it("still warns for non-forbidden optional refresh failures", async () => {
+		const harness = makeAdapterHarness(async () => []);
+		Object.assign(harness.adapter, { knownStudentIdentities: [{ id: 42, name: "Ada" }] });
+		Object.assign((harness.adapter as { webUntis: object }).webUntis, {
+			loadHomework: async () => {
+				throw new WebUntisError("INVALID_RESPONSE", "invalid");
+			},
+		});
+
+		await harness.methods.updateHomeworkAndAbsences();
+
+		expect(harness.warnings).to.deep.equal([
+			"WebUntis homework refresh failed: INVALID_RESPONSE; previous data was kept",
+		]);
+		expect(harness.debugs).to.be.empty;
 	});
 
 	it("authenticates, clears legacy fields, and continues startup initialization", async () => {

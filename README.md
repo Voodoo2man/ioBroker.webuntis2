@@ -250,6 +250,10 @@ and include only relevant, non-sensitive log messages when asking for help.
 </a>
 
 ## Changelog
+### **WORK IN PROGRESS**
+
+- (Voodoo2man) Reduced warnings for optional WebUntis permission failures and moved routine school-search logs to debug.
+
 ### 0.4.0 (2026-11-28)
 
 - (Voodoo2man) Moved WebUntis credentials to ioBroker's central credential store and retained legacy values until successful authentication.
