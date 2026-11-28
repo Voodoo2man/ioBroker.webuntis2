@@ -151,7 +151,7 @@
     "connectionType": "cloud",
     "dataSource": "poll",
     "adminUI": {
-      "config": "html"
+      "config": "json"
     },
     "eraseOnUpload": true,
     "dependencies": [
@@ -161,7 +161,7 @@
     ],
     "globalDependencies": [
       {
-        "admin": ">=8.2.0"
+        "admin": ">=8.3.15"
       }
     ]
   },
@@ -171,6 +171,9 @@
     "schoolDisplayName": "",
     "schoolAddress": "",
     "schoolId": null,
+    "schoolQuery": "",
+    "schoolSelection": "",
+    "credentialId": "",
     "username": "",
     "password": "",
     "timetableRefreshIntervalMinutes": 5,

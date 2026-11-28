@@ -770,7 +770,11 @@ export class WebUntisClient {
 						absence[field] != null &&
 						(!Number.isSafeInteger(absence[field]) || (absence[field] as number) < 0),
 				) ||
-				["reasonId", "excuseId", "excuseUserId"].some(
+				(absence.reasonId != null &&
+					(typeof absence.reasonId !== "number" ||
+						!Number.isSafeInteger(absence.reasonId) ||
+						absence.reasonId < 0)) ||
+				["excuseId", "excuseUserId"].some(
 					field => absence[field] != null && positiveSafeId(absence[field]) === undefined,
 				) ||
 				["createdUser", "updatedUser", "studentName", "excuseUsername"].some(

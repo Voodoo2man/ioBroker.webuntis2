@@ -9,6 +9,9 @@ declare global {
 			schoolDisplayName: string;
 			schoolAddress: string;
 			schoolId: number | null;
+			schoolQuery: string;
+			schoolSelection: string;
+			credentialId: string;
 			username: string;
 			password: string;
 			timetableRefreshIntervalMinutes: number;

@@ -5,6 +5,8 @@ import { removeStaleLessonStates } from "./lib/LessonStateCleanup";
 import { MAX_REFRESH_INTERVAL_MINUTES, MAX_TIMETABLE_REFRESH_INTERVAL_MINUTES } from "./lib/RefreshIntervals";
 import type { UpcomingExam } from "./lib/webuntis/Exams";
 import {
+	decodeSchoolSelection,
+	encodeSchoolSelection,
 	mergeSchoolSelection,
 	rankSchoolResults,
 	schoolResultToConfig,
@@ -27,6 +29,33 @@ function response(body: unknown, status = 200): Response {
 	return new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
 }
 
+const credentialApiStub = {
+	getCredentialForm: (values: Record<string, unknown>): string => (values.key !== undefined ? "key" : "login"),
+	getCredentials: async (adapter: object, id: string) => {
+		const client = adapter as {
+			getForeignObjectAsync: (credentialId: string) => Promise<ioBroker.Object | null>;
+			decrypt: (value: string) => string;
+		};
+		if (!id.startsWith("system.credentials.")) {
+			throw new Error("invalid credential ID");
+		}
+		const object = await client.getForeignObjectAsync(id);
+		if (!object) {
+			throw new Error("credential not found");
+		}
+		const native = object.native as Record<string, unknown>;
+		const encryptedFields = Array.isArray(native.encryptedFields) ? native.encryptedFields : [];
+		const values: Record<string, unknown> = {};
+		for (const [key, value] of Object.entries(native)) {
+			if (["type", "form", "version", "encryptedFields"].includes(key)) {
+				continue;
+			}
+			values[key] = encryptedFields.includes(key) && typeof value === "string" ? client.decrypt(value) : value;
+		}
+		return { id, name: String(object.common.name ?? ""), type: String(native.type ?? ""), values };
+	},
+};
+
 type AdapterClass = { prototype: object };
 
 function loadAdapterClassForTest(): AdapterClass {
@@ -37,7 +66,7 @@ function loadAdapterClassForTest(): AdapterClass {
 	const originalLoad = nodeModule._load;
 	nodeModule._load = function (request, parent, isMain) {
 		if (request === "@iobroker/adapter-core") {
-			return { Adapter: class {} };
+			return { Adapter: class {}, Credentials: credentialApiStub };
 		}
 		return originalLoad.call(this, request, parent, isMain);
 	};
@@ -67,6 +96,12 @@ type AdapterHarness = {
 		updateCurrentNextStatesLocked(force?: boolean, now?: Date): Promise<void>;
 		scheduleTimetableUpdate(): void;
 		scheduleCurrentNextUpdate(): void;
+		authenticateConfiguredCredentialAtStartup(): Promise<string | undefined>;
+		subscribeConfiguredCredential(): Promise<void>;
+		getConnectionConfig(credentialId?: string): Promise<{ username: string; password: string }>;
+		onReady(): Promise<void>;
+		onMessage(message: ioBroker.Message): Promise<void>;
+		onUnload(callback: () => void): void;
 	};
 	values: Map<string, ioBroker.StateValue>;
 	scheduledDelays: number[];
@@ -76,8 +111,14 @@ type AdapterHarness = {
 	deleted: string[];
 	objects: Record<string, ioBroker.SettableObject>;
 	warnings: string[];
+	errors: string[];
+	infos: string[];
 	groupWrites: Array<{ group: string; root: string }>;
 	subscriptions: string[];
+	configUpdates: Array<Record<string, unknown>>;
+	messageReplies: Array<{ command: string; payload: unknown }>;
+	credentialListeners: Array<(id: string) => void>;
+	foreignUnsubscriptions: string[];
 };
 
 function makeAdapterHarness(
@@ -102,8 +143,14 @@ function makeAdapterHarness(
 	const deleted: string[] = [];
 	const objects: Record<string, ioBroker.SettableObject> = {};
 	const warnings: string[] = [];
+	const errors: string[] = [];
+	const infos: string[] = [];
 	const groupWrites: Array<{ group: string; root: string }> = [];
 	const subscriptions: string[] = [];
+	const configUpdates: Array<Record<string, unknown>> = [];
+	const messageReplies: Array<{ command: string; payload: unknown }> = [];
+	const credentialListeners: Array<(id: string) => void> = [];
+	const foreignUnsubscriptions: string[] = [];
 	const scheduledDelays: number[] = [];
 	const scheduledCallbacks: Array<() => void> = [];
 	const scheduledTimerHandles: ioBroker.Timeout[] = [];
@@ -125,9 +172,14 @@ function makeAdapterHarness(
 	];
 	const overrides: Record<string, unknown> = {
 		unloaded: false,
+		credentialWatchers: new Map(),
+		verifiedSchoolSelections: new Map(),
 		delay: async () => undefined,
 		inboxMutationQueue: Promise.resolve(),
 		refreshMutationQueue: Promise.resolve(),
+		credentialGeneration: 0,
+		failedCentralCredentialId: undefined,
+		temporaryFailedCentralCredentialId: undefined,
 		currentNextTimerGeneration: 0,
 		hasTimetableSnapshot: false,
 		timetableLessons: [],
@@ -136,6 +188,7 @@ function makeAdapterHarness(
 		childTimetableLessons: new Map(),
 		namespace: "webuntis2.0",
 		config: {
+			credentialId: "",
 			server: "https://example.webuntis.com",
 			schoolName: "Example",
 			schoolId: 1,
@@ -143,6 +196,9 @@ function makeAdapterHarness(
 			password: "test",
 		},
 		webUntis: {
+			clearSession: () => undefined,
+			shutdown: () => undefined,
+			searchSchools: async () => [],
 			loadTimetable: async () => ({
 				today: [],
 				tomorrow: [],
@@ -165,7 +221,43 @@ function makeAdapterHarness(
 			loadHomework: async () => [],
 			loadAbsences: async () => ({ absences: [], absenceReasons: [], excuseStatuses: [] }),
 		},
-		log: { warn: (message: string) => warnings.push(message), debug: () => undefined, error: () => undefined },
+		log: {
+			warn: (message: string) => warnings.push(message),
+			debug: () => undefined,
+			error: (message: string) => errors.push(message),
+			info: (message: string) => infos.push(message),
+		},
+		encrypt: (value: string) => `encrypted:${value}`,
+		decrypt: (value: string) => value.replace(/^encrypted:/, ""),
+		updateConfig: async (config: Record<string, unknown>) => {
+			configUpdates.push(config);
+		},
+		on: (event: string, listener: (id: string) => void) => {
+			if (event === "objectChange") {
+				credentialListeners.push(listener);
+			}
+		},
+		removeListener: (event: string, listener: (id: string) => void) => {
+			if (event === "objectChange") {
+				const index = credentialListeners.indexOf(listener);
+				if (index >= 0) {
+					credentialListeners.splice(index, 1);
+				}
+			}
+		},
+		subscribeForeignObjectsAsync: async () => undefined,
+		unsubscribeForeignObjectsAsync: async (id: string) => {
+			foreignUnsubscriptions.push(id);
+		},
+		setForeignObjectNotExistsAsync: async (id: string, object: ioBroker.SettableObject) => {
+			if (!objects[id]) {
+				objects[id] = object;
+			}
+		},
+		sendTo: (_from: string, command: string, payload: unknown) => {
+			messageReplies.push({ command, payload });
+		},
+
 		setState: async (id: string, value: ioBroker.StateValue) => {
 			values.set(id, value);
 		},
@@ -200,6 +292,7 @@ function makeAdapterHarness(
 			objects[id] = object;
 		},
 		getObjectAsync: async (id: string) => (objects[id] as ioBroker.Object | undefined) ?? null,
+		getForeignObjectAsync: async (id: string) => (objects[id] as ioBroker.Object | undefined) ?? null,
 		extendObjectAsync: async (id: string, patch: ioBroker.PartialObject) => {
 			const existing = objects[id] as ioBroker.Object | undefined;
 			objects[id] = {
@@ -258,6 +351,12 @@ function makeAdapterHarness(
 		updateCurrentNextStatesLocked(force?: boolean, now?: Date): Promise<void>;
 		scheduleTimetableUpdate(): void;
 		scheduleCurrentNextUpdate(): void;
+		authenticateConfiguredCredentialAtStartup(): Promise<string | undefined>;
+		subscribeConfiguredCredential(): Promise<void>;
+		getConnectionConfig(credentialId?: string): Promise<{ username: string; password: string }>;
+		onReady(): Promise<void>;
+		onMessage(message: ioBroker.Message): Promise<void>;
+		onUnload(callback: () => void): void;
 	};
 	return {
 		adapter,
@@ -266,12 +365,18 @@ function makeAdapterHarness(
 		deleted,
 		objects,
 		warnings,
+		errors,
+		infos,
 		groupWrites,
 		subscriptions,
 		scheduledDelays,
 		scheduledCallbacks,
 		scheduledTimerHandles,
 		clearedTimers,
+		configUpdates,
+		messageReplies,
+		credentialListeners,
+		foreignUnsubscriptions,
 	};
 }
 
@@ -813,6 +918,7 @@ describe("upcoming exams adapter states", () => {
 
 	it("does not commit a first timetable snapshot after a partial timetable write failure", async () => {
 		const harness = makeAdapterHarness(async () => []);
+		const adapterConfig = (harness.adapter as { config: Record<string, unknown> }).config;
 		const webUntis = (harness.adapter as { webUntis: WebUntisService }).webUntis;
 		webUntis.loadTimetable = async () => ({
 			today: [],
@@ -834,7 +940,7 @@ describe("upcoming exams adapter states", () => {
 			}
 		).writeTimetableGroup;
 		Object.assign(harness.adapter, {
-			config: { timetableRefreshIntervalMinutes: MAX_TIMETABLE_REFRESH_INTERVAL_MINUTES },
+			config: { ...adapterConfig, timetableRefreshIntervalMinutes: MAX_TIMETABLE_REFRESH_INTERVAL_MINUTES },
 			updateHomeworkAndAbsences: async () => undefined,
 			writeTimetableGroup: async (group: string, lessons: TimetableLesson[], now: Date, root?: string) => {
 				writes.push(group);
@@ -2235,6 +2341,24 @@ describe("WebUntis school discovery", () => {
 		});
 	});
 
+	it("round-trips a school selection safely through the JSON Config string value", () => {
+		const school = {
+			displayName: "Schule München",
+			address: "München, DE",
+			loginName: "schule münchen",
+			schoolId: 7,
+			server: "example.webuntis.com",
+			serverUrl: "https://example.webuntis.com",
+			mobileServiceUrl: null,
+		};
+		const encoded = encodeSchoolSelection(school);
+
+		expect(encoded).not.to.include('"');
+		expect(decodeSchoolSelection(encoded)).to.deep.equal(school);
+		expect(decodeSchoolSelection("not-a-valid-selection")).to.equal(undefined);
+		expect(decodeSchoolSelection(7)).to.equal(undefined);
+	});
+
 	it("replaces school A with school B without losing credentials", () => {
 		const schoolA = {
 			displayName: "Schule A",
@@ -2773,5 +2897,1122 @@ describe("WebUntis connection configuration", () => {
 			ok: false,
 			code: "PASSWORD_REQUIRED",
 		});
+	});
+
+	it("aborts an in-flight connection test when the session is cleared", async () => {
+		let requestSignal: AbortSignal | undefined;
+		let markRequestStarted: () => void = () => undefined;
+		const requestStarted = new Promise<void>(resolve => {
+			markRequestStarted = resolve;
+		});
+		const cancellableService = new WebUntisService(undefined, undefined, undefined, async (_input, init) => {
+			requestSignal = init?.signal ?? undefined;
+			markRequestStarted();
+			return new Promise((_resolve, reject) => {
+				requestSignal?.addEventListener("abort", () => reject(new DOMException("Aborted", "AbortError")), {
+					once: true,
+				});
+			});
+		});
+
+		const pending = cancellableService.testConnection(base);
+		await requestStarted;
+		cancellableService.clearSession();
+
+		expect(requestSignal?.aborted).to.equal(true);
+		expect((await pending).ok).to.equal(false);
+	});
+});
+
+describe("central credential adapter integration", () => {
+	const credentialId = "system.credentials.webuntis2_0";
+	const school = {
+		displayName: "Example school",
+		address: "Example city",
+		loginName: "Example",
+		schoolId: 42,
+		server: "example.webuntis.com",
+		serverUrl: "https://example.webuntis.com",
+		mobileServiceUrl: null,
+	};
+
+	function addCredential(harness: AdapterHarness, form: "login" | "key" = "login"): void {
+		harness.objects[credentialId] = {
+			_id: credentialId,
+			type: "config",
+			common: { name: "WebUntis" },
+			native: {
+				type: "custom",
+				form,
+				version: 1,
+				encryptedFields: ["password"],
+				...(form === "login"
+					? { login: "alice", password: "encrypted:central-secret" }
+					: { key: "encrypted:key-secret" }),
+			},
+			acl: { object: 0x600, owner: "system.user.admin", ownerGroup: "system.group.administrator" },
+		};
+	}
+
+	function setConfiguredCredential(harness: AdapterHarness): void {
+		Object.assign((harness.adapter as { config: Record<string, unknown> }).config, {
+			credentialId,
+			schoolSelection: encodeSchoolSelection(school),
+		});
+	}
+
+	function testConnectionMessage(
+		message: Record<string, unknown> = {},
+		from = "system.adapter.admin.0",
+	): ioBroker.Message {
+		return {
+			_id: 7,
+			command: "testConnection",
+			from,
+			callback: { id: 1, ack: false, time: Date.now(), message: {} },
+			message: message as ioBroker.MessagePayload,
+		};
+	}
+
+	function prepareStartupHarness(harness: AdapterHarness): {
+		refreshedConfigs: Array<{ username: string; password: string }>;
+		scheduled: string[];
+	} {
+		const refreshedConfigs: Array<{ username: string; password: string }> = [];
+		const scheduled: string[] = [];
+		Object.assign(harness.adapter, {
+			ensureStudentsRoot: async () => undefined,
+			ensureNewsOfDayRoot: async () => undefined,
+			cleanupObsoleteStructure: async () => undefined,
+			refreshAll: async () => {
+				refreshedConfigs.push(await harness.methods.getConnectionConfig());
+			},
+			scheduleTimetableUpdate: () => scheduled.push("timetable"),
+			scheduleCurrentNextUpdate: () => scheduled.push("currentNext"),
+		});
+		return { refreshedConfigs, scheduled };
+	}
+
+	async function retainInvalidCredentialWithoutWatcher(harness: AdapterHarness): Promise<void> {
+		addCredential(harness);
+		setConfiguredCredential(harness);
+		Object.assign(harness.adapter, {
+			subscribeForeignObjectsAsync: async () => {
+				throw new Error("subscription failed");
+			},
+		});
+		Object.assign((harness.adapter as { webUntis: object }).webUntis, {
+			testConnection: async () => ({ ok: false, code: "INVALID_CREDENTIALS" }),
+		});
+
+		await harness.methods.onMessage(
+			testConnectionMessage({ schoolSelection: encodeSchoolSelection(school), credentialId }),
+		);
+	}
+
+	it("keeps school search available and logs startup initialization errors", async () => {
+		const harness = makeAdapterHarness(async () => []);
+		Object.assign(harness.adapter, {
+			ensureTranslatedObject: async () => {
+				throw new Error("object initialization failed");
+			},
+		});
+		Object.assign((harness.adapter as { webUntis: object }).webUntis, {
+			searchSchools: async () => [school],
+		});
+
+		await harness.methods.onReady();
+		await harness.methods.onMessage({
+			_id: 8,
+			command: "searchSchools",
+			from: "system.adapter.admin.0",
+			callback: { id: 2, ack: false, time: Date.now(), message: {} },
+			message: { query: "Example" },
+		});
+
+		expect(harness.errors).to.deep.equal(["Adapter startup failed: object initialization failed"]);
+		expect(harness.infos).to.include("Adapter startup initialization started");
+		expect(harness.infos).to.include("School search request received (callback: true)");
+		expect(harness.messageReplies[0].payload).to.be.an("array").with.length(1);
+	});
+
+	it("authenticates, clears legacy fields, and continues startup initialization", async () => {
+		const harness = makeAdapterHarness(async () => []);
+		addCredential(harness);
+		setConfiguredCredential(harness);
+		const startup = prepareStartupHarness(harness);
+		let testedConfig: Record<string, unknown> | undefined;
+		Object.assign((harness.adapter as { webUntis: object }).webUntis, {
+			testConnection: async (config: Record<string, unknown>) => {
+				testedConfig = config;
+				return { ok: true };
+			},
+		});
+
+		await harness.methods.onReady();
+
+		expect(testedConfig).to.include({ username: "alice", password: "central-secret" });
+		expect(harness.configUpdates).to.deep.equal([{ username: "", password: "" }]);
+		expect(startup.refreshedConfigs[0]).to.include({ username: "alice", password: "central-secret" });
+		expect(startup.scheduled).to.deep.equal(["timetable", "currentNext"]);
+	});
+
+	it("schedules startup retries when central credentials are unavailable and no legacy values exist", async () => {
+		const harness = makeAdapterHarness(async () => []);
+		addCredential(harness);
+		setConfiguredCredential(harness);
+		Object.assign((harness.adapter as { config: Record<string, unknown> }).config, {
+			username: "",
+			password: "",
+		});
+		const startup = prepareStartupHarness(harness);
+		Object.assign(harness.adapter, {
+			getForeignObjectAsync: async () => {
+				throw new Error("credential store unavailable");
+			},
+		});
+
+		await harness.methods.onReady();
+
+		expect(startup.refreshedConfigs).to.be.empty;
+		expect(startup.scheduled).to.deep.equal(["timetable", "currentNext"]);
+	});
+
+	it("uses legacy credentials and completes startup when central authentication fails", async () => {
+		const harness = makeAdapterHarness(async () => []);
+		addCredential(harness);
+		setConfiguredCredential(harness);
+		const startup = prepareStartupHarness(harness);
+		Object.assign((harness.adapter as { webUntis: object }).webUntis, {
+			testConnection: async () => ({ ok: false, code: "INVALID_CREDENTIALS" }),
+		});
+
+		await harness.methods.onReady();
+
+		expect(harness.configUpdates).to.be.empty;
+		expect(startup.refreshedConfigs[0]).to.include({ username: "student", password: "test" });
+		expect(startup.scheduled).to.deep.equal(["timetable", "currentNext"]);
+		expect(JSON.stringify(harness.warnings)).not.to.include("test");
+	});
+
+	it("uses legacy credentials for a transient startup authentication failure then retries central credentials", async () => {
+		const harness = makeAdapterHarness(async () => []);
+		addCredential(harness);
+		setConfiguredCredential(harness);
+		const startup = prepareStartupHarness(harness);
+		let authenticationConfig: Record<string, unknown> | undefined;
+		Object.assign((harness.adapter as { webUntis: object }).webUntis, {
+			testConnection: async (config: Record<string, unknown>) => {
+				authenticationConfig = config;
+				return { ok: false, code: "SERVER_UNREACHABLE" };
+			},
+		});
+
+		await harness.methods.onReady();
+
+		expect(authenticationConfig).to.include({ username: "alice", password: "central-secret" });
+		expect(startup.refreshedConfigs[0]).to.include({ username: "student", password: "test" });
+		expect((harness.adapter as { failedCentralCredentialId?: string }).failedCentralCredentialId).to.equal(
+			undefined,
+		);
+		expect(
+			(harness.adapter as { temporaryFailedCentralCredentialId?: string }).temporaryFailedCentralCredentialId,
+		).to.equal(undefined);
+		expect(await harness.methods.getConnectionConfig()).to.include({
+			username: "alice",
+			password: "central-secret",
+		});
+		expect(JSON.stringify(harness.warnings)).not.to.include("central-secret");
+		expect(JSON.stringify(harness.warnings)).not.to.include("test");
+	});
+
+	it("temporarily uses legacy credentials when the central credential cannot be read during startup", async () => {
+		const harness = makeAdapterHarness(async () => []);
+		addCredential(harness);
+		setConfiguredCredential(harness);
+		const startup = prepareStartupHarness(harness);
+		let credentialReads = 0;
+		Object.assign(harness.adapter, {
+			getForeignObjectAsync: async (id: string) => {
+				if (id === credentialId && credentialReads++ === 0) {
+					throw new Error("credential store unavailable");
+				}
+				return (harness.objects[id] as ioBroker.Object | undefined) ?? null;
+			},
+		});
+
+		await harness.methods.onReady();
+
+		expect(startup.refreshedConfigs[0]).to.include({ username: "student", password: "test" });
+		expect(
+			(harness.adapter as { temporaryFailedCentralCredentialId?: string }).temporaryFailedCentralCredentialId,
+		).to.equal(undefined);
+		expect(await harness.methods.getConnectionConfig()).to.include({
+			username: "alice",
+			password: "central-secret",
+		});
+		expect(credentialReads).to.equal(2);
+		expect(JSON.stringify(harness.warnings)).not.to.include("central-secret");
+		expect(JSON.stringify(harness.warnings)).not.to.include("test");
+	});
+
+	it("clears credential-read fallback after a credential-change refresh and retries next time", async () => {
+		const harness = makeAdapterHarness(async () => []);
+		addCredential(harness);
+		setConfiguredCredential(harness);
+		await harness.methods.subscribeConfiguredCredential();
+		(harness.adapter as { startupInitialized: boolean }).startupInitialized = true;
+		let credentialReads = 0;
+		Object.assign(harness.adapter, {
+			getForeignObjectAsync: async (id: string) => {
+				if (id === credentialId && credentialReads++ === 0) {
+					throw new Error("credential store unavailable");
+				}
+				return (harness.objects[id] as ioBroker.Object | undefined) ?? null;
+			},
+		});
+		const refreshConfigs: Array<{ username: string; password: string }> = [];
+		let markRefreshComplete: () => void = () => undefined;
+		const refreshComplete = new Promise<void>(resolve => {
+			markRefreshComplete = resolve;
+		});
+		Object.assign(harness.adapter, {
+			refreshAllLocked: async () => {
+				refreshConfigs.push(await harness.methods.getConnectionConfig());
+			},
+			resetTimetableUpdateTimer: () => markRefreshComplete(),
+			resetCurrentNextUpdateTimer: () => undefined,
+		});
+
+		harness.credentialListeners[0](credentialId);
+		await refreshComplete;
+
+		expect(refreshConfigs[0]).to.include({ username: "student", password: "test" });
+		expect(
+			(harness.adapter as { temporaryFailedCentralCredentialId?: string }).temporaryFailedCentralCredentialId,
+		).to.equal(undefined);
+		await harness.methods.refreshAll();
+		expect(refreshConfigs[1]).to.include({ username: "alice", password: "central-secret" });
+		expect(credentialReads).to.equal(2);
+		expect(JSON.stringify(harness.warnings)).not.to.include("central-secret");
+		expect(JSON.stringify(harness.warnings)).not.to.include("test");
+
+		harness.methods.onUnload(() => undefined);
+	});
+
+	it("preserves legacy values when the instance config cannot be updated after authentication", async () => {
+		const harness = makeAdapterHarness(async () => []);
+		addCredential(harness);
+		setConfiguredCredential(harness);
+		const startup = prepareStartupHarness(harness);
+		Object.assign(harness.adapter as { updateConfig: () => Promise<void> }, {
+			updateConfig: async () => {
+				throw new Error("permission denied");
+			},
+		});
+		Object.assign((harness.adapter as { webUntis: object }).webUntis, {
+			testConnection: async () => ({ ok: true }),
+		});
+
+		await harness.methods.onReady();
+
+		expect((harness.adapter as { config: Record<string, unknown> }).config).to.include({
+			username: "student",
+			password: "test",
+		});
+		expect(harness.configUpdates).to.be.empty;
+		expect(JSON.stringify(harness.warnings)).not.to.include("student");
+		expect(JSON.stringify(harness.warnings)).not.to.include("test");
+		expect(startup.refreshedConfigs[0]).to.include({ username: "alice", password: "central-secret" });
+	});
+
+	it("revalidates changed central credentials after legacy cleanup fails without a watcher", async () => {
+		const harness = makeAdapterHarness(async () => []);
+		addCredential(harness);
+		setConfiguredCredential(harness);
+		const startup = prepareStartupHarness(harness);
+		Object.assign(harness.adapter, {
+			subscribeForeignObjectsAsync: async () => {
+				throw new Error("subscription failed");
+			},
+			updateConfig: async () => {
+				throw new Error("permission denied");
+			},
+		});
+		const testedCredentials: Array<{ username: string; password: string }> = [];
+		Object.assign((harness.adapter as { webUntis: object }).webUntis, {
+			testConnection: async (config: { username: string; password: string }) => {
+				testedCredentials.push({ username: config.username, password: config.password });
+				return config.username === "alice" && config.password === "central-secret"
+					? { ok: true }
+					: { ok: false, code: "INVALID_CREDENTIALS" };
+			},
+		});
+
+		await harness.methods.onReady();
+
+		expect(startup.refreshedConfigs[0]).to.include({ username: "alice", password: "central-secret" });
+		expect(
+			(harness.adapter as { authenticatedCentralCredentialSnapshot?: unknown })
+				.authenticatedCentralCredentialSnapshot,
+		).to.deep.equal({ id: credentialId, username: "alice", password: "central-secret" });
+		const centralCredential = harness.objects[credentialId] as ioBroker.Object;
+		Object.assign(centralCredential.native, { login: "bob", password: "encrypted:invalid-secret" });
+
+		await harness.methods.refreshAll();
+
+		expect(testedCredentials).to.deep.equal([
+			{ username: "alice", password: "central-secret" },
+			{ username: "bob", password: "invalid-secret" },
+		]);
+		expect(startup.refreshedConfigs[1]).to.include({ username: "student", password: "test" });
+		expect((harness.adapter as { failedCentralCredentialId?: string }).failedCentralCredentialId).to.equal(
+			credentialId,
+		);
+		expect(
+			(harness.adapter as { failedCentralCredentialSnapshot?: unknown }).failedCentralCredentialSnapshot,
+		).to.deep.equal({ id: credentialId, username: "bob", password: "invalid-secret" });
+		expect(
+			(harness.adapter as { authenticatedCentralCredentialSnapshot?: unknown })
+				.authenticatedCentralCredentialSnapshot,
+		).to.equal(undefined);
+		expect(JSON.stringify(harness.warnings)).not.to.include("invalid-secret");
+
+		harness.methods.onUnload(() => undefined);
+	});
+
+	it("unsubscribes credential listeners when the adapter unloads", async () => {
+		const harness = makeAdapterHarness(async () => []);
+		addCredential(harness);
+		setConfiguredCredential(harness);
+		await harness.methods.subscribeConfiguredCredential();
+		expect(harness.credentialListeners).to.have.length(1);
+
+		let unloadCallbackCalled = false;
+		harness.methods.onUnload(() => {
+			unloadCallbackCalled = true;
+		});
+		await Promise.resolve();
+
+		expect(unloadCallbackCalled).to.equal(true);
+		expect(harness.credentialListeners).to.be.empty;
+		expect(harness.foreignUnsubscriptions).to.include(credentialId);
+	});
+
+	it("runs an immediate serialized refresh after a central credential changes", async () => {
+		const harness = makeAdapterHarness(async () => []);
+		addCredential(harness);
+		setConfiguredCredential(harness);
+		await harness.methods.subscribeConfiguredCredential();
+		(harness.adapter as { startupInitialized: boolean }).startupInitialized = true;
+		let activeRefreshes = 0;
+		let maximumConcurrentRefreshes = 0;
+		let startedRefreshes = 0;
+		let markFirstRefreshStarted: () => void = () => undefined;
+		const firstRefreshStarted = new Promise<void>(resolve => {
+			markFirstRefreshStarted = resolve;
+		});
+		const finishRefresh: Array<() => void> = [];
+		Object.assign((harness.adapter as { webUntis: object }).webUntis, {
+			testConnection: async () => ({ ok: true }),
+		});
+		Object.assign(harness.adapter, {
+			refreshAllLocked: () => {
+				startedRefreshes++;
+				activeRefreshes++;
+				maximumConcurrentRefreshes = Math.max(maximumConcurrentRefreshes, activeRefreshes);
+				if (startedRefreshes === 1) {
+					markFirstRefreshStarted();
+				}
+				return new Promise<void>(resolve => {
+					finishRefresh.push(() => {
+						activeRefreshes--;
+						resolve();
+					});
+				});
+			},
+		});
+
+		harness.credentialListeners[0](credentialId);
+		await firstRefreshStarted;
+		harness.credentialListeners[0](credentialId);
+		finishRefresh[0]();
+		await new Promise(resolve => setImmediate(resolve));
+		expect(startedRefreshes).to.equal(2);
+		finishRefresh[1]();
+		await new Promise(resolve => setImmediate(resolve));
+		expect(maximumConcurrentRefreshes).to.equal(1);
+
+		harness.methods.onUnload(() => undefined);
+	});
+
+	it("uses legacy credentials in the immediate refresh when an updated central credential fails authentication", async () => {
+		const harness = makeAdapterHarness(async () => []);
+		addCredential(harness);
+		setConfiguredCredential(harness);
+		const native = harness.objects[credentialId].native as Record<string, unknown>;
+		native.login = "invalid-user";
+		native.password = "encrypted:invalid-secret";
+		await harness.methods.subscribeConfiguredCredential();
+		(harness.adapter as { startupInitialized: boolean }).startupInitialized = true;
+
+		let authenticationConfig: Record<string, unknown> | undefined;
+		let refreshConfig: { username: string; password: string } | undefined;
+		Object.assign((harness.adapter as { webUntis: object }).webUntis, {
+			testConnection: async (config: Record<string, unknown>) => {
+				authenticationConfig = config;
+				return { ok: false, code: "INVALID_CREDENTIALS" };
+			},
+		});
+		Object.assign(harness.adapter, {
+			refreshAllLocked: async () => {
+				refreshConfig = await harness.methods.getConnectionConfig();
+			},
+		});
+
+		harness.credentialListeners[0](credentialId);
+		await new Promise(resolve => setImmediate(resolve));
+
+		expect(authenticationConfig).to.include({
+			server: school.serverUrl,
+			schoolName: school.loginName,
+			schoolId: school.schoolId,
+			username: "invalid-user",
+			password: "invalid-secret",
+		});
+		expect(refreshConfig).to.include({ username: "student", password: "test" });
+		expect((harness.adapter as { failedCentralCredentialId?: string }).failedCentralCredentialId).to.equal(
+			credentialId,
+		);
+		expect(harness.configUpdates).to.be.empty;
+		expect(JSON.stringify(harness.warnings)).not.to.include("invalid-secret");
+		expect(JSON.stringify(harness.warnings)).not.to.include("test");
+
+		harness.methods.onUnload(() => undefined);
+	});
+
+	it("uses legacy for a transient credential-change refresh then retries central credentials", async () => {
+		const harness = makeAdapterHarness(async () => []);
+		addCredential(harness);
+		setConfiguredCredential(harness);
+		await harness.methods.subscribeConfiguredCredential();
+		(harness.adapter as { startupInitialized: boolean }).startupInitialized = true;
+
+		const authenticationConfigs: Array<Record<string, unknown>> = [];
+		const refreshConfigs: Array<{ username: string; password: string }> = [];
+		Object.assign((harness.adapter as { webUntis: object }).webUntis, {
+			testConnection: async (config: Record<string, unknown>) => {
+				authenticationConfigs.push(config);
+				return { ok: false, code: "SERVER_UNREACHABLE" };
+			},
+		});
+		Object.assign(harness.adapter, {
+			refreshAllLocked: async () => {
+				refreshConfigs.push(await harness.methods.getConnectionConfig());
+			},
+		});
+
+		harness.credentialListeners[0](credentialId);
+		await new Promise(resolve => setImmediate(resolve));
+
+		expect(authenticationConfigs).to.have.length(1);
+		expect(authenticationConfigs[0]).to.include({ username: "alice", password: "central-secret" });
+		expect(refreshConfigs[0]).to.include({ username: "student", password: "test" });
+		expect((harness.adapter as { failedCentralCredentialId?: string }).failedCentralCredentialId).to.equal(
+			undefined,
+		);
+		expect(
+			(harness.adapter as { temporaryFailedCentralCredentialId?: string }).temporaryFailedCentralCredentialId,
+		).to.equal(undefined);
+
+		await harness.methods.refreshAll();
+		expect(refreshConfigs[1]).to.include({ username: "alice", password: "central-secret" });
+		expect(JSON.stringify(harness.warnings)).not.to.include("central-secret");
+		expect(JSON.stringify(harness.warnings)).not.to.include("test");
+
+		harness.methods.onUnload(() => undefined);
+	});
+
+	it("retains legacy credentials when the selected central credential is not a login form", async () => {
+		const harness = makeAdapterHarness(async () => []);
+		addCredential(harness, "key");
+		setConfiguredCredential(harness);
+
+		await harness.methods.authenticateConfiguredCredentialAtStartup();
+
+		expect(harness.configUpdates).to.be.empty;
+		expect(await harness.methods.getConnectionConfig()).to.include({ username: "student", password: "test" });
+		expect(JSON.stringify(harness.warnings)).not.to.include("test");
+	});
+
+	it("rejects connection tests from non-Admin senders before using credentials", async () => {
+		const harness = makeAdapterHarness(async () => []);
+		addCredential(harness);
+		setConfiguredCredential(harness);
+		let testedConfig: Record<string, unknown> | undefined;
+		Object.assign((harness.adapter as { webUntis: object }).webUntis, {
+			testConnection: async (config: Record<string, unknown>) => {
+				testedConfig = config;
+				return { ok: true };
+			},
+		});
+
+		await harness.methods.onMessage(
+			testConnectionMessage(
+				{
+					schoolSelection: encodeSchoolSelection({ ...school, serverUrl: "https://attacker.example" }),
+					credentialId,
+				},
+				"system.adapter.attacker.0",
+			),
+		);
+
+		expect(harness.messageReplies[0]).to.deep.equal({
+			command: "testConnection",
+			payload: { ok: false, code: "UNAUTHORIZED", error: "UNAUTHORIZED" },
+		});
+		expect(testedConfig).to.equal(undefined);
+	});
+
+	it("returns school search options for the Admin user sender", async () => {
+		const harness = makeAdapterHarness(async () => []);
+		Object.assign((harness.adapter as { webUntis: object }).webUntis, {
+			searchSchools: async () => [school],
+		});
+
+		await harness.methods.onMessage({
+			_id: 8,
+			command: "searchSchools",
+			from: "system.user.admin",
+			callback: { id: 2, ack: false, time: Date.now(), message: {} },
+			message: { query: "Example" },
+		});
+
+		expect(harness.messageReplies[0].payload).to.deep.equal([
+			{
+				label: school.displayName,
+				value: encodeSchoolSelection(school),
+				description: `${school.address} · ${school.loginName}`,
+				noTranslation: true,
+			},
+		]);
+	});
+
+	it("rejects unsearched school endpoints before using central credentials", async () => {
+		const harness = makeAdapterHarness(async () => []);
+		addCredential(harness);
+		setConfiguredCredential(harness);
+		let testedConfig: Record<string, unknown> | undefined;
+		Object.assign((harness.adapter as { webUntis: object }).webUntis, {
+			testConnection: async (config: Record<string, unknown>) => {
+				testedConfig = config;
+				return { ok: true };
+			},
+		});
+
+		await harness.methods.onMessage(
+			testConnectionMessage({
+				schoolSelection: encodeSchoolSelection({ ...school, serverUrl: "https://attacker.example" }),
+				credentialId,
+			}),
+		);
+
+		expect(harness.messageReplies[0].payload).to.deep.equal({
+			ok: false,
+			code: "INVALID_CONFIG",
+			error: "INVALID_CONFIG",
+		});
+		expect(testedConfig).to.equal(undefined);
+	});
+
+	it("accepts an unsaved school selection returned by the adapter search", async () => {
+		const harness = makeAdapterHarness(async () => []);
+		addCredential(harness);
+		setConfiguredCredential(harness);
+		const searchedSchool = { ...school, displayName: "Second school", loginName: "Second school" };
+		let testedConfig: Record<string, unknown> | undefined;
+		let testResult: { ok: true } | { ok: false; code: string } = {
+			ok: false,
+			code: "INVALID_CREDENTIALS",
+		};
+		Object.assign((harness.adapter as { webUntis: object }).webUntis, {
+			searchSchools: async () => [searchedSchool],
+			testConnection: async (config: Record<string, unknown>) => {
+				testedConfig = config;
+				return testResult;
+			},
+		});
+
+		await harness.methods.onMessage({
+			_id: 8,
+			command: "searchSchools",
+			from: "system.adapter.admin.0",
+			callback: { id: 2, ack: false, time: Date.now(), message: {} },
+			message: { query: "Second school" },
+		});
+		const options = harness.messageReplies[0].payload as Array<{ value: string }>;
+		const selectedSchool = options[0].value;
+		await harness.methods.onMessage(testConnectionMessage({ schoolSelection: selectedSchool, credentialId }));
+		expect((harness.adapter as { failedCentralCredentialId?: string }).failedCentralCredentialId).to.equal(
+			undefined,
+		);
+		(harness.adapter as { failedCentralCredentialId?: string }).failedCentralCredentialId = credentialId;
+		testResult = { ok: true };
+		await harness.methods.onMessage(testConnectionMessage({ schoolSelection: selectedSchool, credentialId }));
+
+		expect(testedConfig).to.include({
+			server: searchedSchool.serverUrl,
+			schoolName: searchedSchool.loginName,
+			schoolId: searchedSchool.schoolId,
+		});
+		expect(harness.configUpdates).to.be.empty;
+		expect((harness.adapter as { config: Record<string, unknown> }).config).to.include({
+			credentialId,
+			username: "student",
+			password: "test",
+		});
+		expect((harness.adapter as { failedCentralCredentialId?: string }).failedCentralCredentialId).to.equal(
+			credentialId,
+		);
+	});
+
+	it("retains legacy credentials after testing an unsaved central credential", async () => {
+		const harness = makeAdapterHarness(async () => []);
+		addCredential(harness);
+		setConfiguredCredential(harness);
+		const unsavedCredentialId = "system.credentials.webuntis2_1";
+		(harness.adapter as { failedCentralCredentialId?: string }).failedCentralCredentialId = credentialId;
+		harness.objects[unsavedCredentialId] = {
+			...harness.objects[credentialId],
+			_id: unsavedCredentialId,
+		} as ioBroker.SettableObject;
+		Object.assign((harness.adapter as { webUntis: object }).webUntis, {
+			testConnection: async () => ({ ok: true }),
+		});
+
+		await harness.methods.onMessage(
+			testConnectionMessage({
+				schoolSelection: encodeSchoolSelection(school),
+				credentialId: unsavedCredentialId,
+			}),
+		);
+
+		expect(harness.configUpdates).to.be.empty;
+		expect(harness.credentialListeners).to.be.empty;
+		expect((harness.adapter as { failedCentralCredentialId?: string }).failedCentralCredentialId).to.equal(
+			credentialId,
+		);
+		expect((harness.adapter as { config: Record<string, unknown> }).config).to.include({
+			credentialId,
+			username: "student",
+			password: "test",
+		});
+	});
+
+	it("does not start a connection test when unloading during credential watch setup", async () => {
+		const harness = makeAdapterHarness(async () => []);
+		addCredential(harness);
+		setConfiguredCredential(harness);
+		let resolveSubscription: (() => void) | undefined;
+		let markSubscriptionStarted: () => void = () => undefined;
+		const subscriptionStarted = new Promise<void>(resolve => {
+			markSubscriptionStarted = resolve;
+		});
+		(
+			harness.adapter as unknown as { subscribeForeignObjectsAsync: () => Promise<void> }
+		).subscribeForeignObjectsAsync = () => {
+			markSubscriptionStarted();
+			return new Promise<void>(resolve => {
+				resolveSubscription = resolve;
+			});
+		};
+		let connectionTests = 0;
+		Object.assign((harness.adapter as { webUntis: object }).webUntis, {
+			testConnection: async () => {
+				connectionTests++;
+				return { ok: true };
+			},
+		});
+
+		const pending = harness.methods.onMessage(
+			testConnectionMessage({ schoolSelection: encodeSchoolSelection(school), credentialId }),
+		);
+		await subscriptionStarted;
+		harness.methods.onUnload(() => undefined);
+		resolveSubscription?.();
+		await pending;
+
+		expect(connectionTests).to.equal(0);
+	});
+
+	it("resolves central login credentials and the selected school for connection testing", async () => {
+		const harness = makeAdapterHarness(async () => []);
+		addCredential(harness);
+		setConfiguredCredential(harness);
+		let testedConfig: Record<string, unknown> | undefined;
+		Object.assign((harness.adapter as { webUntis: object }).webUntis, {
+			testConnection: async (config: Record<string, unknown>) => {
+				testedConfig = config;
+				return { ok: true };
+			},
+		});
+
+		await harness.methods.onMessage(
+			testConnectionMessage({
+				schoolSelection: encodeSchoolSelection(school),
+				credentialId,
+				username: "untrusted-client-value",
+				password: "untrusted-client-secret",
+			}),
+		);
+
+		expect(testedConfig).to.include({
+			server: "https://example.webuntis.com",
+			schoolName: "Example",
+			schoolId: 42,
+			username: "alice",
+			password: "central-secret",
+		});
+		expect(harness.messageReplies[0]).to.deep.equal({
+			command: "testConnection",
+			payload: { ok: true, result: "CONNECTED" },
+		});
+		expect(harness.configUpdates).to.deep.equal([{ username: "", password: "" }]);
+		expect(JSON.stringify(harness.messageReplies)).not.to.include("central-secret");
+	});
+
+	it("retains and uses legacy credentials after failed Admin central authentication", async () => {
+		const harness = makeAdapterHarness(async () => []);
+		addCredential(harness);
+		setConfiguredCredential(harness);
+		Object.assign((harness.adapter as { webUntis: object }).webUntis, {
+			testConnection: async () => ({ ok: false, code: "INVALID_CREDENTIALS" }),
+		});
+
+		await harness.methods.onMessage(
+			testConnectionMessage({ schoolSelection: encodeSchoolSelection(school), credentialId }),
+		);
+
+		expect(harness.messageReplies[0].payload).to.deep.equal({
+			ok: false,
+			code: "INVALID_CREDENTIALS",
+			error: "INVALID_CREDENTIALS",
+		});
+		expect(harness.configUpdates).to.be.empty;
+		expect(await harness.methods.getConnectionConfig()).to.include({ username: "student", password: "test" });
+	});
+
+	it("clears persistent credential fallback after a successful Admin authentication", async () => {
+		const harness = makeAdapterHarness(async () => []);
+		await retainInvalidCredentialWithoutWatcher(harness);
+		Object.assign((harness.adapter as { webUntis: object }).webUntis, {
+			testConnection: async () => ({ ok: true }),
+		});
+
+		await harness.methods.onMessage(
+			testConnectionMessage({ schoolSelection: encodeSchoolSelection(school), credentialId }),
+		);
+
+		expect((harness.adapter as { failedCentralCredentialId?: string }).failedCentralCredentialId).to.equal(
+			undefined,
+		);
+		expect(
+			(harness.adapter as { failedCentralCredentialSnapshot?: unknown }).failedCentralCredentialSnapshot,
+		).to.equal(undefined);
+		expect(harness.configUpdates).to.deep.equal([{ username: "", password: "" }]);
+	});
+
+	it("keeps using legacy credentials for an unchanged failed central credential without a watcher", async () => {
+		const harness = makeAdapterHarness(async () => []);
+		let credentialReads = 0;
+		Object.assign(harness.adapter, {
+			getForeignObjectAsync: async (id: string) => {
+				if (id === credentialId) {
+					credentialReads++;
+				}
+				return (harness.objects[id] as ioBroker.Object | undefined) ?? null;
+			},
+		});
+		await retainInvalidCredentialWithoutWatcher(harness);
+		const readsBeforeRefresh = credentialReads;
+
+		const config = await harness.methods.getConnectionConfig();
+
+		expect(config).to.include({ username: "student", password: "test" });
+		expect(credentialReads).to.equal(readsBeforeRefresh + 1);
+		expect((harness.adapter as { failedCentralCredentialId?: string }).failedCentralCredentialId).to.equal(
+			credentialId,
+		);
+		expect((harness.adapter as { credentialWatchers: Map<string, unknown> }).credentialWatchers.size).to.equal(0);
+		expect(JSON.stringify(harness.warnings)).not.to.include("central-secret");
+		expect(JSON.stringify(harness.warnings)).not.to.include("test");
+	});
+
+	it("uses legacy credentials when a persistently failed credential is temporarily unreadable", async () => {
+		const harness = makeAdapterHarness(async () => []);
+		await retainInvalidCredentialWithoutWatcher(harness);
+		Object.assign(harness.adapter, {
+			getForeignObjectAsync: async () => {
+				throw new Error("credential store unavailable");
+			},
+		});
+
+		const config = await harness.methods.getConnectionConfig();
+
+		expect(config).to.include({ username: "student", password: "test" });
+		expect((harness.adapter as { failedCentralCredentialId?: string }).failedCentralCredentialId).to.equal(
+			credentialId,
+		);
+		expect((harness.adapter as { failedCentralCredentialSnapshot?: unknown }).failedCentralCredentialSnapshot).not
+			.to.be.undefined;
+		expect(JSON.stringify(harness.warnings)).not.to.include("central-secret");
+		expect(JSON.stringify(harness.warnings)).not.to.include("test");
+	});
+
+	it("retries a changed central credential after fallback when no watcher is available", async () => {
+		const harness = makeAdapterHarness(async () => []);
+		await retainInvalidCredentialWithoutWatcher(harness);
+		const native = harness.objects[credentialId].native as Record<string, unknown>;
+		native.login = "alice-updated";
+		native.password = "encrypted:updated-secret";
+		let testedConfig: Record<string, unknown> | undefined;
+		let testCount = 0;
+		Object.assign((harness.adapter as { webUntis: object }).webUntis, {
+			testConnection: async (config: Record<string, unknown>) => {
+				testCount++;
+				testedConfig = config;
+				return { ok: true };
+			},
+		});
+
+		const config = await harness.methods.getConnectionConfig();
+
+		expect(testedConfig).to.include({ username: "alice-updated", password: "updated-secret" });
+		expect(config).to.include({ username: "alice-updated", password: "updated-secret" });
+		expect((harness.adapter as { failedCentralCredentialId?: string }).failedCentralCredentialId).to.equal(
+			undefined,
+		);
+		expect(
+			(harness.adapter as { failedCentralCredentialSnapshot?: unknown }).failedCentralCredentialSnapshot,
+		).to.equal(undefined);
+		expect(
+			(harness.adapter as { authenticatedCentralCredentialSnapshot?: unknown })
+				.authenticatedCentralCredentialSnapshot,
+		).to.deep.equal({ id: credentialId, username: "alice-updated", password: "updated-secret" });
+		await harness.methods.getConnectionConfig();
+		expect(testCount).to.equal(1);
+		expect(testedConfig).to.include({ username: "alice-updated", password: "updated-secret" });
+		expect((harness.adapter as { credentialWatchers: Map<string, unknown> }).credentialWatchers.size).to.equal(0);
+		expect(JSON.stringify(harness.warnings)).not.to.include("central-secret");
+		expect(JSON.stringify(harness.warnings)).not.to.include("updated-secret");
+	});
+
+	it("keeps legacy credentials and records updated central credentials after invalid authentication", async () => {
+		const harness = makeAdapterHarness(async () => []);
+		await retainInvalidCredentialWithoutWatcher(harness);
+		const native = harness.objects[credentialId].native as Record<string, unknown>;
+		native.login = "invalid-user";
+		native.password = "encrypted:invalid-secret";
+		const testedConfigs: Array<Record<string, unknown>> = [];
+		Object.assign((harness.adapter as { webUntis: object }).webUntis, {
+			testConnection: async (config: Record<string, unknown>) => {
+				testedConfigs.push(config);
+				return { ok: false, code: "INVALID_CREDENTIALS" };
+			},
+		});
+		const refreshConfigs: Array<{ username: string; password: string }> = [];
+		Object.assign(harness.adapter, {
+			refreshAllLocked: async () => {
+				refreshConfigs.push(await harness.methods.getConnectionConfig());
+			},
+		});
+
+		await harness.methods.refreshAll();
+
+		expect(testedConfigs).to.have.length(1);
+		expect(testedConfigs[0]).to.include({ username: "invalid-user", password: "invalid-secret" });
+		expect(refreshConfigs[0]).to.include({ username: "student", password: "test" });
+		expect((harness.adapter as { failedCentralCredentialId?: string }).failedCentralCredentialId).to.equal(
+			credentialId,
+		);
+		expect(
+			(harness.adapter as { failedCentralCredentialSnapshot?: unknown }).failedCentralCredentialSnapshot,
+		).to.deep.equal({ id: credentialId, username: "invalid-user", password: "invalid-secret" });
+		expect(await harness.methods.getConnectionConfig()).to.include({ username: "student", password: "test" });
+		expect(testedConfigs).to.have.length(1);
+		expect(JSON.stringify(harness.warnings)).not.to.include("invalid-secret");
+		expect(JSON.stringify(harness.warnings)).not.to.include("test");
+	});
+
+	it("retries transient verification failures on the next refresh", async () => {
+		const harness = makeAdapterHarness(async () => []);
+		await retainInvalidCredentialWithoutWatcher(harness);
+		const native = harness.objects[credentialId].native as Record<string, unknown>;
+		native.login = "alice-updated";
+		native.password = "encrypted:updated-secret";
+		let testAttempts = 0;
+		Object.assign((harness.adapter as { webUntis: object }).webUntis, {
+			testConnection: async () => {
+				testAttempts++;
+				return testAttempts === 1 ? { ok: false, code: "SERVER_UNREACHABLE" } : { ok: true };
+			},
+		});
+		const refreshConfigs: Array<{ username: string; password: string }> = [];
+		Object.assign(harness.adapter, {
+			refreshAllLocked: async () => {
+				refreshConfigs.push(await harness.methods.getConnectionConfig());
+			},
+		});
+
+		await harness.methods.refreshAll();
+
+		expect(refreshConfigs[0]).to.include({ username: "student", password: "test" });
+		expect(
+			(harness.adapter as { temporaryFailedCentralCredentialId?: string }).temporaryFailedCentralCredentialId,
+		).to.equal(undefined);
+		expect((harness.adapter as { failedCentralCredentialId?: string }).failedCentralCredentialId).to.equal(
+			credentialId,
+		);
+		await harness.methods.refreshAll();
+
+		expect(refreshConfigs[1]).to.include({ username: "alice-updated", password: "updated-secret" });
+		expect(testAttempts).to.equal(2);
+		expect((harness.adapter as { failedCentralCredentialId?: string }).failedCentralCredentialId).to.equal(
+			undefined,
+		);
+		expect(JSON.stringify(harness.warnings)).not.to.include("updated-secret");
+	});
+
+	it("retains legacy credentials after WebUntis blocks the central credential", async () => {
+		const harness = makeAdapterHarness(async () => []);
+		addCredential(harness);
+		setConfiguredCredential(harness);
+		Object.assign((harness.adapter as { webUntis: object }).webUntis, {
+			testConnection: async () => ({ ok: false, code: "USER_BLOCKED" }),
+		});
+
+		await harness.methods.onMessage(
+			testConnectionMessage({ schoolSelection: encodeSchoolSelection(school), credentialId }),
+		);
+
+		expect((harness.adapter as { failedCentralCredentialId?: string }).failedCentralCredentialId).to.equal(
+			credentialId,
+		);
+		expect(await harness.methods.getConnectionConfig()).to.include({ username: "student", password: "test" });
+	});
+
+	it("does not persist a central credential fallback after a transient Admin test failure", async () => {
+		const harness = makeAdapterHarness(async () => []);
+		addCredential(harness);
+		setConfiguredCredential(harness);
+		Object.assign((harness.adapter as { webUntis: object }).webUntis, {
+			testConnection: async () => ({ ok: false, code: "SERVER_UNREACHABLE" }),
+		});
+
+		await harness.methods.onMessage(
+			testConnectionMessage({ schoolSelection: encodeSchoolSelection(school), credentialId }),
+		);
+
+		expect(harness.messageReplies[0].payload).to.deep.equal({
+			ok: false,
+			code: "SERVER_UNREACHABLE",
+			error: "SERVER_UNREACHABLE",
+		});
+		expect((harness.adapter as { failedCentralCredentialId?: string }).failedCentralCredentialId).to.equal(
+			undefined,
+		);
+		expect(await harness.methods.getConnectionConfig()).to.include({
+			username: "alice",
+			password: "central-secret",
+		});
+		expect(JSON.stringify(harness.messageReplies)).not.to.include("central-secret");
+	});
+
+	it("returns native school-search options with the complete selection encoded", async () => {
+		const harness = makeAdapterHarness(async () => []);
+		Object.assign((harness.adapter as { webUntis: object }).webUntis, {
+			searchSchools: async () => [school],
+		});
+
+		await harness.methods.onMessage({
+			_id: 8,
+			command: "searchSchools",
+			from: "system.adapter.admin.0",
+			callback: { id: 2, ack: false, time: Date.now(), message: {} },
+			message: { query: "Example" },
+		});
+
+		const options = harness.messageReplies[0].payload as Array<{
+			label: string;
+			value: string;
+			description: string;
+		}>;
+		expect(options[0]).to.include({ label: school.displayName, description: "Example city · Example" });
+		expect(decodeSchoolSelection(options[0].value)).to.deep.equal(school);
+	});
+
+	it("does not publish a stale connection-test result after an unsaved selected credential changes", async () => {
+		const harness = makeAdapterHarness(async () => []);
+		addCredential(harness);
+		setConfiguredCredential(harness);
+
+		let resolveTest: ((result: { ok: true } | { ok: false; code: string }) => void) | undefined;
+		let markTestStarted: () => void = () => undefined;
+		const testStarted = new Promise<void>(resolve => {
+			markTestStarted = resolve;
+		});
+		Object.assign((harness.adapter as { webUntis: object }).webUntis, {
+			testConnection: () => {
+				markTestStarted();
+				return new Promise<{ ok: true } | { ok: false; code: string }>(resolve => {
+					resolveTest = resolve;
+				});
+			},
+		});
+
+		const pending = harness.methods.onMessage(
+			testConnectionMessage({ schoolSelection: encodeSchoolSelection(school), credentialId }),
+		);
+		await testStarted;
+		harness.credentialListeners[0](credentialId);
+		resolveTest?.({ ok: true });
+		await pending;
+
+		expect(harness.messageReplies[0].payload).to.deep.equal({
+			ok: false,
+			code: "CREDENTIAL_CHANGED",
+			error: "CREDENTIAL_CHANGED",
+		});
+		expect(harness.configUpdates).to.be.empty;
+		expect(harness.values.get("info.connection")).to.equal(false);
+	});
+
+	it("re-reads a selected credential before publishing when change monitoring is unavailable", async () => {
+		const harness = makeAdapterHarness(async () => []);
+		addCredential(harness);
+		setConfiguredCredential(harness);
+		(
+			harness.adapter as unknown as { subscribeForeignObjectsAsync: () => Promise<void> }
+		).subscribeForeignObjectsAsync = async () => {
+			throw new Error("subscription denied");
+		};
+		Object.assign((harness.adapter as { webUntis: object }).webUntis, {
+			testConnection: async () => {
+				(harness.objects[credentialId].native as Record<string, unknown>).password = "encrypted:changed-secret";
+				return { ok: true };
+			},
+		});
+
+		await harness.methods.onMessage(
+			testConnectionMessage({ schoolSelection: encodeSchoolSelection(school), credentialId }),
+		);
+
+		expect(harness.messageReplies[0].payload).to.deep.equal({
+			ok: false,
+			code: "CREDENTIAL_CHANGED",
+			error: "CREDENTIAL_CHANGED",
+		});
+		expect(harness.configUpdates).to.be.empty;
+		expect(harness.values.get("info.connection")).to.equal(undefined);
 	});
 });

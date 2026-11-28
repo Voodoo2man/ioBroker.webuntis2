@@ -39,6 +39,23 @@ function isSchoolSearchResponse(value: unknown): value is SchoolSearchResponse {
 	return isRecord(value) && typeof value.size === "number" && Array.isArray(value.schools);
 }
 
+/** Encodes a full school result as a JSON Config-compatible string value. */
+export function encodeSchoolSelection(school: SchoolSearchResult): string {
+	return encodeURIComponent(JSON.stringify(school));
+}
+
+/** Decodes and validates a school result previously stored by JSON Config. */
+export function decodeSchoolSelection(value: unknown): SchoolSearchResult | undefined {
+	if (typeof value !== "string" || value.length > 4096) {
+		return undefined;
+	}
+	try {
+		return mapSchool(JSON.parse(decodeURIComponent(value)) as unknown);
+	} catch {
+		return undefined;
+	}
+}
+
 /**
  *
  */

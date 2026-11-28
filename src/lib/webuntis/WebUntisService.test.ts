@@ -1,6 +1,7 @@
 /* eslint-disable @typescript-eslint/require-await, @typescript-eslint/no-base-to-string, curly */
 
 import { expect } from "chai";
+import { WebUntisError } from "./WebUntisErrors";
 import { WebUntisService } from "./WebUntisService";
 
 const config = {
@@ -33,6 +34,36 @@ function fetchFor(calls: string[], failingMasterdata = false): typeof fetch {
 }
 
 describe("WebUntis service session and master data caching", () => {
+	it("aborts in-flight session authentication and rejects its stale result", async () => {
+		let signal: AbortSignal | undefined;
+		let markRequestStarted: () => void = () => undefined;
+		let resolveAuthentication: ((response: Response) => void) | undefined;
+		const requestStarted = new Promise<void>(resolve => {
+			markRequestStarted = resolve;
+		});
+		const pendingResponse = new Promise<Response>(resolve => {
+			resolveAuthentication = resolve;
+		});
+		const service = new WebUntisService(undefined, undefined, undefined, async (_input, init) => {
+			signal = init?.signal ?? undefined;
+			markRequestStarted();
+			return pendingResponse;
+		});
+
+		const pending = service.loadStudentIdentities(config);
+		await requestStarted;
+		service.clearSession();
+		resolveAuthentication?.(json({ result: { sessionId: "stale", personType: 5, personId: 1, klasseId: 2 } }));
+
+		const outcome = await pending.then(
+			() => undefined,
+			error => error,
+		);
+		expect(signal?.aborted).to.equal(true);
+		expect(outcome).to.be.instanceOf(WebUntisError);
+		expect((outcome as WebUntisError).code).to.equal("CREDENTIAL_CHANGED");
+	});
+
 	it("loads messages of day and reauthenticates only once after session expiry", async () => {
 		let authentications = 0;
 		let messageRequests = 0;

@@ -434,6 +434,59 @@ describe("WebUntis messages", () => {
 		}
 	});
 
+	it("accepts the no-reason sentinel in WebUntis absence responses", async () => {
+		const absence = {
+			id: 7,
+			startDate: 20260911,
+			endDate: 20260911,
+			reasonId: 0,
+			excuseStatus: null,
+			excuse: { id: -1, userId: -1, excuseDate: 0 },
+		};
+		let payload: unknown = {
+			data: {
+				absences: [absence],
+				absenceReasons: [],
+				excuseStatuses: null,
+			},
+		};
+		const client = new WebUntisClient(config, async input => {
+			const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+			return url.includes("/api/token/new") ? new Response("token") : new Response(JSON.stringify(payload));
+		});
+
+		expect(await client.getAbsences(session, 41, 20260901, 20260930)).to.deep.equal({
+			absences: [
+				{
+					id: 7,
+					studentId: 41,
+					startDate: "2026-09-11",
+					endDate: "2026-09-11",
+					reasonId: 0,
+					excuseStatus: "unknown",
+				},
+			],
+			absenceReasons: [],
+			excuseStatuses: [],
+		});
+
+		for (const reasonId of [-1, 1.5, Number.MAX_SAFE_INTEGER + 1]) {
+			payload = {
+				data: {
+					absences: [{ ...absence, reasonId }],
+					absenceReasons: [],
+					excuseStatuses: null,
+				},
+			};
+			try {
+				await client.getAbsences(session, 41, 20260901, 20260930);
+				expect.fail("expected invalid reason ID");
+			} catch (error) {
+				expect(error).to.have.property("code", "INVALID_RESPONSE");
+			}
+		}
+	});
+
 	it("maps HTTP 401 to session expiry but keeps 403 as an API error", async () => {
 		let status = 401;
 		const client = new WebUntisClient(config, async input => {
