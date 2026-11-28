@@ -19,6 +19,12 @@ import {
 	MAX_TIMETABLE_REFRESH_INTERVAL_MINUTES,
 } from "./lib/RefreshIntervals";
 import { deriveCurrentNextLesson, type CurrentNextLessonSummary } from "./lib/webuntis/CurrentNextLesson";
+import {
+	decodeSchoolSelection,
+	encodeSchoolSelection,
+	rankSchoolResults,
+	schoolResultToConfig,
+} from "./lib/webuntis/SchoolDiscovery";
 import type { UpcomingExam } from "./lib/webuntis/Exams";
 import type { HolidaySummary } from "./lib/webuntis/Holidays";
 import {
@@ -37,10 +43,13 @@ import type {
 	WebUntisHttpDiagnostic,
 	WebUntisInboxMessage,
 	WebUntisMessageOfDay,
+	WebUntisSchoolConfig,
 	WebUntisStudentIdentity,
+	SchoolSearchResult,
 } from "./lib/webuntis/WebUntisTypes";
 
 const EXAMS_MAX_ATTEMPTS = 3;
+const MAX_VERIFIED_SCHOOL_SELECTIONS = 200;
 const TIMETABLE_GROUPS = ["today", "tomorrow", "week"] as const;
 type AdapterStateDefinition = {
 	type: "string" | "number" | "boolean";
@@ -286,6 +295,22 @@ class WebuntisNext extends utils.Adapter {
 	private lastCurrentNextUpdateAt?: number;
 	private lastCurrentNextUpdateDate?: string;
 	private unloaded = false;
+	private startupInitialized = false;
+	private failedCentralCredentialId?: string;
+	private failedCentralCredentialSnapshot?: { id: string; username: string; password: string };
+	private authenticatedCentralCredentialSnapshot?: { id: string; username: string; password: string };
+	private temporaryFailedCentralCredentialId?: string;
+	private readonly verifiedSchoolSelections = new Map<string, SchoolSearchResult>();
+	private readonly credentialWatchers = new Map<
+		string,
+		{
+			references: number;
+			listener: (id: string) => void;
+			subscription: Promise<boolean>;
+		}
+	>();
+	private resolvedCredential?: { id: string; username: string; password: string };
+	private credentialGeneration = 0;
 	private readonly migratedNames = new Set<string>();
 	private inboxMutationQueue: Promise<void> = Promise.resolve();
 	private refreshMutationQueue: Promise<void> = Promise.resolve();
@@ -382,6 +407,17 @@ class WebuntisNext extends utils.Adapter {
 			() => undefined,
 		);
 		return result;
+	}
+
+	private enqueueRefreshMutationWithFallbackCleanup<T>(operation: () => Promise<T>): Promise<T> {
+		return this.enqueueRefreshMutation(async () => {
+			const generation = this.credentialGeneration;
+			try {
+				return await operation();
+			} finally {
+				this.clearTemporaryCentralCredentialFallback(this.temporaryFailedCentralCredentialId, generation);
+			}
+		});
 	}
 
 	/** Throw when asynchronous work resumes after adapter shutdown. */
@@ -700,6 +736,22 @@ class WebuntisNext extends utils.Adapter {
 	}
 
 	private async onReady(): Promise<void> {
+		this.log.info("Adapter startup initialization started");
+		try {
+			await this.initialize();
+		} catch (error) {
+			if (!this.unloaded) {
+				const detail = error instanceof Error ? error.message : "Unknown error";
+				this.log.error(`Adapter startup failed: ${detail}`);
+			}
+		}
+	}
+
+	private async initialize(): Promise<void> {
+		if (this.unloaded) {
+			return;
+		}
+		await this.subscribeConfiguredCredential();
 		if (this.unloaded) {
 			return;
 		}
@@ -810,10 +862,33 @@ class WebuntisNext extends utils.Adapter {
 		await this.ensureHolidaysRoot();
 		await this.cleanupObsoleteStructure();
 		await this.setState("info.connection", false, true);
-		if (!this.hasConnectionConfig()) {
+		this.startupInitialized = true;
+		if (!this.hasSchoolConfig() || !this.hasCredentialSource()) {
 			return;
 		}
-		await this.refreshAll();
+		const credentialGeneration = this.credentialGeneration;
+		const temporaryFallbackId = await this.authenticateConfiguredCredentialAtStartup(credentialGeneration);
+		if (this.unloaded || credentialGeneration !== this.credentialGeneration) {
+			return;
+		}
+		try {
+			try {
+				await this.getConnectionConfig();
+			} catch (error) {
+				const code = error instanceof WebUntisError ? error.code : "CREDENTIAL_UNAVAILABLE";
+				this.log.warn(
+					`WebUntis credentials are unavailable (${code}); select a valid login credential in Admin`,
+				);
+				if (!this.unloaded) {
+					this.scheduleTimetableUpdate();
+					this.scheduleCurrentNextUpdate();
+				}
+				return;
+			}
+			await this.refreshAll();
+		} finally {
+			this.clearTemporaryCentralCredentialFallback(temporaryFallbackId, credentialGeneration);
+		}
 		this.scheduleTimetableUpdate();
 		this.scheduleCurrentNextUpdate();
 	}
@@ -824,7 +899,7 @@ class WebuntisNext extends utils.Adapter {
 	}
 
 	private async refreshAll(): Promise<void> {
-		return this.enqueueRefreshMutation(() => this.refreshAllLocked());
+		return this.enqueueRefreshMutationWithFallbackCleanup(() => this.refreshAllLocked());
 	}
 
 	private async refreshAllLocked(): Promise<void> {
@@ -852,6 +927,18 @@ class WebuntisNext extends utils.Adapter {
 			this.config.currentNextRefreshIntervalMinutes,
 			DEFAULT_CURRENT_NEXT_REFRESH_INTERVAL_MINUTES,
 		);
+	}
+
+	private clearTimetableUpdateTimer(): void {
+		if (this.timetableTimer) {
+			this.clearTimeout(this.timetableTimer);
+			this.timetableTimer = undefined;
+		}
+	}
+
+	private resetTimetableUpdateTimer(): void {
+		this.clearTimetableUpdateTimer();
+		this.scheduleTimetableUpdate();
 	}
 
 	private scheduleTimetableUpdate(): void {
@@ -917,18 +1004,543 @@ class WebuntisNext extends utils.Adapter {
 		this.scheduleCurrentNextUpdate();
 	}
 
-	private hasConnectionConfig(): this is { config: WebUntisConnectionConfig } {
-		return Boolean(
-			this.config.server &&
-			this.config.schoolName &&
-			typeof this.config.schoolId === "number" &&
-			this.config.username &&
-			this.config.password,
+	private hasSchoolConfig(): boolean {
+		const school = this.getSchoolConfig();
+		return Boolean(school.server && school.schoolName && typeof school.schoolId === "number");
+	}
+
+	private hasCredentialSource(): boolean {
+		return Boolean(this.config.credentialId?.trim() || (this.config.username?.trim() && this.config.password));
+	}
+
+	private getSchoolConfig(): WebUntisSchoolConfig {
+		const selectedSchool = decodeSchoolSelection(this.config.schoolSelection);
+		if (selectedSchool) {
+			return schoolResultToConfig(selectedSchool);
+		}
+		return {
+			server: this.config.server,
+			schoolName: this.config.schoolName,
+			schoolDisplayName: this.config.schoolDisplayName,
+			schoolAddress: this.config.schoolAddress,
+			schoolId: this.config.schoolId,
+		};
+	}
+
+	private async resolveCentralCredential(
+		credentialId: string,
+		expectedGeneration = this.credentialGeneration,
+	): Promise<{ id: string; username: string; password: string }> {
+		let credential: utils.Credentials.CredentialInfo<utils.Credentials.LoginPasswordCredentials>;
+		try {
+			credential = await utils.Credentials.getCredentials<utils.Credentials.LoginPasswordCredentials>(
+				this,
+				credentialId,
+			);
+		} catch {
+			throw new WebUntisError("CREDENTIAL_UNAVAILABLE", "The selected WebUntis credential is unavailable");
+		}
+		if (expectedGeneration !== this.credentialGeneration) {
+			throw new WebUntisError("CREDENTIAL_CHANGED", "The selected WebUntis credential changed during validation");
+		}
+		const values = credential.values as unknown as Record<string, unknown>;
+		if (
+			credential.type !== "custom" ||
+			utils.Credentials.getCredentialForm(values) !== "login" ||
+			typeof values.login !== "string" ||
+			!values.login.trim() ||
+			typeof values.password !== "string" ||
+			!values.password
+		) {
+			throw new WebUntisError("CREDENTIAL_INVALID", "The selected credential must contain a login and password");
+		}
+		return { id: credentialId, username: values.login, password: values.password };
+	}
+
+	private async getConnectionConfig(
+		credentialId = this.config.credentialId,
+		schoolConfig = this.getSchoolConfig(),
+		allowLegacyFallback = true,
+		expectedGeneration = this.credentialGeneration,
+	): Promise<WebUntisConnectionConfig> {
+		const selectedId = typeof credentialId === "string" ? credentialId.trim() : "";
+		const hasLegacyCredentials = Boolean(this.config.username?.trim() && this.config.password);
+		if (
+			this.authenticatedCentralCredentialSnapshot &&
+			(this.authenticatedCentralCredentialSnapshot.id !== this.config.credentialId?.trim() ||
+				!hasLegacyCredentials)
+		) {
+			this.authenticatedCentralCredentialSnapshot = undefined;
+		}
+		if (!selectedId) {
+			if (allowLegacyFallback && hasLegacyCredentials) {
+				return { ...schoolConfig, username: this.config.username, password: this.config.password };
+			}
+			throw new WebUntisError("CREDENTIAL_REQUIRED", "A WebUntis login credential must be selected");
+		}
+		if (allowLegacyFallback && hasLegacyCredentials && selectedId === this.temporaryFailedCentralCredentialId) {
+			if (expectedGeneration !== this.credentialGeneration) {
+				throw new WebUntisError(
+					"CREDENTIAL_CHANGED",
+					"The selected WebUntis credential changed during validation",
+				);
+			}
+			return { ...schoolConfig, username: this.config.username, password: this.config.password };
+		}
+
+		const hasActiveWatcher = await this.hasActiveCredentialWatcher(selectedId);
+		let resolvedAfterFallbackCheck: { id: string; username: string; password: string } | undefined;
+		const isPersistentFallback = selectedId === this.failedCentralCredentialId;
+		const authenticatedCredential =
+			this.authenticatedCentralCredentialSnapshot?.id === selectedId
+				? this.authenticatedCentralCredentialSnapshot
+				: undefined;
+		const shouldRevalidateWithoutWatcher =
+			allowLegacyFallback && hasLegacyCredentials && (isPersistentFallback || Boolean(authenticatedCredential));
+		if (allowLegacyFallback && hasLegacyCredentials && isPersistentFallback && hasActiveWatcher) {
+			if (expectedGeneration !== this.credentialGeneration) {
+				throw new WebUntisError(
+					"CREDENTIAL_CHANGED",
+					"The selected WebUntis credential changed during validation",
+				);
+			}
+			return { ...schoolConfig, username: this.config.username, password: this.config.password };
+		}
+		if (shouldRevalidateWithoutWatcher && !hasActiveWatcher) {
+			try {
+				resolvedAfterFallbackCheck = await this.resolveCentralCredential(selectedId, expectedGeneration);
+			} catch (error) {
+				if (error instanceof WebUntisError && error.code === "CREDENTIAL_CHANGED") {
+					throw error;
+				}
+				return { ...schoolConfig, username: this.config.username, password: this.config.password };
+			}
+			const knownCredential = isPersistentFallback
+				? this.failedCentralCredentialSnapshot
+				: authenticatedCredential;
+			if (
+				knownCredential?.id === selectedId &&
+				resolvedAfterFallbackCheck.username === knownCredential.username &&
+				resolvedAfterFallbackCheck.password === knownCredential.password
+			) {
+				if (isPersistentFallback) {
+					return { ...schoolConfig, username: this.config.username, password: this.config.password };
+				}
+				return {
+					...schoolConfig,
+					username: resolvedAfterFallbackCheck.username,
+					password: resolvedAfterFallbackCheck.password,
+				};
+			}
+
+			let result: Awaited<ReturnType<WebUntisService["testConnection"]>>;
+			try {
+				result = await this.webUntis.testConnection({
+					...schoolConfig,
+					username: resolvedAfterFallbackCheck.username,
+					password: resolvedAfterFallbackCheck.password,
+				});
+			} catch (error) {
+				if (expectedGeneration !== this.credentialGeneration) {
+					throw new WebUntisError(
+						"CREDENTIAL_CHANGED",
+						"The selected WebUntis credential changed during validation",
+					);
+				}
+				if (!this.markCentralCredentialForFallback(selectedId, expectedGeneration, false)) {
+					throw new WebUntisError(
+						"CREDENTIAL_CHANGED",
+						"The selected WebUntis credential changed during validation",
+					);
+				}
+				const code = error instanceof WebUntisError ? error.code : "CREDENTIAL_UNAVAILABLE";
+				this.log.warn(
+					`The updated central WebUntis credential could not be validated (${code}); legacy credentials were retained`,
+				);
+				return { ...schoolConfig, username: this.config.username, password: this.config.password };
+			}
+			if (expectedGeneration !== this.credentialGeneration) {
+				throw new WebUntisError(
+					"CREDENTIAL_CHANGED",
+					"The selected WebUntis credential changed during validation",
+				);
+			}
+			if (result.ok) {
+				if (
+					!(await this.centralCredentialUnchangedAfterAuthentication(
+						resolvedAfterFallbackCheck,
+						expectedGeneration,
+					))
+				) {
+					if (expectedGeneration !== this.credentialGeneration) {
+						throw new WebUntisError(
+							"CREDENTIAL_CHANGED",
+							"The selected WebUntis credential changed during validation",
+						);
+					}
+					if (!this.markCentralCredentialForFallback(selectedId, expectedGeneration, false)) {
+						throw new WebUntisError(
+							"CREDENTIAL_CHANGED",
+							"The selected WebUntis credential changed during validation",
+						);
+					}
+					return { ...schoolConfig, username: this.config.username, password: this.config.password };
+				}
+				this.clearCentralCredentialFallback(selectedId);
+				this.rememberAuthenticatedCentralCredential(resolvedAfterFallbackCheck);
+				return {
+					...schoolConfig,
+					username: resolvedAfterFallbackCheck.username,
+					password: resolvedAfterFallbackCheck.password,
+				};
+			}
+
+			const persistentFailure = result.code === "INVALID_CREDENTIALS" || result.code === "USER_BLOCKED";
+			const credentialUnchanged =
+				persistentFailure &&
+				(await this.centralCredentialUnchangedAfterAuthentication(
+					resolvedAfterFallbackCheck,
+					expectedGeneration,
+				));
+			if (expectedGeneration !== this.credentialGeneration) {
+				throw new WebUntisError(
+					"CREDENTIAL_CHANGED",
+					"The selected WebUntis credential changed during validation",
+				);
+			}
+			if (
+				!this.markCentralCredentialForFallback(
+					selectedId,
+					expectedGeneration,
+					persistentFailure && credentialUnchanged,
+					resolvedAfterFallbackCheck,
+				)
+			) {
+				throw new WebUntisError(
+					"CREDENTIAL_CHANGED",
+					"The selected WebUntis credential changed during validation",
+				);
+			}
+			this.log.warn(
+				`The updated central WebUntis credential failed authentication (${result.code}); legacy credentials were retained`,
+			);
+			return { ...schoolConfig, username: this.config.username, password: this.config.password };
+		}
+
+		let resolved =
+			resolvedAfterFallbackCheck ??
+			(hasActiveWatcher && selectedId === this.config.credentialId?.trim() ? this.resolvedCredential : undefined);
+		if (!resolved || resolved.id !== selectedId) {
+			resolved = await this.resolveCentralCredential(selectedId, expectedGeneration);
+			if (hasActiveWatcher && selectedId === this.config.credentialId?.trim()) {
+				this.resolvedCredential = resolved;
+			}
+		}
+		if (expectedGeneration !== this.credentialGeneration) {
+			throw new WebUntisError("CREDENTIAL_CHANGED", "The selected WebUntis credential changed during validation");
+		}
+		return { ...schoolConfig, username: resolved.username, password: resolved.password };
+	}
+
+	private async centralCredentialUnchangedAfterAuthentication(
+		authenticatedCredential: { id: string; username: string; password: string },
+		generation: number,
+	): Promise<boolean> {
+		if (this.unloaded || generation !== this.credentialGeneration) {
+			return false;
+		}
+		try {
+			const currentCredential = await this.resolveCentralCredential(authenticatedCredential.id, generation);
+			return (
+				!this.unloaded &&
+				generation === this.credentialGeneration &&
+				currentCredential.id === authenticatedCredential.id &&
+				currentCredential.username === authenticatedCredential.username &&
+				currentCredential.password === authenticatedCredential.password
+			);
+		} catch {
+			return false;
+		}
+	}
+
+	private markCentralCredentialForFallback(
+		credentialId: string,
+		generation: number,
+		persistent: boolean,
+		credential?: { username: string; password: string },
+	): boolean {
+		if (
+			generation !== this.credentialGeneration ||
+			credentialId !== this.config.credentialId?.trim() ||
+			!this.config.username?.trim() ||
+			!this.config.password
+		) {
+			return false;
+		}
+		if (persistent) {
+			this.failedCentralCredentialId = credentialId;
+			this.failedCentralCredentialSnapshot = credential
+				? { id: credentialId, username: credential.username, password: credential.password }
+				: undefined;
+			this.authenticatedCentralCredentialSnapshot = undefined;
+		} else {
+			this.temporaryFailedCentralCredentialId = credentialId;
+		}
+		this.resolvedCredential = undefined;
+		this.webUntis.clearSession();
+		return true;
+	}
+
+	private async hasActiveCredentialWatcher(credentialId: string): Promise<boolean> {
+		const watcher = this.credentialWatchers.get(credentialId);
+		return watcher ? watcher.subscription : false;
+	}
+
+	private clearCentralCredentialFallback(credentialId: string): void {
+		if (this.failedCentralCredentialId === credentialId) {
+			this.failedCentralCredentialId = undefined;
+			this.failedCentralCredentialSnapshot = undefined;
+		}
+		if (this.authenticatedCentralCredentialSnapshot?.id === credentialId) {
+			this.authenticatedCentralCredentialSnapshot = undefined;
+		}
+		if (this.temporaryFailedCentralCredentialId === credentialId) {
+			this.temporaryFailedCentralCredentialId = undefined;
+		}
+	}
+
+	private rememberAuthenticatedCentralCredential(credential: {
+		id: string;
+		username: string;
+		password: string;
+	}): void {
+		if (
+			credential.id === this.config.credentialId?.trim() &&
+			this.config.username?.trim() &&
+			this.config.password
+		) {
+			this.authenticatedCentralCredentialSnapshot = {
+				id: credential.id,
+				username: credential.username,
+				password: credential.password,
+			};
+		} else {
+			this.authenticatedCentralCredentialSnapshot = undefined;
+		}
+	}
+
+	private clearTemporaryCentralCredentialFallback(credentialId: string | undefined, generation: number): void {
+		if (
+			credentialId &&
+			!this.unloaded &&
+			generation === this.credentialGeneration &&
+			credentialId === this.temporaryFailedCentralCredentialId
+		) {
+			this.temporaryFailedCentralCredentialId = undefined;
+		}
+	}
+
+	private isSavedCredentialSelection(credentialId: string, schoolConfig: WebUntisSchoolConfig): boolean {
+		const configuredSchool = this.getSchoolConfig();
+		return (
+			credentialId === this.config.credentialId?.trim() &&
+			configuredSchool.server === schoolConfig.server &&
+			configuredSchool.schoolName === schoolConfig.schoolName &&
+			configuredSchool.schoolId === schoolConfig.schoolId
 		);
 	}
 
+	private async clearLegacyCredentialsAfterSuccessfulAuthentication(
+		authenticatedCredential: { id: string; username: string; password: string },
+		generation: number,
+		schoolConfig: WebUntisSchoolConfig,
+		markTemporaryFallbackOnCredentialChange = false,
+	): Promise<boolean> {
+		if (!this.config.username?.trim() && !this.config.password) {
+			return false;
+		}
+		if (!this.isSavedCredentialSelection(authenticatedCredential.id, schoolConfig)) {
+			return false;
+		}
+		if (!(await this.centralCredentialUnchangedAfterAuthentication(authenticatedCredential, generation))) {
+			if (markTemporaryFallbackOnCredentialChange) {
+				this.markCentralCredentialForFallback(authenticatedCredential.id, generation, false);
+			}
+			this.log.warn(
+				"The authenticated WebUntis credential changed before legacy cleanup; legacy credentials were retained",
+			);
+			return false;
+		}
+		if (!this.isSavedCredentialSelection(authenticatedCredential.id, schoolConfig)) {
+			return false;
+		}
+		try {
+			await this.updateConfig({ username: "", password: "" });
+			this.clearCentralCredentialFallback(authenticatedCredential.id);
+			return true;
+		} catch {
+			this.rememberAuthenticatedCentralCredential(authenticatedCredential);
+			this.log.warn(
+				"The WebUntis credential was authenticated, but legacy credentials could not be cleared; check adapter permissions",
+			);
+			return false;
+		}
+	}
+
+	private async authenticateConfiguredCredentialAtStartup(
+		generation = this.credentialGeneration,
+	): Promise<string | undefined> {
+		const credentialId = this.config.credentialId?.trim();
+		if (!credentialId || (!this.config.username?.trim() && !this.config.password) || !this.hasSchoolConfig()) {
+			return undefined;
+		}
+		const schoolConfig = this.getSchoolConfig();
+		let credential: { id: string; username: string; password: string };
+		try {
+			credential = await this.resolveCentralCredential(credentialId, generation);
+		} catch (error) {
+			const code = error instanceof WebUntisError ? error.code : "CREDENTIAL_UNAVAILABLE";
+			const temporaryFallbackId =
+				code === "CREDENTIAL_CHANGED" || !this.markCentralCredentialForFallback(credentialId, generation, false)
+					? undefined
+					: credentialId;
+			this.log.warn(
+				`The selected WebUntis credential could not be read (${code}); legacy credentials were retained`,
+			);
+			return temporaryFallbackId;
+		}
+		const result = await this.webUntis.testConnection({
+			...schoolConfig,
+			username: credential.username,
+			password: credential.password,
+		});
+		if (this.unloaded || generation !== this.credentialGeneration) {
+			return undefined;
+		}
+		if (!result.ok) {
+			const persistent = result.code === "INVALID_CREDENTIALS" || result.code === "USER_BLOCKED";
+			const fallbackMarked = this.markCentralCredentialForFallback(
+				credentialId,
+				generation,
+				persistent,
+				credential,
+			);
+			this.log.warn(
+				`The selected central WebUntis credential failed authentication (${result.code}); legacy credentials were retained`,
+			);
+			return !persistent && fallbackMarked ? credentialId : undefined;
+		}
+		if (!(await this.centralCredentialUnchangedAfterAuthentication(credential, generation))) {
+			const fallbackMarked = this.markCentralCredentialForFallback(credentialId, generation, false);
+			this.log.warn("The authenticated WebUntis credential changed; legacy credentials were retained");
+			return fallbackMarked ? credentialId : undefined;
+		}
+		this.clearCentralCredentialFallback(credentialId);
+		await this.clearLegacyCredentialsAfterSuccessfulAuthentication(credential, generation, schoolConfig, true);
+		return this.temporaryFailedCentralCredentialId === credentialId ? credentialId : undefined;
+	}
+
+	private async subscribeConfiguredCredential(): Promise<void> {
+		const credentialId = this.config.credentialId?.trim();
+		if (credentialId) {
+			await this.watchCredential(credentialId);
+		}
+	}
+
+	private async watchCredential(credentialId: string): Promise<() => Promise<void>> {
+		if (this.unloaded || !credentialId) {
+			return () => Promise.resolve();
+		}
+		let watcher = this.credentialWatchers.get(credentialId);
+		if (watcher) {
+			watcher.references++;
+		} else {
+			const listener = (changedId: string): void => {
+				if (changedId !== credentialId || this.unloaded) {
+					return;
+				}
+				const generation = ++this.credentialGeneration;
+				this.clearCentralCredentialFallback(credentialId);
+				this.resolvedCredential = undefined;
+				this.webUntis.clearSession();
+				void this.setStateAsync("info.connection", false, true).catch(() => {
+					if (!this.unloaded) {
+						this.log.warn("Could not update the WebUntis connection state after credential changes");
+					}
+				});
+				if (this.startupInitialized && this.hasSchoolConfig() && this.hasCredentialSource()) {
+					this.clearTimetableUpdateTimer();
+					void this.enqueueRefreshMutation(async () => {
+						const temporaryFallbackId = await this.authenticateConfiguredCredentialAtStartup(generation);
+						if (this.unloaded || generation !== this.credentialGeneration) {
+							return;
+						}
+						try {
+							await this.refreshAllLocked();
+						} finally {
+							this.clearTemporaryCentralCredentialFallback(temporaryFallbackId, generation);
+						}
+					})
+						.catch(error => {
+							if (!this.unloaded && generation === this.credentialGeneration) {
+								const code = error instanceof WebUntisError ? error.code : "UNEXPECTED_RESPONSE";
+								this.log.warn(`WebUntis refresh after credential change failed (${code})`);
+							}
+						})
+						.finally(() => {
+							if (!this.unloaded && generation === this.credentialGeneration) {
+								this.resetTimetableUpdateTimer();
+								this.resetCurrentNextUpdateTimer();
+							}
+						});
+				}
+			};
+			watcher = { references: 1, listener, subscription: Promise.resolve(false) };
+			this.credentialWatchers.set(credentialId, watcher);
+			this.on("objectChange", listener);
+			watcher.subscription = Promise.resolve()
+				.then(() => this.subscribeForeignObjectsAsync(credentialId))
+				.then(() => true)
+				.catch(() => {
+					if (this.credentialWatchers.get(credentialId) === watcher) {
+						this.credentialWatchers.delete(credentialId);
+						this.removeListener("objectChange", listener);
+					}
+					this.log.warn(
+						"Could not monitor the selected WebUntis credential; it will be re-read before each request",
+					);
+					return false;
+				});
+		}
+
+		if (!(await watcher.subscription) || this.unloaded) {
+			return () => Promise.resolve();
+		}
+		let released = false;
+		return async () => {
+			if (released) {
+				return;
+			}
+			released = true;
+			if (this.credentialWatchers.get(credentialId) !== watcher) {
+				return;
+			}
+			watcher.references--;
+			if (watcher.references > 0) {
+				return;
+			}
+			this.credentialWatchers.delete(credentialId);
+			this.removeListener("objectChange", watcher.listener);
+			try {
+				await this.unsubscribeForeignObjectsAsync(credentialId);
+			} catch {
+				this.log.warn("Could not unsubscribe from the selected WebUntis credential");
+			}
+		};
+	}
+
 	private async updateTimetable(): Promise<void> {
-		return this.enqueueRefreshMutation(() => this.updateTimetableLocked());
+		return this.enqueueRefreshMutationWithFallbackCleanup(() => this.updateTimetableLocked());
 	}
 
 	private async updateTimetableLocked(): Promise<void> {
@@ -940,7 +1552,7 @@ class WebuntisNext extends utils.Adapter {
 		let timetableGroupWriteStarted = false;
 		try {
 			const now = new Date();
-			const messages = await this.webUntis.loadMessagesOfDay(this.config, now);
+			const messages = await this.webUntis.loadMessagesOfDay(await this.getConnectionConfig(), now);
 			if (!this.unloaded) {
 				await this.writeMessagesOfDay(messages, now);
 			}
@@ -957,7 +1569,7 @@ class WebuntisNext extends utils.Adapter {
 			}
 		}
 		try {
-			const unreadMessages = await this.webUntis.loadUnreadMessages(this.config);
+			const unreadMessages = await this.webUntis.loadUnreadMessages(await this.getConnectionConfig());
 			await this.writeUnreadMessages(unreadMessages);
 			this.lastMessageWarningAt = 0;
 		} catch (error) {
@@ -974,7 +1586,7 @@ class WebuntisNext extends utils.Adapter {
 			await this.ensureStudentsRoot();
 			await this.ensureHolidaysRoot();
 			const now = refreshNow;
-			const data = await this.webUntis.loadTimetable(this.config, now);
+			const data = await this.webUntis.loadTimetable(await this.getConnectionConfig(), now);
 			if (this.unloaded) {
 				return;
 			}
@@ -1133,7 +1745,7 @@ class WebuntisNext extends utils.Adapter {
 	}
 
 	private async updateHomeworkAndAbsences(): Promise<void> {
-		if (this.unloaded || !this.hasConnectionConfig()) {
+		if (this.unloaded || !this.hasSchoolConfig() || !this.hasCredentialSource()) {
 			return;
 		}
 		const warningIntervalMs = 30 * 60 * 1000;
@@ -1163,7 +1775,7 @@ class WebuntisNext extends utils.Adapter {
 		}
 		let schoolYear: Awaited<ReturnType<WebUntisService["loadCurrentSchoolYear"]>>;
 		try {
-			schoolYear = await this.webUntis.loadCurrentSchoolYear(this.config);
+			schoolYear = await this.webUntis.loadCurrentSchoolYear(await this.getConnectionConfig());
 		} catch (error) {
 			this.logOptionalRefreshFailure("homework and absences", error, "lastHomeworkWarningAt", warningIntervalMs);
 			this.logOptionalRefreshFailure("homework and absences", error, "lastAbsencesWarningAt", warningIntervalMs);
@@ -1176,7 +1788,12 @@ class WebuntisNext extends utils.Adapter {
 		}
 
 		try {
-			const homeworks = await this.webUntis.loadHomework(this.config, startDate, endDate, schoolYear);
+			const homeworks = await this.webUntis.loadHomework(
+				await this.getConnectionConfig(),
+				startDate,
+				endDate,
+				schoolYear,
+			);
 			if (this.unloaded) {
 				return;
 			}
@@ -1269,7 +1886,7 @@ class WebuntisNext extends utils.Adapter {
 				const channelId = channelIds.get(student.id)!;
 				const root = `students.${channelId}.absences`;
 				const absenceResponse = await this.webUntis.loadAbsences(
-					this.config,
+					await this.getConnectionConfig(),
 					student.id,
 					startDate,
 					endDate,
@@ -1298,7 +1915,7 @@ class WebuntisNext extends utils.Adapter {
 
 	private async loadStudentIdentitiesForOptionalRefresh(): Promise<WebUntisStudentIdentity[] | undefined> {
 		try {
-			const students = await this.webUntis.loadStudentIdentities(this.config);
+			const students = await this.webUntis.loadStudentIdentities(await this.getConnectionConfig());
 			if (!this.unloaded) {
 				this.knownStudentIdentities = students;
 			}
@@ -1361,7 +1978,7 @@ class WebuntisNext extends utils.Adapter {
 		for (let attempt = 1; attempt <= EXAMS_MAX_ATTEMPTS; attempt++) {
 			this.ensureActive();
 			try {
-				return await this.webUntis.loadUpcomingExams(this.config, now);
+				return await this.webUntis.loadUpcomingExams(await this.getConnectionConfig(), now);
 			} catch (error) {
 				const transient =
 					error instanceof WebUntisError && (error.code === "SERVER_UNREACHABLE" || error.code === "TIMEOUT");
@@ -2494,32 +3111,157 @@ class WebuntisNext extends utils.Adapter {
 		}
 	}
 
+	private rememberVerifiedSchoolSelection(school: SchoolSearchResult): string {
+		const selection = encodeSchoolSelection(school);
+		this.verifiedSchoolSelections.delete(selection);
+		this.verifiedSchoolSelections.set(selection, school);
+		while (this.verifiedSchoolSelections.size > MAX_VERIFIED_SCHOOL_SELECTIONS) {
+			const oldestSelection = this.verifiedSchoolSelections.keys().next().value;
+			if (oldestSelection === undefined) {
+				break;
+			}
+			this.verifiedSchoolSelections.delete(oldestSelection);
+		}
+		return selection;
+	}
+
 	private async onMessage(obj: ioBroker.Message): Promise<void> {
+		if (obj?.command === "searchSchools") {
+			this.log.info(`School search request received (callback: ${Boolean(obj.callback)})`);
+		}
 		if (this.unloaded || !obj || !obj.command || !obj.callback) {
+			return;
+		}
+		if (obj.command !== "searchSchools" && !/^system\.adapter\.admin\.\d+$/.test(obj.from)) {
+			this.sendTo(
+				obj.from,
+				obj.command,
+				{ ok: false, code: "UNAUTHORIZED", error: "UNAUTHORIZED" },
+				obj.callback,
+			);
 			return;
 		}
 		try {
 			if (obj.command === "searchSchools") {
-				const results = await this.webUntis.searchSchools(this.getStringPayload(obj.message, "query"));
+				const query = this.getStringPayload(obj.message, "query");
+				const results = rankSchoolResults(await this.webUntis.searchSchools(query), query);
 				if (this.unloaded) {
 					return;
 				}
 				this.log.info(`School search returned ${results.length} results`);
-				this.sendTo(obj.from, obj.command, { ok: true, results }, obj.callback);
+				this.sendTo(
+					obj.from,
+					obj.command,
+					results.map(school => ({
+						label: school.displayName,
+						value: this.rememberVerifiedSchoolSelection(school),
+						description: [school.address, school.loginName].filter(Boolean).join(" · "),
+						noTranslation: true,
+					})),
+					obj.callback,
+				);
 				return;
 			}
 			if (obj.command === "testConnection") {
-				const result = await this.webUntis.testConnection(this.getConnectionPayload(obj.message));
-				if (this.unloaded) {
-					return;
+				const selectedCredentialId = this.getSelectedCredentialId(obj.message);
+				const configuredCredentialId = this.config.credentialId?.trim();
+				const releaseCredentialWatch =
+					selectedCredentialId && selectedCredentialId === configuredCredentialId
+						? await this.watchCredential(selectedCredentialId)
+						: undefined;
+				try {
+					if (this.unloaded) {
+						return;
+					}
+					const credentialGeneration = this.credentialGeneration;
+					const config = await this.getConnectionPayload(obj.message, credentialGeneration);
+					if (this.unloaded) {
+						return;
+					}
+					if (credentialGeneration !== this.credentialGeneration) {
+						throw new WebUntisError(
+							"CREDENTIAL_CHANGED",
+							"The selected credential changed during the connection test",
+						);
+					}
+					const result = await this.webUntis.testConnection(config);
+					if (this.unloaded) {
+						return;
+					}
+					if (selectedCredentialId) {
+						let currentCredential: { id: string; username: string; password: string };
+						try {
+							currentCredential = await this.resolveCentralCredential(
+								selectedCredentialId,
+								credentialGeneration,
+							);
+						} catch {
+							throw new WebUntisError(
+								"CREDENTIAL_CHANGED",
+								"The selected credential changed during the connection test",
+							);
+						}
+						if (
+							currentCredential.username !== config.username ||
+							currentCredential.password !== config.password
+						) {
+							throw new WebUntisError(
+								"CREDENTIAL_CHANGED",
+								"The selected credential changed during the connection test",
+							);
+						}
+					}
+					if (credentialGeneration !== this.credentialGeneration) {
+						this.sendTo(
+							obj.from,
+							obj.command,
+							{ ok: false, code: "CREDENTIAL_CHANGED", error: "CREDENTIAL_CHANGED" },
+							obj.callback,
+						);
+						return;
+					}
+					if (
+						!result.ok &&
+						selectedCredentialId &&
+						this.isSavedCredentialSelection(selectedCredentialId, config) &&
+						(result.code === "INVALID_CREDENTIALS" || result.code === "USER_BLOCKED")
+					) {
+						this.markCentralCredentialForFallback(selectedCredentialId, credentialGeneration, true, {
+							username: config.username,
+							password: config.password,
+						});
+					}
+					await this.setState("info.connection", result.ok, true);
+					if (credentialGeneration !== this.credentialGeneration) {
+						await this.setState("info.connection", false, true);
+						this.sendTo(
+							obj.from,
+							obj.command,
+							{ ok: false, code: "CREDENTIAL_CHANGED", error: "CREDENTIAL_CHANGED" },
+							obj.callback,
+						);
+						return;
+					}
+					if (result.ok) {
+						if (selectedCredentialId && this.isSavedCredentialSelection(selectedCredentialId, config)) {
+							this.clearCentralCredentialFallback(selectedCredentialId);
+						}
+						this.log.info("WebUntis authentication successful");
+						this.sendTo(obj.from, obj.command, { ok: true, result: "CONNECTED" }, obj.callback);
+						if (selectedCredentialId) {
+							await this.clearLegacyCredentialsAfterSuccessfulAuthentication(
+								{ id: selectedCredentialId, username: config.username, password: config.password },
+								credentialGeneration,
+								config,
+							);
+						}
+					} else {
+						this.log.warn(`WebUntis authentication failed: ${result.code}`);
+						this.sendTo(obj.from, obj.command, { ...result, error: result.code }, obj.callback);
+					}
+				} finally {
+					await releaseCredentialWatch?.();
 				}
-				await this.setState("info.connection", result.ok, true);
-				if (result.ok) {
-					this.log.info("WebUntis authentication successful");
-				} else {
-					this.log.warn(`WebUntis authentication failed: ${result.code}`);
-				}
-				this.sendTo(obj.from, obj.command, result, obj.callback);
 			}
 		} catch (error) {
 			if (this.unloaded) {
@@ -2527,7 +3269,8 @@ class WebuntisNext extends utils.Adapter {
 			}
 			const code = error instanceof WebUntisError ? error.code : "UNEXPECTED_RESPONSE";
 			this.log.warn(`WebUntis request failed: ${code}`);
-			this.sendTo(obj.from, obj.command, { ok: false, code }, obj.callback);
+			const payload = obj.command === "searchSchools" ? [] : { ok: false, code, error: code };
+			this.sendTo(obj.from, obj.command, payload, obj.callback);
 		}
 	}
 
@@ -2542,21 +3285,44 @@ class WebuntisNext extends utils.Adapter {
 		return (message as Record<string, unknown>)[key] as string;
 	}
 
-	private getConnectionPayload(message: ioBroker.MessagePayload): WebUntisConnectionConfig {
+	private getSelectedCredentialId(message: ioBroker.MessagePayload): string {
+		if (typeof message === "object" && message !== null) {
+			const value = message as Record<string, unknown>;
+			if (Object.prototype.hasOwnProperty.call(value, "credentialId")) {
+				return typeof value.credentialId === "string" ? value.credentialId.trim() : "";
+			}
+		}
+		return this.config.credentialId?.trim() ?? "";
+	}
+
+	private async getConnectionPayload(
+		message: ioBroker.MessagePayload,
+		expectedGeneration = this.credentialGeneration,
+	): Promise<WebUntisConnectionConfig> {
 		if (typeof message !== "object" || message === null) {
 			throw new WebUntisError("INVALID_CONFIG", "Invalid connection payload");
 		}
 		const value = message as Record<string, unknown>;
-		const stringValue = (key: string): string => (typeof value[key] === "string" ? value[key] : "");
-		return {
-			server: stringValue("server"),
-			schoolName: stringValue("schoolName"),
-			schoolDisplayName: stringValue("schoolDisplayName"),
-			schoolAddress: stringValue("schoolAddress"),
-			schoolId: typeof value.schoolId === "number" ? value.schoolId : null,
-			username: stringValue("username"),
-			password: stringValue("password"),
-		};
+		let schoolConfig = this.getSchoolConfig();
+		if (value.schoolSelection !== undefined && value.schoolSelection !== "") {
+			if (typeof value.schoolSelection !== "string") {
+				throw new WebUntisError("INVALID_CONFIG", "Invalid school selection");
+			}
+			const selectedSchool =
+				this.verifiedSchoolSelections.get(value.schoolSelection) ??
+				(value.schoolSelection === this.config.schoolSelection
+					? decodeSchoolSelection(value.schoolSelection)
+					: undefined);
+			if (!selectedSchool) {
+				throw new WebUntisError("INVALID_CONFIG", "School selection was not returned by WebUntis search");
+			}
+			schoolConfig = schoolResultToConfig(selectedSchool);
+		}
+		if (!schoolConfig.server || !schoolConfig.schoolName || schoolConfig.schoolId === null) {
+			return { ...schoolConfig, username: "", password: "" };
+		}
+		const credentialId = this.getSelectedCredentialId(message);
+		return this.getConnectionConfig(credentialId, schoolConfig, !credentialId, expectedGeneration);
 	}
 
 	private onUnload(callback: () => void): void {
@@ -2564,7 +3330,27 @@ class WebuntisNext extends utils.Adapter {
 			return;
 		}
 		this.unloaded = true;
+		this.credentialGeneration++;
 		this.webUntis.shutdown();
+		this.failedCentralCredentialId = undefined;
+		this.failedCentralCredentialSnapshot = undefined;
+		this.authenticatedCentralCredentialSnapshot = undefined;
+		this.temporaryFailedCentralCredentialId = undefined;
+		this.resolvedCredential = undefined;
+		const credentialWatchers = [...this.credentialWatchers.entries()];
+		this.credentialWatchers.clear();
+		for (const [credentialId, watcher] of credentialWatchers) {
+			this.removeListener("objectChange", watcher.listener);
+			void watcher.subscription
+				.then(async subscribed => {
+					if (subscribed) {
+						await this.unsubscribeForeignObjectsAsync(credentialId);
+					}
+				})
+				.catch(() => {
+					this.log.warn("Could not unsubscribe from the selected WebUntis credential");
+				});
+		}
 		if (this.timetableTimer) {
 			this.clearTimeout(this.timetableTimer);
 		}

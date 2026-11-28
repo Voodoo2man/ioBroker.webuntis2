@@ -15,7 +15,7 @@ visualizations, notifications, and automations.
 
 - School search by school name, city, or address
 - Simple school selection during setup
-- Secure username and password configuration
+- Central ioBroker login credential selection, with legacy credential fallback until validation
 - A connection test before saving
 - Timetables for today, tomorrow, and the current week
 - Lesson details such as subject, teacher, room, class, time, and status, with available long names in additional states
@@ -35,29 +35,31 @@ visualizations, notifications, and automations.
 
 1. Install **WebUntis2** from the ioBroker adapter list.
 2. Create a new `webuntis2` instance.
-3. Search for your school by entering part of its name or a city.
-4. Select the matching school from the results.
-5. Enter the WebUntis username and password.
-6. Use **Test connection** and save the settings.
+3. Enter part of the school name or a city in the school search field, then select the matching result.
+4. In the account settings, create or select a custom login/password credential from **Settings → Credentials**.
+5. Use **Test connection** and save the settings.
 
-The adapter stores the selected school together with the information required
-for the connection. No server address needs to be entered manually when it is
-provided by the school search.
+Existing WebUntis usernames and passwords are not copied automatically. They
+remain available as a backward-compatible fallback until the selected central
+login credential successfully authenticates with WebUntis using the saved school
+and credential settings and is re-read unchanged. A successful test with an
+unsaved school or credential selection does not clear them; after saving, the
+adapter verifies the saved settings at startup and clears the legacy fields
+through the instance configuration API. If that update fails, it retains them
+as a fallback.
+The adapter stores the selected school and central credential ID. No server
+address needs to be entered manually when it is provided by the school search.
 
 ## Admin configuration interface
 
-The adapter uses a React-based Admin interface because setup includes two
-interactive operations: searching WebUntis schools from a user-entered query
-and displaying the returned schools for selection, and testing the entered
-credentials against the selected school before saving. Both operations call
-the adapter asynchronously and need to show loading, empty-result, and error
-states in the same form. The standard `jsonConfig` controls do not provide
-this complete query-and-result workflow on their own; reproducing it there
-would require a custom component or equivalent custom UI code. React keeps
-these setup interactions together while the adapter remains responsible for
-WebUntis requests and validation.
-
-The Admin configuration also provides `timetableRefreshIntervalMinutes` for the
+The adapter uses ioBroker's native JSON configuration. The `selectSendTo`
+control searches WebUntis schools using the entered name or city and stores the
+selected school's connection details. The `credential` control selects a custom
+login/password credential from the central credential store and supports adding
+one inline. **Test connection** checks the selected school and credential; the
+adapter resolves credentials through `@iobroker/adapter-core` and never sends
+passwords through the Admin form. The configuration also provides
+`timetableRefreshIntervalMinutes` for the
 full timetable and data refresh, and `currentNextRefreshIntervalMinutes` for
 current/next lesson states. Both accept whole minutes; the full refresh is
 limited to 5–8,640 minutes (6 days), and current/next updates have a 1-minute
@@ -213,7 +215,7 @@ that shared session's school year.
 
 ## Requirements and notes
 
-- Node.js 22.19 or newer, js-controller 7.2.2 or newer, and Admin 8.2.0 or newer are required.
+- Node.js 22.19 or newer, js-controller 7.2.2 or newer, and Admin 8.3.15 or newer are required.
 - A WebUntis account with access to the selected school is required.
 - Username-and-password login is supported.
 - QR-code, Microsoft 365, SAML, and OAuth login are not supported.
@@ -223,9 +225,18 @@ that shared session's school year.
 
 ## Privacy and security
 
-The password is stored using ioBroker's protected configuration mechanism.
-Credentials, cookies, and session information are not shown in logs or
-published as states. Do not share login details or personal student information
+WebUntis login credentials are stored in ioBroker's central credential store,
+with secret fields encrypted using the installation secret. The adapter
+references the selected credential by ID. Existing legacy username/password
+values are not copied; they remain as a fallback until the central credential
+successfully authenticates with WebUntis using the saved school and credential
+settings and is re-read unchanged. Testing an unsaved school or credential
+selection does not clear them. The adapter then clears legacy values through
+the instance configuration API; if that update fails, they remain as a
+fallback. Credentials, cookies, and session information are not shown in logs
+or published as states.
+Do not share login
+details or personal student information
 in issues or support requests.
 
 ## Support
@@ -242,6 +253,9 @@ and include only relevant, non-sensitive log messages when asking for help.
 
 ### **WORK IN PROGRESS**
 
+- (Voodoo2man) Accepted WebUntis' no-reason absence sentinel without rejecting valid absence records.
+- (Voodoo2man) Raised the Admin minimum to the stable 8.3.15 release and logged school-search requests for clearer Admin diagnostics.
+- (Voodoo2man) Added central login credentials and cleared legacy credentials only after the saved configuration authenticated successfully.
 - (Voodoo2man) Added configurable refresh intervals with a six-day full-refresh
   maximum and five-minute retries without a successful snapshot; kept Current/Next,
   today's timetable views, and next-update reporting aligned with the cached week.

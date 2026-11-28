@@ -74,8 +74,11 @@ export class WebUntisService {
 	private sessionClient?: WebUntisClient;
 	private session?: WebUntisSession;
 	private sessionKey?: string;
+	private sessionGeneration = 0;
+	private sessionAbortController?: AbortController;
 	private sessionLoading?: { key: string; promise: Promise<{ client: WebUntisClient; session: WebUntisSession }> };
 	private masterDataCache?: MasterDataCache;
+	private readonly connectionTestAbortControllers = new Set<AbortController>();
 
 	public constructor(
 		private readonly onDiagnostic?: (diagnostic: WebUntisHttpDiagnostic) => void,
@@ -384,19 +387,37 @@ export class WebUntisService {
 		if (this.sessionLoading?.key === key) {
 			return this.sessionLoading.promise;
 		}
+		const generation = this.sessionGeneration;
+		const sessionAbortController = new AbortController();
+		this.sessionAbortController = sessionAbortController;
 		const client = new WebUntisClient(
 			config,
 			this.fetchImpl,
 			undefined,
 			this.onDiagnostic,
-			this.abortController.signal,
+			AbortSignal.any([this.abortController.signal, sessionAbortController.signal]),
 		);
-		const promise = client.authenticate(config.username, config.password).then(session => {
-			this.sessionClient = client;
-			this.session = session;
-			this.sessionKey = key;
-			return { client, session };
-		});
+		const promise = client
+			.authenticate(config.username, config.password)
+			.then(session => {
+				if (
+					generation !== this.sessionGeneration ||
+					this.abortController.signal.aborted ||
+					sessionAbortController.signal.aborted
+				) {
+					throw new WebUntisError("CREDENTIAL_CHANGED", "The WebUntis login was superseded");
+				}
+				this.sessionClient = client;
+				this.session = session;
+				this.sessionKey = key;
+				return { client, session };
+			})
+			.catch(error => {
+				if (this.sessionAbortController === sessionAbortController) {
+					this.sessionAbortController = undefined;
+				}
+				throw error;
+			});
 		this.sessionLoading = { key, promise };
 		void promise.then(
 			() => {
@@ -503,22 +524,42 @@ export class WebUntisService {
 		if (!config.password) {
 			return { ok: false, code: "PASSWORD_REQUIRED" };
 		}
+		const abortController = new AbortController();
+		this.connectionTestAbortControllers.add(abortController);
 		try {
 			await new WebUntisClient(
 				config,
 				this.fetchImpl,
 				undefined,
 				this.onDiagnostic,
-				this.abortController.signal,
+				abortController.signal,
 			).authenticate(config.username, config.password);
 			return { ok: true };
 		} catch (error) {
 			return { ok: false, code: classifyWebUntisError(error) };
+		} finally {
+			this.connectionTestAbortControllers.delete(abortController);
 		}
+	}
+
+	public clearSession(): void {
+		for (const abortController of this.connectionTestAbortControllers) {
+			abortController.abort();
+		}
+		this.connectionTestAbortControllers.clear();
+		this.sessionGeneration++;
+		this.sessionAbortController?.abort();
+		this.sessionAbortController = undefined;
+		this.sessionClient = undefined;
+		this.session = undefined;
+		this.sessionKey = undefined;
+		this.sessionLoading = undefined;
+		this.masterDataCache = undefined;
 	}
 
 	public shutdown(): void {
 		this.abortController.abort();
+		this.clearSession();
 	}
 }
 

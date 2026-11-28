@@ -1,0 +1,109 @@
+{
+  "i18n": true,
+  "type": "tabs",
+  "items": {
+    "account": {
+      "type": "panel",
+      "label": "accountCardTitle",
+      "items": {
+        "schoolHelp": {
+          "type": "staticText",
+          "text": "schoolCardHelp",
+          "sm": 12
+        },
+        "schoolQuery": {
+          "type": "text",
+          "label": "schoolSearch",
+          "sm": 6
+        },
+        "schoolSelection": {
+          "type": "selectSendTo",
+          "label": "selectedSchool",
+          "command": "searchSchools",
+          "jsonData": "{\"query\":\"${data.schoolQuery}\"}",
+          "alsoDependsOn": ["schoolQuery"],
+          "manual": false,
+          "noTranslation": true,
+          "sm": 6
+        },
+        "credentialHelp": {
+          "type": "staticText",
+          "text": "credentialHelp",
+          "sm": 12
+        },
+        "credentialId": {
+          "type": "credential",
+          "label": "credentialSelect",
+          "credentialType": "custom",
+          "disableCreation": false,
+          "sm": 6
+        },
+        "testConnection": {
+          "type": "sendTo",
+          "label": "testConnection",
+          "command": "testConnection",
+          "jsonData": "{\"schoolSelection\":\"${data.schoolSelection}\",\"credentialId\":\"${data.credentialId}\"}",
+          "result": {
+            "CONNECTED": "CONNECTED"
+          },
+          "error": {
+            "UNAUTHORIZED": "UNAUTHORIZED",
+            "INVALID_CONFIG": "INVALID_CONFIG",
+            "SCHOOL_NOT_SELECTED": "SCHOOL_NOT_SELECTED",
+            "USERNAME_REQUIRED": "USERNAME_REQUIRED",
+            "PASSWORD_REQUIRED": "PASSWORD_REQUIRED",
+            "CREDENTIAL_REQUIRED": "CREDENTIAL_REQUIRED",
+            "CREDENTIAL_UNAVAILABLE": "CREDENTIAL_UNAVAILABLE",
+            "CREDENTIAL_INVALID": "CREDENTIAL_INVALID",
+            "CREDENTIAL_CHANGED": "CREDENTIAL_CHANGED",
+            "INVALID_CREDENTIALS": "INVALID_CREDENTIALS",
+            "USER_BLOCKED": "USER_BLOCKED",
+            "INVALID_SCHOOL": "INVALID_SCHOOL",
+            "SERVER_UNREACHABLE": "SERVER_UNREACHABLE",
+            "TIMEOUT": "TIMEOUT",
+            "ABORTED": "ABORTED",
+            "UNSUPPORTED_LOGIN": "UNSUPPORTED_LOGIN",
+            "INVALID_RESPONSE": "INVALID_RESPONSE",
+            "HTML_RESPONSE": "HTML_RESPONSE",
+            "REDIRECTED": "REDIRECTED",
+            "SESSION_EXPIRED": "SESSION_EXPIRED",
+            "FORBIDDEN": "FORBIDDEN",
+            "MODULE_UNAVAILABLE": "MODULE_UNAVAILABLE",
+            "API_REQUEST": "API_REQUEST",
+            "UNEXPECTED_RESPONSE": "UNEXPECTED_RESPONSE"
+          },
+          "showProcess": true,
+          "icon": "auth",
+          "timeout": 30000,
+          "sm": 12
+        }
+      }
+    },
+    "refreshIntervals": {
+      "type": "panel",
+      "label": "refreshIntervalsCardTitle",
+      "items": {
+        "refreshIntervalsHelp": {
+          "type": "staticText",
+          "text": "refreshIntervalsCardHelp",
+          "sm": 12
+        },
+        "timetableRefreshIntervalMinutes": {
+          "type": "number",
+          "label": "timetableRefreshInterval",
+          "min": 5,
+          "max": 8640,
+          "step": 1,
+          "sm": 6
+        },
+        "currentNextRefreshIntervalMinutes": {
+          "type": "number",
+          "label": "currentNextRefreshInterval",
+          "min": 1,
+          "step": 1,
+          "sm": 6
+        }
+      }
+    }
+  }
+}
